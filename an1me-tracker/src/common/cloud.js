@@ -61,7 +61,6 @@ const firebaseConfig = {
   "use strict";
 
   const STORAGE_KEY = "firebase_tokens";
-  const FEATURE_FLAGS_KEY = "_featureFlags";
   const CURRENT_SCHEMA_VERSION = 3;
   const AUTH_MUTATION_TIMEOUT_MS = 20000;
 
@@ -117,13 +116,6 @@ const firebaseConfig = {
     });
   }
 
-  async function isAuthHardeningEnabled() {
-    const stored = await _storageGet([FEATURE_FLAGS_KEY]);
-    const flags = stored[FEATURE_FLAGS_KEY];
-    if (!flags || typeof flags !== "object") return true;
-    return flags.AUTH_HARDENING_ENABLED !== false;
-  }
-
   async function readTokens() {
     const stored = await _storageGet([STORAGE_KEY]);
     const t = stored[STORAGE_KEY];
@@ -163,9 +155,6 @@ const firebaseConfig = {
   }
 
   async function migrateTokensIfNeeded() {
-    if (!(await isAuthHardeningEnabled())) {
-      return readTokens();
-    }
     const result = await _sendAuthMutation({ operation: "migrate_tokens" });
     return result.tokens || null;
   }
@@ -203,7 +192,6 @@ const firebaseConfig = {
   const api = Object.freeze({
     STORAGE_KEY,
     CURRENT_SCHEMA_VERSION,
-    isAuthHardeningEnabled,
     readTokens,
     writeTokens,
     replaceTokens,

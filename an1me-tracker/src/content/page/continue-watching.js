@@ -454,7 +454,6 @@
                 border-color: rgba(79,195,247,0.45);
             }
             .at-cw-card:hover .at-cw-thumb { border-color: rgba(79,195,247,0.4); }
-            .at-cw-play { display: none !important; }
 
             .at-cw-resume {
                 text-decoration: none !important; color: inherit !important;
@@ -481,23 +480,6 @@
                 align-items: center; justify-content: center;
                 font-size: 32px; font-weight: 800; color: rgba(255,255,255,0.16);
             }
-            .at-cw-play {
-                position: absolute; top: 50%; left: 50%;
-                width: 34px; height: 34px;
-                transform: translate(-50%,-50%) scale(0.75);
-                display: flex; align-items: center; justify-content: center;
-                background:
-                    linear-gradient(180deg, rgba(79,195,247,0.95) 0%, rgba(41,182,246,0.95) 100%);
-                border-radius: 50%;
-                opacity: 0;
-                transition: opacity .18s ease, transform .18s ease;
-                /* Liquid glass perimeter on the play orb — no glow */
-                box-shadow:
-                    inset 0 1px 0 rgba(255,255,255,0.55),
-                    inset 0 -1px 0 rgba(0,0,0,0.25);
-            }
-            .at-cw-play svg { width: 12px; height: 12px; fill: #0c1018; margin-left: 1px; }
-
             .at-cw-bar {
                 position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
                 background: rgba(0,0,0,0.55);
@@ -583,7 +565,7 @@
             }
             /* ============ Motion + responsive ============ */
             @media (prefers-reduced-motion: reduce) {
-                .at-cw-card, .at-cw-play, .at-cw-thumb, .at-cw-btn, .at-cw-track {
+                .at-cw-card, .at-cw-thumb, .at-cw-btn, .at-cw-track {
                     transition: none !important;
                     scroll-behavior: auto !important;
                 }
@@ -689,11 +671,6 @@
       img.src = item.cover;
       thumb.appendChild(img);
     }
-
-    const play = document.createElement("div");
-    play.className = "at-cw-play";
-    play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="8 5 19 12 8 19"/></svg>';
-    thumb.appendChild(play);
 
     const bar = document.createElement("div");
     bar.className = "at-cw-bar";

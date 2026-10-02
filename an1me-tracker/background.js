@@ -43,7 +43,6 @@ const mergeAnimeData = sharedMergeUtils.mergeAnimeData || missingMergeUtil("merg
 const mergeDeletedAnime = sharedMergeUtils.mergeDeletedAnime || missingMergeUtil("mergeDeletedAnime");
 const pruneStaleDeletedAnime = sharedMergeUtils.pruneStaleDeletedAnime || missingMergeUtil("pruneStaleDeletedAnime");
 const applyDeletedAnime = sharedMergeUtils.applyDeletedAnime || missingMergeUtil("applyDeletedAnime");
-const removeDeletedProgress = sharedMergeUtils.removeDeletedProgress || missingMergeUtil("removeDeletedProgress");
 const mergeGroupCoverImages = sharedMergeUtils.mergeGroupCoverImages || missingMergeUtil("mergeGroupCoverImages");
 const mergeGoalSettings = sharedMergeUtils.mergeGoalSettings || missingMergeUtil("mergeGoalSettings");
 const mergeBadgeUnlocks = sharedMergeUtils.mergeBadgeUnlocks || missingMergeUtil("mergeBadgeUnlocks");
@@ -54,10 +53,10 @@ const shallowEqualDeletedAnime = sharedMergeUtils.shallowEqualDeletedAnime || mi
 const shallowEqualObjectMap = sharedMergeUtils.shallowEqualObjectMap || missingMergeUtil("shallowEqualObjectMap");
 const isLikelyMovieSlug = sharedMergeUtils.isLikelyMovieSlug || missingMergeUtil("isLikelyMovieSlug");
 const isPlaceholderDuration = sharedMergeUtils.isPlaceholderDuration || missingMergeUtil("isPlaceholderDuration");
-const stripAutoRepairedEpisodesFromMap = sharedMergeUtils.stripAutoRepairedEpisodesFromMap || ((m) => m);
-const stripEpisodeDefaultsFromMap = sharedMergeUtils.stripEpisodeDefaultsFromMap || ((m) => m);
-const encodeEpisodesForCloud = sharedMergeUtils.encodeEpisodesForCloud || ((m) => m);
-const decodeEpisodesFromCloud = sharedMergeUtils.decodeEpisodesFromCloud || ((m) => m);
+const stripAutoRepairedEpisodesFromMap = sharedMergeUtils.stripAutoRepairedEpisodesFromMap || missingMergeUtil("stripAutoRepairedEpisodesFromMap");
+const stripEpisodeDefaultsFromMap = sharedMergeUtils.stripEpisodeDefaultsFromMap || missingMergeUtil("stripEpisodeDefaultsFromMap");
+const encodeEpisodesForCloud = sharedMergeUtils.encodeEpisodesForCloud || missingMergeUtil("encodeEpisodesForCloud");
+const decodeEpisodesFromCloud = sharedMergeUtils.decodeEpisodesFromCloud || missingMergeUtil("decodeEpisodesFromCloud");
 
 const BG_DEBUG = false;
 const dlog = (...a) => { if (BG_DEBUG) console.log(...a); };
@@ -1802,17 +1801,6 @@ async function periodicSyncNeeded() {
   }
 }
 
-async function _isCacheShortCircuitEnabledBg() {
-  try {
-    const stored = await bgStorageGet(["_featureFlags"]);
-    const flags = stored._featureFlags;
-    if (!flags || typeof flags !== "object") return true;
-    return flags.CACHE_SHORT_CIRCUIT_ENABLED !== false;
-  } catch {
-    return true;
-  }
-}
-
 const _bgCacheStats = { fresh: 0, revalidated: 0, fullFetch: 0 };
 
 async function _revalidateCloudDocViaLastUpdated(user, token, cachedLastUpdated, reason = "revalidate") {
@@ -1860,7 +1848,7 @@ async function fetchCloudDataCached(user, token, reason = "cache", options = {})
     invalidateBgCloudDocCache();
   }
 
-  if (cloudCache.doc && cloudCache.uid === user.uid && cloudCache.doc.lastUpdated && (await _isCacheShortCircuitEnabledBg())) {
+  if (cloudCache.doc && cloudCache.uid === user.uid && cloudCache.doc.lastUpdated) {
     try {
       const cloudLastUpdated = await _revalidateCloudDocViaLastUpdated(user, token, cloudCache.doc.lastUpdated, reason);
       if (cloudLastUpdated && cloudLastUpdated === cloudCache.doc.lastUpdated) {

@@ -7,7 +7,6 @@
   const STORAGE_KEY = "copyGuardEnabled";
 
   const ALLOWED_SELECTORS = [
-    "[data-at-allow-copy]",
     ".group-data-\\[language\\=jp\\]\\/body\\:hidden.line-clamp-2.leading-relaxed",
     ".line-clamp-2.leading-relaxed",
     ".group-data-\\[language\\=jp\\]\\/body\\:hidden",
@@ -158,7 +157,7 @@
           console.log(
             "[CopyGuard] No allowed-copy elements matched on this page — " +
               "an1me.to markup may have changed. Consider updating ALLOWED_SELECTORS in " +
-              "src/content/copy-guard.js or marking allowed elements with data-at-allow-copy.",
+              "src/content/page/copy-guard.js.",
           );
         }
       } catch {}

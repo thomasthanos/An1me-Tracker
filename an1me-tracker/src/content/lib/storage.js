@@ -260,7 +260,6 @@ const ContentStorage = {
   },
 
   async set(data) {
-    const writesLegacyData = Object.keys(data || {}).some((key) => CONTENT_LEGACY_SYNC_KEYS.has(key));
     const writesLibraryData = Object.keys(data || {}).some((key) => CONTENT_LIBRARY_MUTATION_KEYS.has(key));
     if (writesLibraryData) {
       const { Logger } = window.AnimeTrackerContent;
@@ -268,13 +267,6 @@ const ContentStorage = {
       if (isContentStorageAbort(response)) return response;
       if (!response?.success) throw new Error(response?.error || "Library mutation write failed");
       return response;
-    }
-    if (writesLegacyData) {
-      const { Logger } = window.AnimeTrackerContent;
-      const migrationState = await contentStorageAreaGet("local", [CONTENT_LEGACY_SYNC_MIGRATION_KEY], Logger);
-      if (isContentStorageAbort(migrationState)) return migrationState;
-      const migrationResult = await ensureContentLegacySyncMigration(migrationState, Logger);
-      if (isContentStorageAbort(migrationResult)) return migrationResult;
     }
     return contentStorageLocalSet(data);
   },

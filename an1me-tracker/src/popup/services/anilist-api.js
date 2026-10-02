@@ -1440,11 +1440,6 @@ const AnilistService = {
     return entry;
   },
 
-  getAnilistMediaStatus(slug) {
-    const key = String(slug || "").toLowerCase();
-    return this.airingSchedule?.[key]?.mediaStatus || null;
-  },
-
   // Loaded alongside the info cache on popup boot; keyed by slug, lowercase.
   airingSchedule: {},
 
@@ -1458,10 +1453,6 @@ const AnilistService = {
     } catch {
       this.airingSchedule = {};
     }
-  },
-
-  isFresh(slug) {
-    return window.AnimeTracker.CachePolicy.isInfoFresh(this.cache[slug]);
   },
 
   backfillAnimeEntry(entry, info) {

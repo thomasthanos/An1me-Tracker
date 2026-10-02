@@ -146,13 +146,8 @@ const Storage = {
   },
 
   async set(data) {
-    const writesLegacyData = Object.keys(data || {}).some((key) => LEGACY_SYNC_KEYS.has(key));
     const writesLibraryData = Object.keys(data || {}).some((key) => POPUP_LIBRARY_MUTATION_KEYS.has(key));
     if (writesLibraryData) return coordinatedLibraryWrite(data);
-    if (writesLegacyData) {
-      const migrationState = await localGet([LEGACY_SYNC_MIGRATION_KEY]);
-      await ensureLegacySyncMigration(migrationState);
-    }
 
     return new Promise((resolve, reject) => {
       chrome.storage.local.set(data, () => {

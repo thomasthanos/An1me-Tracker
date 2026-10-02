@@ -531,29 +531,6 @@ const AnimeCardRenderer = {
             </div>
         `;
   },
-
-  createInProgressItem(anime) {
-    return "";
-  },
-
-  createInProgressGroup() {
-    return "";
-  },
-  createSeasonGroup() {
-    return "";
-  },
-  createMovieGroup() {
-    return "";
-  },
-  createSingleMovieCard() {
-    return "";
-  },
-  extractBaseTitle(title) {
-    return title;
-  },
-  extractMovieBaseTitle(title) {
-    return title;
-  },
 };
 
 window.AnimeTracker = window.AnimeTracker || {};

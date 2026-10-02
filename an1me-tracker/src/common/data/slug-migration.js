@@ -27,9 +27,6 @@
     if (["TV", "TV_SHORT"].includes(sourceType)) return !targetType || ["TV", "TV_SHORT"].includes(targetType);
     return !!targetType && sourceType === targetType;
   }
-  // Kept as a no-op: movie/ova/special slugs are no longer skipped upfront — compatibility is checked when resolving.
-  function shouldSkipSlugForMigration(slug) { return false; }
-
   function fallbackSlugify(title) {
     return String(title || "")
       .toLowerCase()
@@ -304,8 +301,6 @@
       // sign-in re-probed the same unresolvable slugs and replayed their 404s and warnings.
       if (prior && prior.incompatible && Date.now() - triedAt < INCOMPATIBLE_COOLDOWN_MS) continue;
       if (Date.now() - triedAt < PER_SLUG_COOLDOWN_MS) continue;
-
-      if (shouldSkipSlugForMigration(slug)) continue;
       suspects.push(slug);
     }
 

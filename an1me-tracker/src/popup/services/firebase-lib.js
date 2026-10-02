@@ -9,7 +9,6 @@ const FirebaseLib = (function () {
   "use strict";
 
   const API_KEY = firebaseConfig.apiKey;
-  const PROJECT_ID = firebaseConfig.projectId;
 
   const OAUTH_CLIENT_ID_LOCAL = "851894443732-st4bqk291b03jf6bscup0eqck2n60gmq.apps.googleusercontent.com";
   const OAUTH_CLIENT_ID_RELEASE = "851894443732-uncr0msnm21fbrfbagtdd76pmkatui1t.apps.googleusercontent.com";
@@ -389,82 +388,6 @@ const FirebaseLib = (function () {
     });
   }
 
-  async function getDocument(collection, docId, optionsOrRetry = 0) {
-    const opts = typeof optionsOrRetry === "object" && optionsOrRetry !== null ? optionsOrRetry : { retryCount: optionsOrRetry || 0 };
-    const retryCount = Number(opts.retryCount) || 0;
-    const mask = Array.isArray(opts.mask) ? opts.mask.filter(Boolean) : null;
-
-    const idToken = await getIdToken();
-    if (!idToken) {
-      (window.PopupLogger || console).warn?.("Firebase", `getDocument(${collection}/${docId}) — no idToken available`);
-      return null;
-    }
-
-    let url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/${collection}/${docId}`;
-    if (mask && mask.length > 0) {
-      url += "?" + mask.map((f) => `mask.fieldPaths=${encodeURIComponent(f)}`).join("&");
-    }
-
-    try {
-      const response = await fetchWithTimeout(url, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          (window.PopupLogger || console).log?.("Firebase", `Document ${collection}/${docId.slice(0, 8)}… not found (404)`);
-          return null;
-        }
-
-        if (response.status >= 500 && retryCount < 3) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
-          (window.PopupLogger || console).warn?.("Firebase", `Server error ${response.status}, retrying in ${delay}ms...`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          return getDocument(collection, docId, {
-            ...opts,
-            retryCount: retryCount + 1,
-          });
-        }
-
-        const errorBody = await response.text().catch(() => "");
-        (window.PopupLogger || console).error?.(
-          "Firebase",
-          `getDocument(${collection}/${docId.slice(0, 8)}…) HTTP ${response.status}: ${errorBody.slice(0, 200)}`,
-        );
-        const err = new Error(`Firestore error: ${response.status}`);
-        err.status = response.status;
-        err.body = errorBody;
-        throw err;
-      }
-
-      const data = await response.json();
-      return firestoreDocToJson(data);
-    } catch (error) {
-      if (error.name === "TypeError" && retryCount < 3) {
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
-        (window.PopupLogger || console).warn?.("Firebase", "Network error, retrying in", delay, "ms...");
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        return getDocument(collection, docId, {
-          ...opts,
-          retryCount: retryCount + 1,
-        });
-      }
-
-      if (error.status) throw error;
-
-      (window.PopupLogger || console).error?.("Firebase", `getDocument(${collection}/${docId.slice(0, 8)}…) network error:`, error.message);
-      return null;
-    }
-  }
-
-  const _fsCodec = (typeof window !== "undefined" && window.AnimeTrackerFirestoreCodec) || null;
-  if (!_fsCodec) {
-    console.error("[FirebaseLib] Firestore codec not loaded — sync disabled");
-  }
-  const firestoreDocToJson = (doc) => {
-    if (!_fsCodec || !doc?.fields) return {};
-    return _fsCodec.decodeFields(doc.fields);
-  };
   async function _identityToolkitPost(path, body) {
     const url = `https://identitytoolkit.googleapis.com/v1/${path}?key=${API_KEY}`;
     let response, data;
@@ -556,20 +479,6 @@ const FirebaseLib = (function () {
       throw new Error("Unexpected response from sign-in endpoint");
     }
     PopupLogger.log("Firebase", `Email sign-in successful for ${data.email}`);
-    return _persistEmailPasswordSession(data);
-  }
-
-  async function signUpWithEmailPassword(email, password) {
-    if (!email || !password) throw new Error("MISSING_EMAIL");
-    const data = await _identityToolkitPost("accounts:signUp", {
-      email,
-      password,
-      returnSecureToken: true,
-    });
-    if (!data.idToken || !data.refreshToken || !data.expiresIn || !data.localId) {
-      throw new Error("Unexpected response from sign-up endpoint");
-    }
-    PopupLogger.log("Firebase", `Account created for ${data.email}`);
     return _persistEmailPasswordSession(data);
   }
 
@@ -704,13 +613,11 @@ const FirebaseLib = (function () {
     init,
     signInWithGoogle,
     signInWithEmailPassword,
-    signUpWithEmailPassword,
     setPasswordForCurrentUser,
     sendPasswordReset,
     verifyPasswordSilently,
     signOut,
     onAuthStateChanged,
-    getDocument,
 
     getIdToken,
     isReauthNeeded,
@@ -759,10 +666,6 @@ const FirebaseSync = (function () {
 
   async function signInWithEmailPassword(email, password) {
     return await FirebaseLib.signInWithEmailPassword(email, password);
-  }
-
-  async function signUpWithEmailPassword(email, password) {
-    return await FirebaseLib.signUpWithEmailPassword(email, password);
   }
 
   async function signOut() {
@@ -841,7 +744,6 @@ const FirebaseSync = (function () {
     getUser,
     signInWithGoogle,
     signInWithEmailPassword,
-    signUpWithEmailPassword,
     signOut,
     sendPasswordReset,
     setPasswordForCurrentUser,

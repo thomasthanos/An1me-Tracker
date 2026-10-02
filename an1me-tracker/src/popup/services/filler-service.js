@@ -67,10 +67,8 @@ const FillerService = {
   },
 
   updateFromEpisodeTypes(animeSlug, episodeTypes) {
-    const { Logger } = window.AnimeTracker;
-
     if (!episodeTypes) {
-      Logger.error("updateFromEpisodeTypes: episodeTypes is null/undefined");
+      PopupLogger.error("FillerService", "updateFromEpisodeTypes: episodeTypes is null/undefined");
       return;
     }
 
@@ -79,7 +77,7 @@ const FillerService = {
     let fillerRanges = [];
 
     if (!episodeTypes.filler || episodeTypes.filler.length === 0) {
-      Logger.info(`No fillers found for ${animeSlug}`);
+      PopupLogger.debug("FillerService", `No fillers found for ${animeSlug}`);
     } else {
       const sortedFillers = [...episodeTypes.filler].sort((a, b) => a - b);
       let start = sortedFillers[0];
@@ -96,7 +94,7 @@ const FillerService = {
           }
         }
       }
-      Logger.success(`Updated KNOWN_FILLERS for ${animeSlug} (${fillerRanges.length} ranges)`);
+      PopupLogger.debug("FillerService", `Updated KNOWN_FILLERS for ${animeSlug} (${fillerRanges.length} ranges)`);
     }
 
     slugVariations.forEach((slug) => {
@@ -106,7 +104,6 @@ const FillerService = {
 
   async loadCachedEpisodeTypes(animeData) {
     const { Storage } = window.AnimeTracker;
-    const { Logger } = window.AnimeTracker;
 
     try {
       this.episodeTypesCache = {};
@@ -126,7 +123,7 @@ const FillerService = {
         }
       }
     } catch (error) {
-      Logger.error("Failed to load cached episode types:", error);
+      PopupLogger.error("FillerService", "Failed to load cached episode types:", error);
     }
   },
 

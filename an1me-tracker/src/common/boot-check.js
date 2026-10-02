@@ -25,7 +25,6 @@
       "GoalEngine",
       "ProgressInsights",
       "GoalsView",
-      "Logger",
       "UIHelpers",
       "AnimeCardRenderer",
     ];

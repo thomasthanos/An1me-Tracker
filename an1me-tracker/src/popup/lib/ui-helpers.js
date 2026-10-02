@@ -1,9 +1,5 @@
-// ui-helpers.js — display helpers (time/date formatting, icons, escaping); also Logger and Dialogs.
+// ui-helpers.js — display helpers (time/date formatting, icons, escaping); also Dialogs.
 const UIHelpers = {
-  getUniqueId(animeSlug, episodeNumber) {
-    return `${animeSlug}__episode-${episodeNumber}`;
-  },
-
   formatDuration(seconds) {
     if (!seconds || seconds === 0) return "0m";
 
@@ -238,21 +234,6 @@ const UIHelpers = {
 
 window.AnimeTracker = window.AnimeTracker || {};
 window.AnimeTracker.UIHelpers = UIHelpers;
-
-window.AnimeTracker.Logger = {
-  info: () => {},
-  success: () => {},
-  warn: (...args) => {
-    try {
-      window.PopupLogger?.warn?.("FillerService", ...args);
-    } catch {}
-  },
-  error: (...args) => {
-    try {
-      window.PopupLogger?.error?.("FillerService", ...args);
-    } catch {}
-  },
-};
 
 (function () {
   "use strict";

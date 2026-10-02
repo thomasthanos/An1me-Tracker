@@ -370,9 +370,6 @@
     settingsRefresh: document.getElementById("settingsRefresh"),
     settingsCopyGuard: document.getElementById("settingsCopyGuard"),
     settingsCopyGuardSubtitle: document.getElementById("settingsCopyGuardSubtitle"),
-    settingsDataTools: document.getElementById("settingsDataTools"),
-    settingsDataToolsToggle: document.getElementById("settingsDataToolsToggle"),
-    settingsDataToolsContent: document.getElementById("settingsDataToolsContent"),
     settingsClear: document.getElementById("settingsClear"),
     settingsExportData: document.getElementById("settingsExportData"),
     settingsImportData: document.getElementById("settingsImportData"),
@@ -405,9 +402,6 @@
     settingsSmartNotifSubtitle: document.getElementById("settingsSmartNotifSubtitle"),
     settingsAutoSkipFiller: document.getElementById("settingsAutoSkipFiller"),
     settingsAutoSkipFillerSubtitle: document.getElementById("settingsAutoSkipFillerSubtitle"),
-    settingsPreferences: document.getElementById("settingsPreferences"),
-    settingsPreferencesToggle: document.getElementById("settingsPreferencesToggle"),
-    settingsPreferencesContent: document.getElementById("settingsPreferencesContent"),
 
     addAnimeBtn: document.getElementById("addAnimeBtn"),
     addAnimeDialog: document.getElementById("addAnimeDialog"),
@@ -671,24 +665,6 @@
   const loadAutoResumeSetting = () => loadToggleSetting("autoResume");
   AT.refreshSmartNotificationStatus = loadSmartNotifSetting;
 
-  function setSettingsDataToolsExpanded(expanded) {
-    const dataTools = document.getElementById("settingsDataTools");
-    const toggle = document.getElementById("settingsDataToolsToggle");
-    if (!dataTools || !toggle) return;
-    const isExpanded = !!expanded;
-    dataTools.classList.toggle("expanded", isExpanded);
-    toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
-  }
-
-  function setSettingsPreferencesExpanded(expanded) {
-    const prefs = document.getElementById("settingsPreferences");
-    const toggle = document.getElementById("settingsPreferencesToggle");
-    if (!prefs || !toggle) return;
-    const isExpanded = !!expanded;
-    prefs.classList.toggle("expanded", isExpanded);
-    toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
-  }
-
   function doesProgressChangeAffectLists(oldProgress = {}, newProgress = {}) {
     const completedPct = AT.CONFIG?.COMPLETED_PERCENTAGE || 85;
     const keys = new Set([...Object.keys(oldProgress || {}), ...Object.keys(newProgress || {})]);
@@ -753,10 +729,6 @@
   function normalizeCategory(value) {
     const allowed = new Set(["all", "series", "movies"]);
     return allowed.has(value) ? value : "all";
-  }
-
-  function renderCategorySwitch(filter = "") {
-    renderAnimeList(filter);
   }
 
   function normalizeCompactStatus(value) {
@@ -1695,7 +1667,7 @@
     if (emailForm && emailSignInBtn) {
       emailForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        handleEmailAuth({ mode: "signin" });
+        handleEmailAuth();
       });
     }
     if (forgotPasswordBtn) {
@@ -1732,8 +1704,6 @@
         closeDonateDropdown();
         return;
       }
-      setSettingsDataToolsExpanded(false);
-      setSettingsPreferencesExpanded(false);
       setTimeout(openDonateDropdown, 80);
     });
 
@@ -1875,31 +1845,9 @@
         return;
       }
 
-      const dataToolsToggle = e.target.closest("#settingsDataToolsToggle");
-      if (dataToolsToggle) {
-        e.stopPropagation();
-        const dataTools = document.getElementById("settingsDataTools");
-        const isExpanded = dataTools?.classList.contains("expanded");
-        setSettingsDataToolsExpanded(!isExpanded);
-        setSettingsPreferencesExpanded(false);
-        return;
-      }
-
-      const prefsToggle = e.target.closest("#settingsPreferencesToggle");
-      if (prefsToggle) {
-        e.stopPropagation();
-        const prefs = document.getElementById("settingsPreferences");
-        const isExpanded = prefs?.classList.contains("expanded");
-        setSettingsPreferencesExpanded(!isExpanded);
-        setSettingsDataToolsExpanded(false);
-        return;
-      }
-
       const refreshBtn = e.target.closest("#settingsRefresh");
       if (refreshBtn) {
         refreshBtn.classList.add("loading");
-        setSettingsDataToolsExpanded(false);
-        setSettingsPreferencesExpanded(false);
         setMetadataRepairStatus("Refreshing…", false, { source: "manual" });
         const startedAt = Date.now();
         try {
@@ -1923,14 +1871,11 @@
       }
 
       if (e.target.closest("#settingsClear")) {
-        setSettingsDataToolsExpanded(false);
-        setSettingsPreferencesExpanded(false);
         showDialog();
         return;
       }
 
       if (e.target.closest("#settingsExportData")) {
-        setSettingsDataToolsExpanded(false);
         exportLibraryToJson().catch((err) => {
           PopupLogger.error("Export", err);
           AT.UIHelpers?.showToast?.("Export failed", { type: "error", duration: 3500 });
@@ -1948,30 +1893,21 @@
       }
 
       if (e.target.closest("#settingsSignOut")) {
-        setSettingsDataToolsExpanded(false);
-        setSettingsPreferencesExpanded(false);
         signOut();
         return;
       }
 
       if (e.target.closest("#settingsReauthBtn")) {
-        setSettingsDataToolsExpanded(false);
-        setSettingsPreferencesExpanded(false);
         signOut(true);
         return;
       }
 
       if (e.target.closest("#settingsSetPassword")) {
-        setSettingsDataToolsExpanded(false);
-        setSettingsPreferencesExpanded(false);
         AT.openSetPasswordModal();
         return;
       }
 
       if (e.target.closest("#settingsFetchFillers")) {
-        setSettingsDataToolsExpanded(false);
-        setSettingsPreferencesExpanded(false);
-
         try {
           await fetchAllFillers({
             autoStart: true,
@@ -1990,7 +1926,6 @@
       if (e.target?.id === "settingsImportFile") {
         const file = e.target.files?.[0];
         if (!file) return;
-        setSettingsDataToolsExpanded(false);
         try {
           await importLibraryFromFile(file);
         } catch (err) {
@@ -2280,7 +2215,7 @@
           if (categoryChanged) {
             currentCategory = nextCategory;
             _lastRenderedListMarkup = null;
-            renderCategorySwitch(elements.searchInput?.value || "");
+            renderAnimeList(elements.searchInput?.value || "");
           }
 
           persistLibraryPreferences();

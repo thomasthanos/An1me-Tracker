@@ -246,7 +246,7 @@
     return /^[a-z]{2,63}$/i.test(domainLabels[domainLabels.length - 1]);
   }
 
-  async function handleEmailAuth({ mode }) {
+  async function handleEmailAuth() {
     const { FirebaseSync } = AT;
     const { email, password } = readEmailFormCredentials();
     setEmailFormError("");
@@ -264,30 +264,20 @@
       setEmailFormError(EMAIL_AUTH_ERRORS.MISSING_PASSWORD);
       return;
     }
-    if (mode === "signup" && password.length < 6) {
-      setEmailFormError(EMAIL_AUTH_ERRORS.WEAK_PASSWORD);
-      return;
-    }
 
-    const busyLabel = mode === "signup" ? "Creating…" : "Signing in…";
-    const idleLabel = "Sign in";
-    setEmailFormBusy(true, busyLabel);
+    setEmailFormBusy(true, "Signing in…");
 
     try {
-      if (mode === "signup") {
-        await FirebaseSync.signUpWithEmailPassword(email, password);
-      } else {
-        await FirebaseSync.signInWithEmailPassword(email, password);
-      }
+      await FirebaseSync.signInWithEmailPassword(email, password);
 
       const pwEl = document.getElementById("authPasswordInput");
       if (pwEl) pwEl.value = "";
     } catch (err) {
       await chrome.storage.local.set({ pendingBackgroundMetadataRepair: false });
-      PopupLogger.error("Firebase", `${mode === "signup" ? "Sign-up" : "Sign-in"} error:`, err);
+      PopupLogger.error("Firebase", "Sign-in error:", err);
       setEmailFormError(friendlyAuthError(err));
     } finally {
-      setEmailFormBusy(false, idleLabel);
+      setEmailFormBusy(false, "Sign in");
     }
   }
 

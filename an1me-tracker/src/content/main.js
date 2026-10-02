@@ -25,13 +25,11 @@
       ? `https://an1me.to/watch/${page.slug}-episode-${page.episode}`
       : `https://an1me.to/watch/${slug}-episode-${episode}`;
   }
-  let currentEpisodeId = null;
   let durationRefreshAttempted = false;
   let durationRefreshAttempts = 0;
   const MAX_DURATION_REFRESH_ATTEMPTS = 5;
   let accumulatedPlaybackSeconds = 0;
   let lastTimeupdateTime = 0;
-  let lastVideoSource = "";
   let earlyTrackDone = false;
 
   let completionNotificationShown = false;
@@ -305,33 +303,6 @@
     lastTimeupdateTime = 0;
   }
 
-  function resetEpisodeTrackingState(reason = "") {
-    resetPlaybackAccumulator(reason);
-    earlyTrackDone = false;
-    trackingState = TrackingState.IDLE;
-    durationRefreshAttempted = false;
-    durationRefreshAttempts = 0;
-    completionNotificationShown = false;
-    backlogPromptHandled = false;
-  }
-
-  function syncVideoSourceEpisodeBoundary(videoElement) {
-    const src = (videoElement?.currentSrc || videoElement?.src || "").trim();
-    if (!src) return false;
-    if (!lastVideoSource) {
-      lastVideoSource = src;
-      return false;
-    }
-    if (src === lastVideoSource) return false;
-    lastVideoSource = src;
-
-    if (currentEpisodeId && animeInfo && currentEpisodeId !== animeInfo.uniqueId) {
-      resetEpisodeTrackingState("episode id changed via video source");
-      return true;
-    }
-    return false;
-  }
-
   function isNearEnd(currentTime, duration) {
     if (!duration || duration <= 0) return false;
     const remaining = duration - currentTime;
@@ -489,8 +460,6 @@
 
     if (!videoElement || trackingState === TrackingState.COMPLETED || earlyTrackDone || !animeInfo) return;
 
-    syncVideoSourceEpisodeBoundary(videoElement);
-
     const duration = videoElement.duration;
     const currentTime = videoElement.currentTime;
 
@@ -541,14 +510,6 @@
 
     if (!videoElement || trackingState === TrackingState.COMPLETED || !animeInfo) return;
 
-    syncVideoSourceEpisodeBoundary(videoElement);
-
-    if (currentEpisodeId && currentEpisodeId !== animeInfo.uniqueId) {
-      Logger.info("Episode changed, resetting tracking state");
-      resetEpisodeTrackingState("episode id changed");
-      currentEpisodeId = animeInfo.uniqueId;
-    }
-
     const duration = videoElement.duration;
     const currentTime = videoElement.currentTime;
 
@@ -589,7 +550,6 @@
       }
 
       trackingState = TrackingState.TRACKING;
-      currentEpisodeId = animeInfo.uniqueId;
 
       const trackingOperation = async () => {
         await ProgressTracker.saveWatchedEpisode(animeInfo, duration);
@@ -833,19 +793,16 @@
 
     navigationGeneration += 1;
     trackingState = TrackingState.IDLE;
-    currentEpisodeId = null;
     earlyTrackDone = false;
     durationRefreshAttempted = false;
     durationRefreshAttempts = 0;
     resetPlaybackAccumulator("init");
-    lastVideoSource = "";
 
     animeInfo = AnimeParser.extractAnimeInfo();
     if (!animeInfo) {
       Logger.debug("No anime info found");
       return;
     }
-    currentEpisodeId = animeInfo.uniqueId;
     loadOutroStartFor(animeInfo);
     bumpLatestEpisodeFromPage(animeInfo).catch((e) => window.__atSwallow("bumpLatestEpisode", e));
 
@@ -1392,12 +1349,10 @@
         if (_pathOf(location.href) === currPath) {
           Logger.info("URL changed, reinit...");
           trackingState = TrackingState.IDLE;
-          currentEpisodeId = null;
           earlyTrackDone = false;
           durationRefreshAttempted = false;
           durationRefreshAttempts = 0;
           resetPlaybackAccumulator("spa navigation");
-          lastVideoSource = "";
           clearHighlightStorageListener();
           ProgressTracker.reset();
           setTimeout(init, AT.CONFIG.DELAYS.INIT);
