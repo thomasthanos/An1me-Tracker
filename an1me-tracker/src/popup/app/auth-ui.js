@@ -146,15 +146,7 @@
                 </span>`;
       await FirebaseSync.signInWithGoogle();
     } catch (error) {
-      const msg = (error.message || "").toLowerCase();
-      const isCancelled =
-        msg.includes("did not approve") ||
-        msg.includes("cancelled") ||
-        msg.includes("closed") ||
-        msg.includes("popup_closed") ||
-        error.code === "auth/popup-closed-by-user" ||
-        error.code === "auth/cancelled-popup-request";
-      if (!isCancelled) {
+      if (!AT.AuthEnv.isAuthCancelled(error)) {
         PopupLogger.error("Firebase", "Sign in error:", error);
         showAuthToast("Sign in failed. Please try again.", "error");
       }
@@ -184,9 +176,7 @@
 
   function friendlyAuthError(err) {
     const raw = (err?.message || "").trim();
-
-    const code = raw.split(":")[0].trim().toUpperCase().replace(/\s+/g, "_");
-    return EMAIL_AUTH_ERRORS[code] || raw || "Sign-in failed.";
+    return EMAIL_AUTH_ERRORS[AT.AuthEnv.authErrorCode(raw)] || raw || "Sign-in failed.";
   }
 
   function setEmailFormBusy(busy, label) {

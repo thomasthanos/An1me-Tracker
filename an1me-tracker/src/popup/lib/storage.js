@@ -21,30 +21,9 @@ const _multipartMaps = (typeof window !== "undefined" && window.AnimeTrackerMult
 const STORAGE_SLUG_NORMALIZATION = _multipartMaps.SLUG_NORMALIZATION || {};
 const STORAGE_EPISODE_OFFSET_MAPPING = _multipartMaps.EPISODE_OFFSET_MAPPING || {};
 
-const LEGACY_SYNC_KEYS = new Set(["animeData", "trackedEpisodes", "videoProgress"]);
-const LEGACY_SYNC_MIGRATION_KEY = "legacySyncMigrationV1Complete";
-const POPUP_LIBRARY_MUTATION_KEYS = new Set([
-  "animeData",
-  "videoProgress",
-  "deletedAnime",
-  "groupCoverImages",
-  "anilist_media_map",
-  "anilist_pushed",
-  "anilist_push_schema",
-  "fillerStaySelections",
-  "goalSettings",
-  "badgeUnlocks",
-  "badgeEvaluationBaselineV1",
-  "badgeNotificationBaselineV1",
-  "anilist_auth",
-  "anilist_username",
-  "copyGuardEnabled",
-  "smartNotificationsEnabled",
-  "autoSkipFillers",
-  "skiptimeHelperEnabled",
-  "auto4kServerEnabled",
-  "playbackSettingsUpdatedAt",
-]);
+const LEGACY_SYNC_KEYS = new Set(AnimeTrackerLibraryKeys.LEGACY_SYNC_KEYS);
+const LEGACY_SYNC_MIGRATION_KEY = AnimeTrackerLibraryKeys.LEGACY_SYNC_MIGRATION_KEY;
+const POPUP_LIBRARY_MUTATION_KEYS = new Set(AnimeTrackerLibraryKeys.MUTATION_KEYS);
 const POPUP_LIBRARY_REQUEST_TIMEOUT_MS = 20000;
 let legacySyncMigrationPromise = null;
 
@@ -65,19 +44,6 @@ function pickStorageKeys(source, keys) {
     if (hasOwn(source, key)) picked[key] = source[key];
   }
   return picked;
-}
-
-function localGet(keys) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get(keys, (result) => {
-      const errorMessage = chrome.runtime.lastError?.message;
-      if (errorMessage) {
-        reject(new Error(`Local storage read failed: ${errorMessage}`));
-        return;
-      }
-      resolve(result || {});
-    });
-  });
 }
 
 function sendLibraryCoordinatorRequest(message) {
@@ -107,22 +73,6 @@ async function ensureLegacySyncMigration(initialLocal) {
   return legacySyncMigrationPromise;
 }
 
-function decodeHtmlEntities(value) {
-  if (typeof value !== "string" || !value.includes("&")) return value;
-
-  const textarea = document.createElement("textarea");
-  let decoded = value;
-
-  for (let i = 0; i < 3; i += 1) {
-    textarea.innerHTML = decoded;
-    const next = textarea.value;
-    if (next === decoded) break;
-    decoded = next;
-  }
-
-  return decoded;
-}
-
 const Storage = {
   LEGACY_SYNC_KEYS,
   LEGACY_SYNC_MIGRATION_KEY,
@@ -135,14 +85,14 @@ const Storage = {
     const readKeys = needsLegacyMigration
       ? [...new Set([...requestedKeys, LEGACY_SYNC_MIGRATION_KEY, ...LEGACY_SYNC_KEYS])]
       : requestedKeys;
-    const localResult = await localGet(readKeys);
+    const localResult = await AnimeTrackerUtils.storage.get(readKeys);
 
     if (!needsLegacyMigration || localResult[LEGACY_SYNC_MIGRATION_KEY] === true) {
       return pickStorageKeys(localResult, requestedKeys);
     }
 
     await ensureLegacySyncMigration(localResult);
-    return pickStorageKeys(await localGet(requestedKeys), requestedKeys);
+    return pickStorageKeys(await AnimeTrackerUtils.storage.get(requestedKeys), requestedKeys);
   },
 
   async set(data) {
@@ -213,7 +163,7 @@ const Storage = {
         return false;
       }
       await new Promise((r) => chrome.storage.local.set({ [LOCK_KEY]: { time: Date.now(), token: myToken } }, r));
-      await new Promise((r) => setTimeout(r, 50));
+      await AnimeTrackerUtils.sleep(50);
       const verify = await new Promise((r) => chrome.storage.local.get([LOCK_KEY], r));
       if (verify[LOCK_KEY]?.token !== myToken) {
         (window.PopupLogger || console).log?.("Storage", "Migration lock contended, deferring");
@@ -266,7 +216,7 @@ const Storage = {
           if (typeof title !== "string") return title;
 
           const TITLE_CLEANUP_RE = /(?:\s*[-–—]\s*Episode\s*\d*.*|\s+Episode)\s*$/i;
-          return decodeHtmlEntities(title).replace(TITLE_CLEANUP_RE, "").trim();
+          return AnimeTrackerUtils.decodeHtmlEntities(title).replace(TITLE_CLEANUP_RE, "").trim();
         };
 
         const migrateSlug = (oldSlug, newSlug, offset = 0, titleTransform = null) => {

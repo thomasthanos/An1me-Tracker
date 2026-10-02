@@ -4,21 +4,6 @@
 
   let _hourCache = null;
 
-  function revisionSignature(revision) {
-    if (revision === null || revision === undefined || revision === "") return null;
-    const value = Number(revision);
-    return Number.isFinite(value) && value >= 0 ? `revision:${value}` : null;
-  }
-
-  function hashText(value) {
-    let hash = 2166136261;
-    for (let i = 0; i < value.length; i++) {
-      hash ^= value.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(36);
-  }
-
   function dayKey(date) {
     return window.AnimeTracker.StatsEngine.dayKey(date);
   }
@@ -36,17 +21,8 @@
     return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
   }
 
-  function signatureOf(animeData) {
-    try {
-      const serialized = JSON.stringify(animeData || {});
-      return `${serialized.length}|${hashText(serialized)}`;
-    } catch {
-      return `uncacheable:${Date.now()}:${Math.random()}`;
-    }
-  }
-
   function buildHourIndex(animeData, revision = null) {
-    const sig = revisionSignature(revision) || signatureOf(animeData);
+    const sig = AnimeTrackerUtils.cacheSignature(animeData, revision);
     if (_hourCache && _hourCache.sig === sig) return _hourCache;
 
     const hours = new Map();
@@ -932,11 +908,7 @@
     return { target, bias, justLearned };
   }
 
-  function toMillis(value) {
-    if (!value) return 0;
-    const millis = new Date(value).getTime();
-    return Number.isFinite(millis) ? millis : 0;
-  }
+  const { toMillis } = globalThis.AnimeTrackerUtils;
 
   function clampNumber(value, min, max) {
     return Math.min(max, Math.max(min, value));

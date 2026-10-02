@@ -353,9 +353,18 @@
     },
   };
 
-  const COPY_GUARD_STORAGE_KEY = "copyGuardEnabled";
-  const GOAL_SETTINGS_KEY = "goalSettings";
-  const BADGE_STATE_KEY = "badgeUnlocks";
+  const {
+    COPY_GUARD_STORAGE_KEY,
+    GOAL_SETTINGS_KEY,
+    BADGE_STATE_KEY,
+    SMART_NOTIF_STORAGE_KEY,
+    AUTO_SKIP_FILLER_STORAGE_KEY,
+    SKIPTIME_HELPER_KEY,
+    AUTO_4K_SERVER_KEY,
+    AD_GUARD_KEY,
+    AUTO_RESUME_KEY,
+    PASSWORD_SET_MARKER_KEY,
+  } = AT.SETTING_KEYS;
 
   const elements = {
     authSection: document.getElementById("authSection"),
@@ -433,13 +442,12 @@
   });
   AT.MetadataRepair._init({
     elements,
-    detectHasGoogleAuth,
     markInternalSave,
     scheduleDeferredListRefresh,
     sendRuntimeMessage,
     updateStats,
   });
-  AT.StatsViews._init({ elements, detectHasGoogleAuth, setTopStatValue, markInternalSave });
+  AT.StatsViews._init({ elements, setTopStatValue, markInternalSave });
   let lastMetadataRepairState = null;
   let lastHydratedLibraryRevision = null;
 
@@ -506,16 +514,6 @@
   function getActiveFilter() {
     return elements.searchInput?.value || "";
   }
-
-  const SMART_NOTIF_STORAGE_KEY = "smartNotificationsEnabled";
-  const AUTO_SKIP_FILLER_STORAGE_KEY = "autoSkipFillers";
-
-  const SKIPTIME_HELPER_KEY = "skiptimeHelperEnabled";
-  const AUTO_4K_SERVER_KEY = "auto4kServerEnabled";
-  const AD_GUARD_KEY = "adGuardEnabled";
-  const AUTO_RESUME_KEY = "autoResumeEnabled";
-
-  const PASSWORD_SET_MARKER_KEY = "passwordSetMarker";
 
   const TOGGLE_SETTINGS = {
     copyGuard: {
@@ -744,18 +742,9 @@
     elements.authSection.style.display = "flex";
     elements.mainApp.style.display = "none";
 
-    const hasGoogleAuth = detectHasGoogleAuth();
+    const hasGoogleAuth = AT.AuthEnv.supportsWebAuthFlow();
 
-    PopupLogger.log(
-      "Auth",
-      `hasGoogleAuth=${hasGoogleAuth} · redirect=${(() => {
-        try {
-          return chrome?.identity?.getRedirectURL?.() || "∅";
-        } catch {
-          return "∅";
-        }
-      })()} · ua="${(navigator.userAgent || "").slice(0, 140)}"`,
-    );
+    PopupLogger.log("Auth", `hasGoogleAuth=${hasGoogleAuth} · redirect=${AT.AuthEnv.getRedirectUrl() || "∅"}`);
     const authContent = document.querySelector(".auth-content");
     if (authContent) {
       authContent.classList.toggle("auth-mobile", !hasGoogleAuth);
@@ -765,22 +754,6 @@
     const orDivider = document.querySelector(".auth-or-divider");
     if (emailForm) emailForm.style.display = "";
     if (orDivider) orDivider.style.display = hasGoogleAuth ? "" : "none";
-  }
-
-  function detectHasGoogleAuth() {
-    const ua = navigator.userAgent || "";
-    if (/Orion|Firefox|FxiOS/i.test(ua)) return false;
-    if (/Android|iPhone|iPad|iPod|Mobile|CriOS|EdgiOS/i.test(ua)) return false;
-    if (/AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg/i.test(ua)) return false;
-    if (!chrome?.identity?.launchWebAuthFlow) return false;
-    let redirectUrl = "";
-    try {
-      redirectUrl = chrome.identity.getRedirectURL?.() || "";
-    } catch {
-      return false;
-    }
-    if (!/^https:\/\/[a-z0-9]+\.chromiumapp\.org/.test(redirectUrl)) return false;
-    return true;
   }
 
   function showMainApp(user) {
@@ -1163,16 +1136,7 @@
           getMediaType: (slug, anime) => SeasonGrouping.getDisplayMediaType(slug, anime),
           isChronologyGroup: (base) => SeasonGrouping.isChronologyGroup(base),
           resolverVersion: Number(Core?.RESOLVER_V) || 0,
-          slugify: (t) =>
-            Core?.slugify
-              ? Core.slugify(t)
-              : String(t || "")
-                  .toLowerCase()
-                  .trim()
-                  .replace(/[^\w\s-]/g, " ")
-                  .replace(/[\s_]+/g, "-")
-                  .replace(/-+/g, "-")
-                  .replace(/^-+|-+$/g, ""),
+          slugify: AnimeTrackerUtils.slugify,
         };
 
         const groups = Dedupe.findDuplicateGroups(currentAnimeData, mediaMap, helpers);
@@ -1857,7 +1821,7 @@
             await loadData();
           }
           const elapsed = Date.now() - startedAt;
-          if (elapsed < 500) await new Promise((r) => setTimeout(r, 500 - elapsed));
+          if (elapsed < 500) await AnimeTrackerUtils.sleep(500 - elapsed);
           setMetadataRepairStatus("Refreshed", true, { source: "manual" });
           scheduleDefaultSyncStatusRestore(2500, "manual");
         } catch (error) {

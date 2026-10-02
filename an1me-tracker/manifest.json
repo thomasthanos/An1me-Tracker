@@ -68,6 +68,7 @@
         "https://*.an1me.to/watch/*"
       ],
       "js": [
+        "src/common/utils.js",
         "src/common/data/zoned-time.js",
         "src/common/data/cache-policy.js",
         "src/common/data/media-type.js",
@@ -128,6 +129,8 @@
         "https://*.an1me.to/watch/*"
       ],
       "js": [
+        "src/common/utils.js",
+        "src/common/data/library-keys.js",
         "src/common/data/multipart-mappings.js",
         "src/common/data/anime-identity.js",
         "src/common/data/zoned-time.js",

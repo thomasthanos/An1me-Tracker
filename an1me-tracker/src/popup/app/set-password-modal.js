@@ -3,7 +3,7 @@
   "use strict";
 
   const AT = (window.AnimeTracker = window.AnimeTracker || {});
-  const PASSWORD_SET_MARKER_KEY = "passwordSetMarker";
+  const { PASSWORD_SET_MARKER_KEY } = AT.SETTING_KEYS;
 
   async function openSetPasswordModal() {
     document.getElementById("setPasswordOverlay")?.remove();
@@ -29,7 +29,7 @@
         }
       : {
           title: "Set password for mobile",
-          hint: "Sign in on Orion / Safari with this password — same library, same account.",
+          hint: "Sign in on Safari with this password — same library, same account.",
           saveIdle: "Save password",
           saveBusy: "Saving…",
           successTitle: "Password set.",
@@ -237,18 +237,14 @@
           await FirebaseSync.setPasswordForCurrentUser(pw);
           return true;
         } catch (firstErr) {
-          const code = (firstErr?.message || "").split(":")[0].trim().toUpperCase().replace(/\s+/g, "_");
-          if (code !== "CREDENTIAL_TOO_OLD_LOGIN_AGAIN") throw firstErr;
+          if (AT.AuthEnv.authErrorCode(firstErr) !== "CREDENTIAL_TOO_OLD_LOGIN_AGAIN") throw firstErr;
 
           PopupLogger.log("Firebase", "Credential too old — reauthenticating via Google before retry");
           setLoadingLabel("Verifying with Google…");
           try {
             await FirebaseSync.signInWithGoogle();
           } catch (reauthErr) {
-            const m = (reauthErr?.message || "").toLowerCase();
-            const cancelled =
-              m.includes("did not approve") || m.includes("cancelled") || m.includes("closed") || m.includes("popup_closed");
-            if (cancelled) {
+            if (AT.AuthEnv.isAuthCancelled(reauthErr)) {
               throw new Error("Reauthentication cancelled. Please try again.");
             }
             throw reauthErr;

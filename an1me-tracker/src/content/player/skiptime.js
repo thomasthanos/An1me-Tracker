@@ -656,7 +656,7 @@
   let lastEpisodeIdentity = null;
   let submitCountdownTimer = null;
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const { sleep } = globalThis.AnimeTrackerUtils;
 
   function cacheKey() {
     return STORAGE_CACHE_PREFIX + getEpisodeIdentity();

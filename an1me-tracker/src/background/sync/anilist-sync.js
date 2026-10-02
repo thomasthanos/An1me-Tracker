@@ -15,14 +15,7 @@
   const MAX_WORK_PER_RUN = 25;
   const PROGRESS_WRITE_GAP_MS = 800;
 
-  function sget(keys) {
-    return bgStorageGet(keys);
-  }
-  function sset(obj) {
-    return bgStorageSet(obj);
-  }
-
-  function writeStatus(obj) { return sset({ [STATUS_KEY]: { ...obj, updatedAt: Date.now() } }); }
+  function writeStatus(obj) { return bgStorageSet({ [STATUS_KEY]: { ...obj, updatedAt: Date.now() } }); }
 
   function armPushAlarm(delayMinutes) {
     try {
@@ -33,7 +26,7 @@
   }
 
   async function getToken() {
-    const stored = await sget([Core.AUTH_KEY]);
+    const stored = await bgStorageGet([Core.AUTH_KEY]);
     const auth = stored[Core.AUTH_KEY];
     if (!auth || !auth.accessToken) return null;
     if (auth.expiresAt && auth.expiresAt <= Date.now()) return null;
@@ -54,7 +47,7 @@
       // A missing/expired token must not leave a "running"/"retrying" status
       // behind — the popup would report "Sync stalled" forever (common on
       // mobile after an update, before cloud auth re-hydrates).
-      const s = await sget([STATUS_KEY, Core.AUTH_KEY]);
+      const s = await bgStorageGet([STATUS_KEY, Core.AUTH_KEY]);
       const st = s[STATUS_KEY];
       if (st && (st.state === "running" || st.state === "retrying")) {
         const auth = s[Core.AUTH_KEY];
@@ -84,7 +77,7 @@
     let wroteRunningStatus = false;
     let heartbeatTimer = null;
     try {
-      const existing = await sget([STATUS_KEY]);
+      const existing = await bgStorageGet([STATUS_KEY]);
       const last = existing[STATUS_KEY];
       const publishRunningStatus = async (progress = null) => {
         wroteRunningStatus = true;
@@ -188,7 +181,7 @@
         try {
           const tombstone = { accessToken: null, expiresAt: 0, viewer: null, updatedAt: new Date().toISOString() };
           await runBgLibraryTransaction([Core.AUTH_KEY], () => ({ data: { [Core.AUTH_KEY]: tombstone }, result: true }));
-          const stored = await sget(["anilist_username"]).catch(() => ({}));
+          const stored = await bgStorageGet(["anilist_username"]).catch(() => ({}));
           queueSidecarSync("anilistAuth", {
             accessToken: null,
             expiresAt: 0,
@@ -254,7 +247,7 @@
     return false;
   });
 
-  sget([STATUS_KEY, Core.AUTH_KEY]).then((s) => {
+  bgStorageGet([STATUS_KEY, Core.AUTH_KEY]).then((s) => {
     const st = s[STATUS_KEY];
     const auth = s[Core.AUTH_KEY];
     const connected = !!(auth && auth.accessToken && (!auth.expiresAt || auth.expiresAt > Date.now()));

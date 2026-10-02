@@ -17,14 +17,6 @@ const FirebaseLib = (function () {
   const OAUTH_CLIENT_ID = isLocalDev ? OAUTH_CLIENT_ID_LOCAL : OAUTH_CLIENT_ID_RELEASE;
   const SCOPES = ["email", "profile"].join(" ");
 
-  function getRedirectUrl() {
-    try {
-      return chrome.identity?.getRedirectURL?.() || "";
-    } catch {
-      return "";
-    }
-  }
-
   const STORAGE_KEYS = {
     USER: "firebase_user",
     TOKENS: "firebase_tokens",
@@ -96,7 +88,7 @@ const FirebaseLib = (function () {
   async function init() {
     installAuthStorageListener();
     try {
-      const ru = getRedirectUrl();
+      const ru = window.AnimeTracker.AuthEnv.getRedirectUrl();
       if (ru) {
         const shortUrl = ru.replace(/https:\/\/([a-z0-9]+)\.chromiumapp\.org.*/, "chrome-extension://$1");
         PopupLogger.log("Firebase", `Extension redirect: ${shortUrl}`);
@@ -160,9 +152,9 @@ const FirebaseLib = (function () {
   async function signInWithGoogle() {
     return new Promise((resolve, reject) => {
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-      const REDIRECT_URL = getRedirectUrl();
+      const REDIRECT_URL = window.AnimeTracker.AuthEnv.getRedirectUrl();
 
-      if (!REDIRECT_URL || !chrome.identity?.launchWebAuthFlow) {
+      if (!window.AnimeTracker.AuthEnv.supportsWebAuthFlow()) {
         reject(new Error("Google sign-in is not supported on this browser. Please use Email/Password login instead."));
         return;
       }
@@ -178,12 +170,7 @@ const FirebaseLib = (function () {
       chrome.identity.launchWebAuthFlow({ url: authUrl.toString(), interactive: true }, async (redirectUrl) => {
         if (chrome.runtime.lastError) {
           const errMsg = chrome.runtime.lastError.message || "";
-          const isCancelled =
-            errMsg.includes("did not approve") ||
-            errMsg.includes("cancelled") ||
-            errMsg.includes("closed") ||
-            errMsg.includes("user_cancelled");
-          if (!isCancelled) {
+          if (!window.AnimeTracker.AuthEnv.isAuthCancelled(errMsg)) {
             PopupLogger.error("Firebase", "Auth error:", chrome.runtime.lastError);
           }
           reject(new Error(errMsg));
@@ -212,7 +199,7 @@ const FirebaseLib = (function () {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               postBody: `access_token=${accessToken}&providerId=google.com`,
-              requestUri: getRedirectUrl(),
+              requestUri: REDIRECT_URL,
               returnIdpCredential: true,
               returnSecureToken: true,
             }),
@@ -523,13 +510,8 @@ const FirebaseLib = (function () {
     return true;
   }
 
-  function mapIdentityToolkitError(code) {
-    const upper = String(code || "")
-      .split(":")[0]
-      .trim()
-      .toUpperCase()
-      .replace(/\s+/g, "_");
-    switch (upper) {
+  function mapIdentityToolkitError(message) {
+    switch (window.AnimeTracker.AuthEnv.authErrorCode(message)) {
       case "EMAIL_NOT_FOUND":
         return {
           friendly: "If an account exists for that email, a reset link has been sent.",
@@ -660,30 +642,6 @@ const FirebaseSync = (function () {
     return FirebaseSync.currentUser || null;
   }
 
-  async function signInWithGoogle() {
-    return await FirebaseLib.signInWithGoogle();
-  }
-
-  async function signInWithEmailPassword(email, password) {
-    return await FirebaseLib.signInWithEmailPassword(email, password);
-  }
-
-  async function signOut() {
-    return await FirebaseLib.signOut();
-  }
-
-  async function sendPasswordReset(email) {
-    return await FirebaseLib.sendPasswordReset(email);
-  }
-
-  async function setPasswordForCurrentUser(password) {
-    return await FirebaseLib.setPasswordForCurrentUser(password);
-  }
-
-  async function verifyPasswordSilently(email, password) {
-    return await FirebaseLib.verifyPasswordSilently(email, password);
-  }
-
   function sendBackgroundRequest(message, timeoutMs = 90000) {
     return window.AnimeTracker.sendRuntimeRequest(message, {
       timeoutMs,
@@ -742,12 +700,12 @@ const FirebaseSync = (function () {
     init,
     cleanup,
     getUser,
-    signInWithGoogle,
-    signInWithEmailPassword,
-    signOut,
-    sendPasswordReset,
-    setPasswordForCurrentUser,
-    verifyPasswordSilently,
+    signInWithGoogle: FirebaseLib.signInWithGoogle,
+    signInWithEmailPassword: FirebaseLib.signInWithEmailPassword,
+    signOut: FirebaseLib.signOut,
+    sendPasswordReset: FirebaseLib.sendPasswordReset,
+    setPasswordForCurrentUser: FirebaseLib.setPasswordForCurrentUser,
+    verifyPasswordSilently: FirebaseLib.verifyPasswordSilently,
     saveToCloud,
     queuePlaybackSettingsSave,
     pushAnilistAuthToCloud,

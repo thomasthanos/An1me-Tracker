@@ -3,8 +3,7 @@
 
   const AT = (window.AnimeTracker = window.AnimeTracker || {});
   const ANIME_DATA_KEY = "animeData";
-  const BADGE_STATE_KEY = "badgeUnlocks";
-  const GOAL_SETTINGS_KEY = "goalSettings";
+  const { BADGE_STATE_KEY, GOAL_SETTINGS_KEY } = AT.SETTING_KEYS;
   const BADGE_BASELINE_KEY = "badgeEvaluationBaselineV1";
   const BADGE_NOTIFICATION_BASELINE_KEY = "badgeNotificationBaselineV1";
   const BADGE_NOTIFICATION_TIMEOUT_MS = 12000;

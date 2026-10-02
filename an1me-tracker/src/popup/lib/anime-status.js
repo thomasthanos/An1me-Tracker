@@ -21,10 +21,7 @@
     return Math.round((nowUtc - targetUtc) / 86400000);
   }
 
-  function toMillis(value) {
-    const timestamp = value ? new Date(value).getTime() : 0;
-    return Number.isFinite(timestamp) ? timestamp : 0;
-  }
+  const { toMillis } = globalThis.AnimeTrackerUtils;
 
   function getAuthoritativeSiteInfo(slug, anime = null) {
     const AT = window.AnimeTracker;
@@ -148,7 +145,7 @@
     }
 
     if (watchedCount > 0 && listState !== AnimeStatus.COMPLETED && latestAvailable > 0) {
-      const highestWatched = Math.max(0, ...(anime.episodes || []).map((ep) => Number(ep.number) || 0));
+      const highestWatched = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber(anime);
 
       if (releaseStatus === "RELEASING" && highestWatched >= latestAvailable) {
         return AnimeStatus.AIRING;
@@ -195,7 +192,7 @@
 
     const eps = Array.isArray(anime.episodes) ? anime.episodes : [];
     if (eps.length === 0) return null;
-    const highestWatched = Math.max(0, ...eps.map((ep) => Number(ep.number) || 0));
+    const highestWatched = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber(anime);
 
     const count = latest - highestWatched;
     if (count <= 0 || count > maxGap) return null;

@@ -4,18 +4,20 @@
 
   const AT = window.AnimeTracker;
 
-  let elements, detectHasGoogleAuth, setTopStatValue, markInternalSave;
+  let elements, setTopStatValue, markInternalSave;
 
-  const GOAL_SETTINGS_KEY = "goalSettings";
-  const BADGE_STATE_KEY = "badgeUnlocks";
-  const COPY_GUARD_STORAGE_KEY = "copyGuardEnabled";
-  const SMART_NOTIF_STORAGE_KEY = "smartNotificationsEnabled";
-  const AUTO_SKIP_FILLER_STORAGE_KEY = "autoSkipFillers";
-  const SKIPTIME_HELPER_KEY = "skiptimeHelperEnabled";
-  const AUTO_4K_SERVER_KEY = "auto4kServerEnabled";
-  const AD_GUARD_KEY = "adGuardEnabled";
-  const AUTO_RESUME_KEY = "autoResumeEnabled";
-  const PASSWORD_SET_MARKER_KEY = "passwordSetMarker";
+  const {
+    GOAL_SETTINGS_KEY,
+    BADGE_STATE_KEY,
+    COPY_GUARD_STORAGE_KEY,
+    SMART_NOTIF_STORAGE_KEY,
+    AUTO_SKIP_FILLER_STORAGE_KEY,
+    SKIPTIME_HELPER_KEY,
+    AUTO_4K_SERVER_KEY,
+    AD_GUARD_KEY,
+    AUTO_RESUME_KEY,
+    PASSWORD_SET_MARKER_KEY,
+  } = AT.SETTING_KEYS;
 
   // persist:false paints the numbers without writing cachedStats — for callers whose animeData
   // is a placeholder rather than the real library (e.g. a failed load), since that cache is what
@@ -203,7 +205,7 @@
       user,
       settings: storedSettings,
       passwordIsSet,
-      isMobile: !detectHasGoogleAuth(),
+      isMobile: !AT.AuthEnv.supportsWebAuthFlow(),
       needsReauth,
     });
     await AT.refreshSmartNotificationStatus?.();
@@ -247,7 +249,6 @@
   AT.StatsViews = {
     _init(d) {
       elements = d.elements;
-      detectHasGoogleAuth = d.detectHasGoogleAuth;
       setTopStatValue = d.setTopStatValue;
       markInternalSave = d.markInternalSave;
       AT.ProgressInsights.configure({

@@ -81,6 +81,36 @@ const UIHelpers = {
     return earliest ? new Date(earliest).toISOString() : null;
   },
 
+  // Earliest started date across several entries (a season or movie group).
+  getEarliestStartedDate(animeList) {
+    let earliest = null;
+    for (const anime of animeList) {
+      const started = this.getStartedDate(anime);
+      if (started && (earliest === null || started < earliest)) earliest = started;
+    }
+    return earliest;
+  },
+
+  // A finished entry shows when it was watched ("3 Mar / 9 Apr"); anything else shows how long ago.
+  formatWatchSpan(isFinished, startedAt, endedAt, lastWatched) {
+    if (isFinished && startedAt && endedAt) return `${this.formatShortDate(startedAt)} / ${this.formatShortDate(endedAt)}`;
+    return lastWatched ? this.formatDate(lastWatched) : "Never";
+  },
+
+  // Compact age: "just now", "5m ago", "3h ago", "2d ago"; from dateAfterDays on, a short date.
+  formatTimeAgo(value, dateAfterDays = Infinity) {
+    const ms = AnimeTrackerUtils.toMillisOrNaN(value);
+    if (!Number.isFinite(ms)) return "";
+    const minutes = Math.floor(Math.max(0, Date.now() - ms) / 60000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < dateAfterDays) return `${days}d ago`;
+    return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  },
+
   getProgressSizeClass(episodeCount, totalEpisodes) {
     const total = totalEpisodes || episodeCount;
     if (total >= 200) return "size-huge";

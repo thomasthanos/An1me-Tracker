@@ -9,29 +9,7 @@
 (function () {
   "use strict";
 
-  const TOMBSTONE_GRACE_MS = 5000;
-
-  function toMillis(value) {
-    if (!value) return 0;
-    const ts = new Date(value).getTime();
-    return Number.isFinite(ts) ? ts : 0;
-  }
-
-  function getActivityTimestamp(anime) {
-    if (!anime || typeof anime !== "object") return 0;
-    let latest = Math.max(
-      toMillis(anime.lastWatched),
-      toMillis(anime.listStateUpdatedAt),
-      toMillis(anime.titleUpdatedAt),
-      toMillis(anime.completedAt),
-      toMillis(anime.droppedAt),
-      toMillis(anime.onHoldAt),
-    );
-    for (const episode of Array.isArray(anime.episodes) ? anime.episodes : []) {
-      latest = Math.max(latest, toMillis(episode?.watchedAt));
-    }
-    return latest;
-  }
+  const { toMillis } = globalThis.AnimeTrackerUtils;
 
   function watchedEpisodeNumbers(entry) {
     const nums = new Set();
@@ -66,10 +44,7 @@
   }
 
   function isTrustedMediaMapEntry(entry, helpers = {}) {
-    if (!entry || !Number(entry.mediaId)) return false;
-    if (entry.source === "anilistImport") return true;
-    const requiredVersion = Number(helpers.resolverVersion) || 0;
-    return requiredVersion > 0 && Number(entry.resolverV || 0) >= requiredVersion;
+    return globalThis.AnimeTrackerAniListImportUtils.isTrustedMapEntry(entry, helpers.resolverVersion);
   }
 
   // Conservative same-anime test for two slugs already sharing a base-group +
@@ -203,8 +178,8 @@
     const bEps = Array.isArray(entryB?.episodes) ? entryB.episodes.length : 0;
     if (aEps !== bEps) return aEps > bEps ? slugA : slugB;
 
-    const aTs = getActivityTimestamp(entryA);
-    const bTs = getActivityTimestamp(entryB);
+    const aTs = globalThis.AnimeTrackerMergeUtils.getAnimeActivityTimestamp(entryA);
+    const bTs = globalThis.AnimeTrackerMergeUtils.getAnimeActivityTimestamp(entryB);
     if (aTs !== bTs) return aTs > bTs ? slugA : slugB;
 
     return slugA <= slugB ? slugA : slugB;
@@ -222,13 +197,6 @@
       }
     }
     return merged;
-  }
-
-  function buildDedupeTombstone(loserEntry, nowMs) {
-    const sharedBuilder = globalThis.AnimeTrackerMergeUtils?.buildDeletedAnimeTombstone;
-    if (typeof sharedBuilder === "function") return sharedBuilder(loserEntry, nowMs);
-    const deletedAtMs = Math.max(Number(nowMs) || Date.now(), getActivityTimestamp(loserEntry) + TOMBSTONE_GRACE_MS + 1000);
-    return { deletedAt: new Date(deletedAtMs).toISOString() };
   }
 
   // Applies every merge to the passed stores IN PLACE and reports what changed.
@@ -312,7 +280,7 @@
 
         if (deletedAnime) {
           delete deletedAnime[winner];
-          deletedAnime[loser] = buildDedupeTombstone(loserEntry, nowMs);
+          deletedAnime[loser] = globalThis.AnimeTrackerMergeUtils.buildDeletedAnimeTombstone(loserEntry, nowMs);
         }
 
         result.cacheKeysToRemove.push(`animeinfo_${loser}`, `episodeTypes_${loser}`, `fillerslug_${loser}`);
@@ -330,9 +298,7 @@
     isSameAnime,
     chooseDuplicateWinner,
     mergeDuplicateEntries,
-    buildDedupeTombstone,
     buildDedupePlan,
-    isTrustedMediaMapEntry,
   };
   root.AnimeTrackerDedupeUtils = exports;
 

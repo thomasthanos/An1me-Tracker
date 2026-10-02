@@ -1,17 +1,9 @@
 // storage.js — chrome.storage read/write helpers used from within content scripts.
-const CONTENT_LEGACY_SYNC_KEYS = new Set(["animeData", "trackedEpisodes", "videoProgress"]);
-const CONTENT_LEGACY_SYNC_MIGRATION_KEY = "legacySyncMigrationV1Complete";
+const CONTENT_LEGACY_SYNC_KEYS = new Set(AnimeTrackerLibraryKeys.LEGACY_SYNC_KEYS);
+const CONTENT_LEGACY_SYNC_MIGRATION_KEY = AnimeTrackerLibraryKeys.LEGACY_SYNC_MIGRATION_KEY;
 const CONTENT_STORAGE_TIMEOUT_MS = 15000;
 const CONTENT_LIBRARY_REQUEST_TIMEOUT_MS = 20000;
-const CONTENT_LIBRARY_MUTATION_KEYS = new Set([
-  "animeData",
-  "videoProgress",
-  "deletedAnime",
-  "groupCoverImages",
-  "fillerStaySelections",
-  "skiptimeHelperEnabled",
-  "playbackSettingsUpdatedAt",
-]);
+const CONTENT_LIBRARY_MUTATION_KEYS = new Set(AnimeTrackerLibraryKeys.MUTATION_KEYS);
 const CONTENT_LIBRARY_MAX_RETRIES = 6;
 let contentLegacySyncMigrationPromise = null;
 

@@ -106,10 +106,6 @@ function an1meJitter(ms) {
   return Math.max(0, Math.round(ms - spread + Math.random() * spread * 2));
 }
 
-function an1meSleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
-}
-
 // Resolves null on timeout instead of hanging on a port that never closes.
 function sendToAn1meTab(tabId, payload, timeoutMs) {
   return new Promise((resolve) => {
@@ -138,7 +134,7 @@ async function an1meTabReady(tabId, timeoutMs = AN1ME_READY_TIMEOUT_MS) {
   while (Date.now() < deadline) {
     const reply = await sendToAn1meTab(tabId, { type: "AN1ME_PING" }, 2000);
     if (reply?.ready === true) return true;
-    await an1meSleep(AN1ME_READY_POLL_MS);
+    await AnimeTrackerUtils.sleep(AN1ME_READY_POLL_MS);
   }
   return false;
 }
@@ -484,7 +480,7 @@ async function an1meTabFetch(url, req, timeoutMs, deadline) {
     let reply = await sendToAn1meTab(tabId, payload, timeoutMs + AN1ME_SEND_TIMEOUT_PAD_MS);
 
     if (an1meTabReplyIsRetryable(reply, req.as) && Date.now() + AN1ME_CHALLENGE_RETRY_MS < deadline) {
-      await an1meSleep(AN1ME_CHALLENGE_RETRY_MS);
+      await AnimeTrackerUtils.sleep(AN1ME_CHALLENGE_RETRY_MS);
       const retry = await sendToAn1meTab(tabId, payload, timeoutMs + AN1ME_SEND_TIMEOUT_PAD_MS);
       if (retry) reply = retry;
     }
@@ -565,7 +561,7 @@ async function an1meFetchUncoalesced(url, options) {
       if (attempt < 2) {
         const backoff = an1meJitter(AN1ME_DIRECT_RETRY_BASE_MS * Math.pow(2, attempt - 1));
         if (backoff >= remaining()) break;
-        await an1meSleep(backoff);
+        await AnimeTrackerUtils.sleep(backoff);
       }
     }
   }

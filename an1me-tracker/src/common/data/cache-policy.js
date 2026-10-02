@@ -29,11 +29,7 @@
   const INFO_SCHEMA_VERSION = 5;
   const EPISODE_TYPES_SCHEMA_VERSION = 3;
 
-  function toMs(value) {
-    if (!value) return NaN;
-    const t = typeof value === "number" ? value : new Date(value).getTime();
-    return Number.isFinite(t) ? t : NaN;
-  }
+  const toMs = globalThis.AnimeTrackerUtils.toMillisOrNaN;
 
   // Finished airing AND every declared episode already on the site: nothing left to discover,
   // so re-scraping it daily is pure noise. A FINISHED page that is still missing episodes keeps

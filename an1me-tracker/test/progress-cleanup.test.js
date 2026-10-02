@@ -10,6 +10,7 @@ const fs = require("fs");
 const path = require("path");
 
 global.self = global;
+require(path.join(__dirname, "..", "src/common/utils.js"));
 require(path.join(__dirname, "..", "src/common/data/merge-utils.js"));
 const { cleanTrackedProgress } = global.self.AnimeTrackerMergeUtils;
 

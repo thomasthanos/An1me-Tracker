@@ -174,9 +174,6 @@ const ProgressManager = {
     return MergeUtils.cleanTrackedProgress(animeData || {}, videoProgress, deletedAnime, {
       isMovie: (slug, entry) => !!SeasonGrouping?.isMovie?.(slug, entry),
       completedPercentage: CONFIG.COMPLETED_PERCENTAGE,
-      tombstoneKeepMs: 7 * 24 * 60 * 60 * 1000,
-      // Same cap as the background sync and the content script.
-      maxEntries: 200,
     });
   },
 

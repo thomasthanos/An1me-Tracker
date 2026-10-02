@@ -97,12 +97,7 @@ function parseAflShowIndex(html) {
   while ((match = pattern.exec(String(html || ""))) !== null) {
     const id = match[1].toLowerCase();
     if (seen.has(id)) continue;
-    const title = match[2]
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&#0?39;|&apos;|&rsquo;/g, "'")
-      .replace(/&quot;/g, '"')
-      .replace(/&nbsp;/g, " ")
+    const title = AnimeTrackerUtils.decodeHtmlEntities(match[2].replace(/<[^>]+>/g, " "))
       .replace(/\s+/g, " ")
       .trim();
     if (!title) continue;
@@ -470,7 +465,7 @@ async function fetchJikanEpisodes(title, options = {}) {
       if (epData?.data) allEpisodes.push(...epData.data);
       hasNext = epData?.pagination?.has_next_page === true;
       page++;
-      if (hasNext) await new Promise((r) => setTimeout(r, 400));
+      if (hasNext) await AnimeTrackerUtils.sleep(400);
     }
 
     if (allEpisodes.length === 0 || hasNext) return null;

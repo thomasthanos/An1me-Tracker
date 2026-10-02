@@ -27,19 +27,6 @@
     if (["TV", "TV_SHORT"].includes(sourceType)) return !targetType || ["TV", "TV_SHORT"].includes(targetType);
     return !!targetType && sourceType === targetType;
   }
-  function fallbackSlugify(title) {
-    return String(title || "")
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, " ")
-      .replace(/[\s_]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  }
-  function getSlugify() {
-    const Core = (typeof globalThis !== "undefined" && globalThis.AniListCore) || (typeof self !== "undefined" && self.AniListCore) || null;
-    return Core && typeof Core.slugify === "function" ? Core.slugify : fallbackSlugify;
-  }
 
   function sget(keys) {
     return window.AnimeTracker.Storage.get(keys);
@@ -50,9 +37,7 @@
   function sremove(keys) {
     return window.AnimeTracker.Storage.remove(keys);
   }
-  function sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-  }
+  const { sleep, slugify } = globalThis.AnimeTrackerUtils;
 
   function logInfo(...args) {
     try {
@@ -113,7 +98,7 @@
       // title — the first link on the page can be a nav element or an unrelated result,
       // and a wrong pick here renames (merges) the library entry under the wrong slug.
       const wantedTokens = new Set(
-        getSlugify()(q)
+        slugify(q)
           .split("-")
           .filter((w) => w.length > 2),
       );
@@ -250,7 +235,6 @@
   function buildCandidatesForEntry(slug, entry) {
     const out = [];
     const seen = new Set([slug]);
-    const slugify = getSlugify();
     const add = (cand) => {
       if (!cand || seen.has(cand)) return;
       seen.add(cand);

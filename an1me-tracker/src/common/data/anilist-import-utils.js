@@ -1,9 +1,12 @@
 (function (root) {
   "use strict";
 
+  // An AniList import is always trusted; a resolved entry only when made by at least resolverVersion.
   function isTrustedMapEntry(entry, resolverVersion) {
     if (!entry || !Number(entry.mediaId)) return false;
-    return entry.source === "anilistImport" || Number(entry.resolverV || 0) >= Number(resolverVersion || 0);
+    if (entry.source === "anilistImport") return true;
+    const requiredVersion = Number(resolverVersion) || 0;
+    return requiredVersion > 0 && Number(entry.resolverV || 0) >= requiredVersion;
   }
 
   function hasTrustedConflict(entry, mediaId, resolverVersion) {

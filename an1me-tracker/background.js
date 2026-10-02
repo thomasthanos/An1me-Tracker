@@ -2,6 +2,9 @@
 // read/write sync (full + progress), debounced cloud polling, daily quota
 // cleanup, and alarm-driven retries. Shared fetchers/jobs loaded via importScripts.
 importScripts(
+  "src/common/utils.js",
+  "src/common/data/library-keys.js",
+  "src/common/logger.js",
   "src/common/cloud.js",
   "src/common/data/cache-policy.js",
   "src/common/data/zoned-time.js",
@@ -60,8 +63,8 @@ const decodeEpisodesFromCloud = sharedMergeUtils.decodeEpisodesFromCloud || miss
 
 const BG_DEBUG = false;
 const dlog = (...a) => { if (BG_DEBUG) console.log(...a); };
-// Silent in production (BG_DEBUG off), but makes swallowed errors observable when debugging.
-const swallow = (ctx, err) => dlog(`[BG] swallowed (${ctx}):`, err?.message || err);
+// Silent unless POPUP_LOG_LEVEL is "DEBUG"; logger.js holds the one implementation.
+const swallow = globalThis.__atSwallow;
 const ddebug = (...a) => { if (BG_DEBUG) console.debug(...a); };
 
 const FSDebug = (() => {
@@ -295,9 +298,6 @@ try {
 
 const COMPLETED_PERCENTAGE = 85;
 const DELETED_ANIME_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-const MAX_PROGRESS_ENTRIES = 200;
-
-const PROGRESS_TOMBSTONE_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 
 function stripFirebaseSilentAnimeMetadata(anime) {
   if (!anime || typeof anime !== "object") return anime;
@@ -348,28 +348,7 @@ const PENDING_PROGRESS_SYNC_KEY = "syncState.pendingProgressFlush";
 const CLOUD_SYNC_STATUS_KEY = "syncState.cloudStatus";
 const BG_SYNC_WRITE_TOKEN_KEY = "syncState.internalWriteToken";
 const LIBRARY_MUTATION_REVISION_KEY = "libraryMutationRevision";
-const LIBRARY_MUTATION_KEYS = Object.freeze([
-  "animeData",
-  "videoProgress",
-  "deletedAnime",
-  "groupCoverImages",
-  "anilist_media_map",
-  "anilist_pushed",
-  "anilist_push_schema",
-  "fillerStaySelections",
-  "goalSettings",
-  "badgeUnlocks",
-  "badgeEvaluationBaselineV1",
-  "badgeNotificationBaselineV1",
-  "anilist_auth",
-  "anilist_username",
-  "copyGuardEnabled",
-  "smartNotificationsEnabled",
-  "autoSkipFillers",
-  "skiptimeHelperEnabled",
-  "auto4kServerEnabled",
-  "playbackSettingsUpdatedAt",
-]);
+const LIBRARY_MUTATION_KEYS = AnimeTrackerLibraryKeys.MUTATION_KEYS;
 const LIBRARY_MUTATION_KEY_SET = new Set(LIBRARY_MUTATION_KEYS);
 const PENDING_SIDECAR_SYNC_KEY = "syncState.pendingSidecars";
 const SIDECAR_SYNC_RETRY_ALARM = "sidecarSyncRetry";
@@ -517,8 +496,6 @@ function cleanTrackedProgressBg(animeData, videoProgress, deletedAnime = {}) {
     isMovie: (slug, entry) =>
       utils.isLikelyMovieSlug(slug, globalThis.AnimeTrackerMediaType?.resolve?.(slug, entry, null) || null),
     completedPercentage: COMPLETED_PERCENTAGE,
-    tombstoneKeepMs: PROGRESS_TOMBSTONE_KEEP_MS,
-    maxEntries: MAX_PROGRESS_ENTRIES,
   }).cleaned;
 }
 
@@ -617,7 +594,7 @@ async function bgIterativeQuotaRecovery(reason = "daily-alarm") {
     let bytesNow = await bgMeasureBytes();
     let pass = 1;
     const maxPasses = 3;
-    // cleanTrackedProgressBg already caps progress at MAX_PROGRESS_ENTRIES (200), so the old `cap > 250`
+    // cleanTrackedProgressBg already caps progress at 200 entries (merge-utils), so the old `cap > 250`
     // condition was never true and these extra passes never ran.
     while (bytesNow > target && pass < maxPasses && cap > 25) {
       pass += 1;
@@ -719,49 +696,24 @@ function isBenignSwLifecycleError(message) {
   return /No SW|Service worker|context invalidated|message port closed|message channel closed|before a response was received/i.test(m);
 }
 
-const BG_LEGACY_SYNC_KEYS = new Set(["animeData", "trackedEpisodes", "videoProgress"]);
-const BG_LEGACY_SYNC_MIGRATION_KEY = "legacySyncMigrationV1Complete";
+const BG_LEGACY_SYNC_KEYS = new Set(AnimeTrackerLibraryKeys.LEGACY_SYNC_KEYS);
+const BG_LEGACY_SYNC_MIGRATION_KEY = AnimeTrackerLibraryKeys.LEGACY_SYNC_MIGRATION_KEY;
 let bgLegacySyncMigrationPromise = null;
 let bgLegacySyncMigrationComplete = false;
 
+function rethrowStorageError(operation) {
+  return (error) => {
+    if (isBenignSwLifecycleError(error?.message)) dlog(`[BG] storage.${operation} ignored during SW teardown:`, error.message);
+    throw error;
+  };
+}
+
 function bgStorageGet(keys) {
-  return new Promise((resolve, reject) => {
-    try {
-      chrome.storage.local.get(keys, (result) => {
-        const err = chrome.runtime.lastError;
-        if (err) {
-          if (isBenignSwLifecycleError(err.message)) {
-            dlog("[BG] storage.get ignored during SW teardown:", err.message);
-          }
-          reject(new Error(err.message));
-        } else {
-          resolve(result || {});
-        }
-      });
-    } catch (e) {
-      reject(e);
-    }
-  });
+  return AnimeTrackerUtils.storage.get(keys).catch(rethrowStorageError("get"));
 }
 
 function bgStorageSetRaw(data) {
-  return new Promise((resolve, reject) => {
-    try {
-      chrome.storage.local.set(data, () => {
-        const err = chrome.runtime.lastError;
-        if (err) {
-          if (isBenignSwLifecycleError(err.message)) {
-            dlog("[BG] storage.set ignored during SW teardown:", err.message);
-          }
-          reject(new Error(err.message));
-        } else {
-          resolve();
-        }
-      });
-    } catch (e) {
-      reject(e);
-    }
-  });
+  return AnimeTrackerUtils.storage.set(data).catch(rethrowStorageError("set"));
 }
 
 function enqueueBgLibraryMutation(task) {

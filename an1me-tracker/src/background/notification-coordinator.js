@@ -27,15 +27,6 @@
     return result;
   }
 
-  function hashText(value) {
-    let hash = 2166136261;
-    for (let i = 0; i < value.length; i++) {
-      hash ^= value.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(36);
-  }
-
   function truncate(value, maxLength) {
     const text = String(value || "").trim();
     if (text.length <= maxLength) return text;
@@ -220,7 +211,7 @@
     const names = items.slice(0, 3).map((item) => item.title);
     const more = items.length - names.length;
     const list = names.join(", ") + (more > 0 ? ` +${more} more` : "");
-    const hash = hashText(keys.join("|"));
+    const hash = AnimeTrackerUtils.hashText(keys.join("|"));
     return {
       eventKey: `episode-batch:${hash}`,
       dedupeKeys: keys,
@@ -256,7 +247,7 @@
       }));
     }
 
-    const hash = hashText(keys.join("|"));
+    const hash = AnimeTrackerUtils.hashText(keys.join("|"));
     return [
       {
         eventKey: `badge-batch:${hash}`,

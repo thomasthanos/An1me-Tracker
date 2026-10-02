@@ -15,13 +15,7 @@ const AnimeCardRenderer = {
     const totalCanon = FillerService.getTotalCanonEpisodes(slug, progressData.total || episodeCount);
     const hasFillerData = FillerService.hasFillerData(slug);
 
-    let highestCompletedEp = 0;
-    if (anime.episodes?.length > 0) {
-      const validNumbers = anime.episodes.map((ep) => ep.number).filter((n) => !isNaN(n) && n > 0);
-      if (validNumbers.length > 0) {
-        highestCompletedEp = Math.max(...validNumbers);
-      }
-    }
+    const highestCompletedEp = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber(anime);
 
     const resolvedListState = globalThis.AnimeTrackerEntryState?.getResolvedListState?.(anime) || anime.listState || "active";
     const trackedEpisodeNumbers = new Set(
@@ -234,18 +228,12 @@ const AnimeCardRenderer = {
     } else if (!isCardComplete) {
       statusTextCard = "Watching";
     }
-    let timeAgoText;
-    if (isCardComplete && totalWatchedEpisodes > 0) {
-      const startedDate = UIHelpers.getStartedDate(anime);
-      const endedDate = anime.completedAt || anime.lastWatched;
-      if (startedDate && endedDate) {
-        timeAgoText = `${UIHelpers.formatShortDate(startedDate)} / ${UIHelpers.formatShortDate(endedDate)}`;
-      } else {
-        timeAgoText = anime.lastWatched ? UIHelpers.formatDate(anime.lastWatched) : "Never";
-      }
-    } else {
-      timeAgoText = anime.lastWatched ? UIHelpers.formatDate(anime.lastWatched) : "Never";
-    }
+    const timeAgoText = UIHelpers.formatWatchSpan(
+      isCardComplete && totalWatchedEpisodes > 0,
+      UIHelpers.getStartedDate(anime),
+      anime.completedAt || anime.lastWatched,
+      anime.lastWatched,
+    );
     const progressBadge =
       !isCardComplete && !isDropped && !isOnHold && episodeProgressText
         ? `<span class="meta-badge meta-badge-progress">${episodeProgressText}</span>`
@@ -574,21 +562,7 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
         ? `<span class="ip-cover-wrap"><img class="ip-cover" src="${UIHelpers.escapeHtml(safeCoverImage)}" alt=""></span>`
         : `<span class="ip-cover-wrap"><span class="ip-cover-placeholder">&#9654;</span></span>`;
 
-      const savedDate = latestEp.savedAt ? new Date(latestEp.savedAt) : null;
-      const now = new Date();
-      let savedTimeStr = "just now";
-      if (savedDate) {
-        const diffMs = now - savedDate;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-
-        if (diffMins < 1) savedTimeStr = "just now";
-        else if (diffMins < 60) savedTimeStr = `${diffMins}m ago`;
-        else if (diffHours < 24) savedTimeStr = `${diffHours}h ago`;
-        else if (diffDays < 7) savedTimeStr = `${diffDays}d ago`;
-        else savedTimeStr = savedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      }
+      const savedTimeStr = (latestEp.savedAt && UIHelpers.formatTimeAgo(latestEp.savedAt, 7)) || "just now";
 
       const watchedDate = latestEp.watchedAt ? new Date(latestEp.watchedAt) : null;
       let watchedDateStr = "";
@@ -1268,25 +1242,13 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
         .join("");
       const allSeasonsComplete = seasonData.every((d) => d.isComplete);
 
-      let lastWatchedText;
-      if (allSeasonsComplete && filteredSeasons.some(({ anime }) => (anime.episodes?.length || 0) > 0)) {
-        let earliestStart = null;
-        filteredSeasons.forEach(({ anime }) => {
-          const started = UIHelpers.getStartedDate(anime);
-          if (started) {
-            const t = new Date(started).getTime();
-            if (earliestStart === null || t < earliestStart) earliestStart = t;
-          }
-        });
-        const endedDate = latestWatched ? latestWatched.toISOString() : null;
-        if (earliestStart && endedDate) {
-          lastWatchedText = `${UIHelpers.formatShortDate(new Date(earliestStart).toISOString())} / ${UIHelpers.formatShortDate(endedDate)}`;
-        } else {
-          lastWatchedText = latestWatched ? UIHelpers.formatDate(latestWatched.toISOString()) : "Never";
-        }
-      } else {
-        lastWatchedText = latestWatched ? UIHelpers.formatDate(latestWatched.toISOString()) : "Never";
-      }
+      const latestWatchedIso = latestWatched ? latestWatched.toISOString() : null;
+      const lastWatchedText = UIHelpers.formatWatchSpan(
+        allSeasonsComplete && filteredSeasons.some(({ anime }) => (anime.episodes?.length || 0) > 0),
+        UIHelpers.getEarliestStartedDate(filteredSeasons.map(({ anime }) => anime)),
+        latestWatchedIso,
+        latestWatchedIso,
+      );
       const itemCount = expandedSeasons.length;
       const inMoviesCategory = AT.PopupState?.currentCategory === "movies";
       const movieItemCount = expandedSeasons.filter(
@@ -1467,25 +1429,13 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
 
       const completedCount = movies.filter(({ slug, anime }) => this.getEntryStatusView(slug, anime).status === "completed").length;
       const allMoviesWatchedForDate = completedCount >= movies.length;
-      let lastWatchedText;
-      if (allMoviesWatchedForDate && completedCount > 0) {
-        let earliestStart = null;
-        movies.forEach(({ anime }) => {
-          const started = UIHelpers.getStartedDate(anime);
-          if (started) {
-            const t = new Date(started).getTime();
-            if (earliestStart === null || t < earliestStart) earliestStart = t;
-          }
-        });
-        const endedDate = latestWatched ? latestWatched.toISOString() : null;
-        if (earliestStart && endedDate) {
-          lastWatchedText = `${UIHelpers.formatShortDate(new Date(earliestStart).toISOString())} / ${UIHelpers.formatShortDate(endedDate)}`;
-        } else {
-          lastWatchedText = latestWatched ? UIHelpers.formatDate(latestWatched.toISOString()) : "Never";
-        }
-      } else {
-        lastWatchedText = latestWatched ? UIHelpers.formatDate(latestWatched.toISOString()) : "Never";
-      }
+      const latestWatchedIso = latestWatched ? latestWatched.toISOString() : null;
+      const lastWatchedText = UIHelpers.formatWatchSpan(
+        allMoviesWatchedForDate && completedCount > 0,
+        UIHelpers.getEarliestStartedDate(movies.map(({ anime }) => anime)),
+        latestWatchedIso,
+        latestWatchedIso,
+      );
 
       const groupImages = (window.AnimeTracker && window.AnimeTracker.groupCoverImages) || {};
       const coverImageGroup =
@@ -1518,17 +1468,7 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
       const formattedTime = UIHelpers.formatDuration(watchTime);
       const statusView = this.getEntryStatusView(slug, anime);
       const isWatched = statusView.status === "completed";
-      let lastWatched;
-      if (isWatched) {
-        const startedDate = UIHelpers.getStartedDate(anime);
-        if (startedDate && anime.lastWatched) {
-          lastWatched = `${UIHelpers.formatShortDate(startedDate)} / ${UIHelpers.formatShortDate(anime.lastWatched)}`;
-        } else {
-          lastWatched = anime.lastWatched ? UIHelpers.formatDate(anime.lastWatched) : "Never";
-        }
-      } else {
-        lastWatched = anime.lastWatched ? UIHelpers.formatDate(anime.lastWatched) : "Never";
-      }
+      const lastWatched = UIHelpers.formatWatchSpan(isWatched, UIHelpers.getStartedDate(anime), anime.lastWatched, anime.lastWatched);
 
       const coverHtml = UIHelpers.renderCoverFigure(title, anime.coverImage || null);
 

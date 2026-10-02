@@ -64,19 +64,7 @@ const firebaseConfig = {
   const CURRENT_SCHEMA_VERSION = 3;
   const AUTH_MUTATION_TIMEOUT_MS = 20000;
 
-  function _storageGet(keys) {
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.storage.local.get(keys, (result) => {
-          const errorMessage = chrome.runtime.lastError?.message;
-          if (errorMessage) reject(new Error(`Local storage read failed: ${errorMessage}`));
-          else resolve(result || {});
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
+  const _storageGet = globalThis.AnimeTrackerUtils.storage.get;
 
   function _sendAuthMutation(message) {
     if (typeof window === "undefined" && typeof bgMutateFirebaseAuth === "function") {

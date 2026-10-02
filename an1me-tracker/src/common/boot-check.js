@@ -7,7 +7,14 @@
   if (typeof window === "undefined") {
     label = "background";
     ns = self;
-    required = ["firebaseConfig", "AnimeTrackerMergeUtils", "AnimeTrackerNotificationCoordinator", "AnimeTrackerAnimeResolver"];
+    required = [
+      "AnimeTrackerUtils",
+      "AnimeTrackerLibraryKeys",
+      "firebaseConfig",
+      "AnimeTrackerMergeUtils",
+      "AnimeTrackerNotificationCoordinator",
+      "AnimeTrackerAnimeResolver",
+    ];
   } else if (location.protocol === "chrome-extension:") {
     // popup / side panel. NB: the shared logger.js also creates window.AnimeTrackerContent
     // here, so detect the context by protocol — not by which namespace object exists.
@@ -15,6 +22,8 @@
     ns = window.AnimeTracker || {};
     required = [
       "CONFIG",
+      "SETTING_KEYS",
+      "AuthEnv",
       "Storage",
       "LibraryMutations",
       "LibraryLoadController",

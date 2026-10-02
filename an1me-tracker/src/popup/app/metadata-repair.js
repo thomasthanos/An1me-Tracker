@@ -11,7 +11,7 @@
   const METADATA_REPAIR_MODAL_FETCH_THRESHOLD = 8;
   const METADATA_REPAIR_MODAL_FETCH_RATIO = 0.6;
 
-  let elements, detectHasGoogleAuth, markInternalSave, scheduleDeferredListRefresh, sendRuntimeMessage, updateStats;
+  let elements, markInternalSave, scheduleDeferredListRefresh, sendRuntimeMessage, updateStats;
   let metadataRepairPromise = null;
   let lastMetadataRepairResumeNudgeAt = 0;
   let metadataRepairApplyVersion = 0;
@@ -323,7 +323,7 @@
           type: "START_LIBRARY_REPAIR",
           forceInfoRefresh,
           forceFillerRefresh,
-          isMobile: !detectHasGoogleAuth(),
+          isMobile: AnimeTrackerUtils.isMobileDevice(),
           origin: "manual",
         },
         30000,
@@ -350,7 +350,6 @@
   AT.MetadataRepair = {
     _init(d) {
       elements = d.elements;
-      detectHasGoogleAuth = d.detectHasGoogleAuth;
       markInternalSave = d.markInternalSave;
       scheduleDeferredListRefresh = d.scheduleDeferredListRefresh;
       sendRuntimeMessage = d.sendRuntimeMessage;

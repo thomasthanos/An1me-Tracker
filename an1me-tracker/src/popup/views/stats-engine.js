@@ -135,32 +135,8 @@
 
   let _cache = null;
 
-  function revisionSignature(revision) {
-    if (revision === null || revision === undefined || revision === "") return null;
-    const value = Number(revision);
-    return Number.isFinite(value) && value >= 0 ? `revision:${value}` : null;
-  }
-
-  function hashText(value) {
-    let hash = 2166136261;
-    for (let i = 0; i < value.length; i++) {
-      hash ^= value.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(36);
-  }
-
-  function signatureOf(animeData) {
-    try {
-      const serialized = JSON.stringify(animeData || {});
-      return `${serialized.length}|${hashText(serialized)}`;
-    } catch {
-      return `uncacheable:${Date.now()}:${Math.random()}`;
-    }
-  }
-
   function buildWatchIndex(animeData, revision = null) {
-    const sig = revisionSignature(revision) || signatureOf(animeData);
+    const sig = AnimeTrackerUtils.cacheSignature(animeData, revision);
     if (_cache && _cache.sig === sig) {
       _cache.ref = animeData;
       return _cache.index;

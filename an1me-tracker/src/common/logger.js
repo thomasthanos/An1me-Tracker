@@ -74,8 +74,8 @@
   function popupLevel() {
     try {
       return (
-        (typeof window !== "undefined" && window.POPUP_LOG_LEVEL) ||
-        (typeof window !== "undefined" && window.AnimeTrackerContent?.CONFIG?.LOG_LEVEL) ||
+        globalThis.POPUP_LOG_LEVEL ||
+        globalThis.AnimeTrackerContent?.CONFIG?.LOG_LEVEL ||
         "INFO"
       );
     } catch {
@@ -121,7 +121,7 @@
     throttleState: new Map(),
 
     get currentLevel() {
-      return (typeof window !== "undefined" && window.AnimeTrackerContent?.CONFIG?.LOG_LEVEL) || "INFO";
+      return globalThis.AnimeTrackerContent?.CONFIG?.LOG_LEVEL || "INFO";
     },
 
     styles: {
@@ -250,10 +250,9 @@
     } catch {}
   }
 
-  if (typeof window !== "undefined") {
-    window.PopupLogger = PopupLogger;
-    window.AnimeTrackerContent = window.AnimeTrackerContent || {};
-    window.AnimeTrackerContent.Logger = ContentLogger;
-    window.__atSwallow = swallow;
-  }
+  // globalThis, not window: the service worker loads this file too.
+  globalThis.PopupLogger = PopupLogger;
+  globalThis.AnimeTrackerContent = globalThis.AnimeTrackerContent || {};
+  globalThis.AnimeTrackerContent.Logger = ContentLogger;
+  globalThis.__atSwallow = swallow;
 })();

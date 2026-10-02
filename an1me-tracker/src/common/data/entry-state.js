@@ -1,10 +1,7 @@
 (function (root) {
   "use strict";
 
-  function toMillis(value) {
-    const timestamp = value ? new Date(value).getTime() : 0;
-    return Number.isFinite(timestamp) ? timestamp : 0;
-  }
+  const { toMillis } = globalThis.AnimeTrackerUtils;
 
   function getResolvedListState(entry) {
     if (!entry) return "active";
@@ -128,6 +125,16 @@
     return { watched: numbers.size, covered, highest };
   }
 
+  // Highest episode number in the entry, fractional ones (6.5) included; 0 when there are none.
+  function getHighestEpisodeNumber(entry) {
+    let highest = 0;
+    for (const episode of Array.isArray(entry?.episodes) ? entry.episodes : []) {
+      const number = Number(episode?.number) || 0;
+      if (number > highest) highest = number;
+    }
+    return highest;
+  }
+
   function getAutoCompletionSource(entry, info = {}) {
     if (!entry) return null;
     const total = Number(info.totalEpisodes) || Number(entry.totalEpisodes) || 0;
@@ -166,6 +173,7 @@
     getResolvedListStateTimestamp,
     normalizeListStateMarkers,
     getEpisodeProgress,
+    getHighestEpisodeNumber,
     getAutoCompletionSource,
     reconcileCompletionState,
   };

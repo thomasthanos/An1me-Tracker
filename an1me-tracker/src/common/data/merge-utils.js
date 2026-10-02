@@ -12,11 +12,10 @@
     return PLACEHOLDER_DURATION_SET.has(d);
   }
 
-  function toMillis(value) {
-    if (!value) return 0;
-    const ts = new Date(value).getTime();
-    return Number.isFinite(ts) ? ts : 0;
-  }
+  const { toMillis } = globalThis.AnimeTrackerUtils;
+
+  const PROGRESS_MAX_ENTRIES = 200;
+  const PROGRESS_TOMBSTONE_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 
   function pickLatestIso(a, b) {
     const aTs = toMillis(a);
@@ -1018,13 +1017,14 @@
   // background kept it. Both disagreements now resolve to keeping the data.
   //
   // options: isMovie(slug, entry), completedPercentage, tombstoneKeepMs, maxEntries (0 = no cap), now.
+  // tombstoneKeepMs and maxEntries default to the limits every context uses.
   // Returns { cleaned, removedCount }.
   function cleanTrackedProgress(animeData, videoProgress, deletedAnime, options) {
     const opts = options || {};
     if (!videoProgress || typeof videoProgress !== "object") return { cleaned: videoProgress, removedCount: 0 };
     const completedPercentage = Number(opts.completedPercentage) || 85;
-    const tombstoneKeepMs = Number(opts.tombstoneKeepMs) || 7 * 24 * 60 * 60 * 1000;
-    const maxEntries = Math.max(0, Number(opts.maxEntries) || 0);
+    const tombstoneKeepMs = Number(opts.tombstoneKeepMs) || PROGRESS_TOMBSTONE_KEEP_MS;
+    const maxEntries = opts.maxEntries === undefined ? PROGRESS_MAX_ENTRIES : Math.max(0, Number(opts.maxEntries) || 0);
     const isMovie = typeof opts.isMovie === "function" ? opts.isMovie : () => false;
     const now = Number(opts.now) || Date.now();
     const library = animeData && typeof animeData === "object" ? animeData : {};
@@ -1108,6 +1108,7 @@
     mergeAnimeData,
     mergeMigratedEntry,
     mergeDeletedAnime,
+    getAnimeActivityTimestamp,
     buildDeletedAnimeTombstone,
     pruneStaleDeletedAnime,
     applyDeletedAnime,

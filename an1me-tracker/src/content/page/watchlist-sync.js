@@ -321,7 +321,7 @@ const WatchlistSync = {
       const removed = await this._sendWatchlistRequest(animeId, "remove", Logger);
       if (removed) {
         await this._persistSyncedType(animeSlug, "remove");
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await AnimeTrackerUtils.sleep(200);
       } else {
         Logger.warn(`Watchlist: couldn't clear previous "${this._statusLabel(previousType)}" status for "${name}"`);
       }
@@ -379,7 +379,7 @@ const WatchlistSync = {
       // Token + verify closes the check-then-set race between two tabs opening together.
       const lockToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       await chrome.storage.local.set({ [LOCK_KEY]: { time: Date.now(), token: lockToken } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await AnimeTrackerUtils.sleep(50);
       const verify = await chrome.storage.local.get([LOCK_KEY]);
       if (verify[LOCK_KEY]?.token !== lockToken) {
         Logger.debug("WatchlistSync: reconcile lock contended, deferring");
@@ -391,7 +391,7 @@ const WatchlistSync = {
       for (const [slug, entry, want] of stale) {
         const ok = await this.updateStatus(entry.siteAnimeId, want, slug);
         if (ok) synced++;
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await AnimeTrackerUtils.sleep(250);
       }
 
       if (synced > 0) {

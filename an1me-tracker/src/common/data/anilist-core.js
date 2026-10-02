@@ -19,35 +19,13 @@
     const popupStorage = globalThis.AnimeTracker?.Storage;
     if (popupStorage?.get) return popupStorage.get(keys);
     if (typeof bgStorageGet === "function") return bgStorageGet(keys);
-
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.storage.local.get(keys, (result) => {
-          const errorMessage = chrome.runtime.lastError?.message;
-          if (errorMessage) reject(new Error(`Local storage read failed: ${errorMessage}`));
-          else resolve(result || {});
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
+    return globalThis.AnimeTrackerUtils.storage.get(keys);
   }
   function sset(obj) {
     const popupStorage = globalThis.AnimeTracker?.Storage;
     if (popupStorage?.set) return popupStorage.set(obj);
     if (typeof bgStorageSet === "function") return bgStorageSet(obj);
-
-    return new Promise((resolve, reject) => {
-      try {
-        chrome.storage.local.set(obj, () => {
-          const errorMessage = chrome.runtime.lastError?.message;
-          if (errorMessage) reject(new Error(`Local storage write failed: ${errorMessage}`));
-          else resolve();
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
+    return globalThis.AnimeTrackerUtils.storage.set(obj);
   }
 
   async function mutateCoordinated(label, keys, operation) {
@@ -71,20 +49,7 @@
     if (outcome?.data) await sset(outcome.data);
     return outcome?.result;
   }
-  function sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-  }
-
-  function slugify(title) {
-    return String(title || "")
-      .toLowerCase()
-      .trim()
-
-      .replace(/[^\w\s-]/g, " ")
-      .replace(/[\s_]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  }
+  const { sleep } = globalThis.AnimeTrackerUtils;
 
   let _lastReqAt = 0;
   let _rateLimitedUntil = 0;
@@ -804,7 +769,6 @@
   root.AniListCore = {
     gql,
     fetchAiringSchedule,
-    slugify,
     localProgress,
     pushStatus,
     resolveMedia,

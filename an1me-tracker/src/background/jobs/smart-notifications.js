@@ -30,12 +30,6 @@ function smartNotifNow() {
   return Date.now();
 }
 
-function snToMs(value) {
-  if (!value) return 0;
-  const timestamp = typeof value === "number" ? value : new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
 function highestWatchedEpisode(anime) {
   return Math.max(
     0,
@@ -56,13 +50,13 @@ function applySmartNotifErrorBackoff(nextCheckAt, state, now) {
     SMART_NOTIF_TUNING.errorBackoffBase * Math.pow(2, failures - 1),
     SMART_NOTIF_TUNING.errorBackoffMax,
   );
-  const since = snToMs(state?.lastErrorAt) || snToMs(state?.lastAttemptAt) || now;
+  const since = AnimeTrackerUtils.toMillis(state?.lastErrorAt) || AnimeTrackerUtils.toMillis(state?.lastAttemptAt) || now;
   return Math.max(nextCheckAt, since + delay);
 }
 
 function computeBaseNextCheckAt(cached, state, now) {
-  const nextDropAt = snToMs(cached?.nextEpisodeAt);
-  const lastActivityAt = Math.max(snToMs(state?.lastCheckedAt), snToMs(state?.lastAttemptAt));
+  const nextDropAt = AnimeTrackerUtils.toMillis(cached?.nextEpisodeAt);
+  const lastActivityAt = Math.max(AnimeTrackerUtils.toMillis(state?.lastCheckedAt), AnimeTrackerUtils.toMillis(state?.lastAttemptAt));
   const minNext = lastActivityAt + SMART_NOTIF_TUNING.minGap;
 
   if (nextDropAt > 0) {
@@ -75,19 +69,19 @@ function computeBaseNextCheckAt(cached, state, now) {
     }
   }
 
-  const cachedAt = snToMs(cached?.cachedAt);
+  const cachedAt = AnimeTrackerUtils.toMillis(cached?.cachedAt);
   const looksActive = cachedAt > 0 && now - cachedAt < 14 * SN_DAY;
   const cadence = looksActive ? SMART_NOTIF_TUNING.activeUnknown : SMART_NOTIF_TUNING.unknownSchedule;
   return Math.max(lastActivityAt + cadence, now);
 }
 
 function urgencyKey(cached, state, now) {
-  const nextDropAt = snToMs(cached?.nextEpisodeAt);
+  const nextDropAt = AnimeTrackerUtils.toMillis(cached?.nextEpisodeAt);
   if (nextDropAt > 0 && nextDropAt <= now) {
     return -(now - nextDropAt) - 1e12;
   }
   if (nextDropAt > now) return nextDropAt;
-  return Number.MAX_SAFE_INTEGER - (now - Math.max(snToMs(state?.lastCheckedAt), snToMs(state?.lastAttemptAt)));
+  return Number.MAX_SAFE_INTEGER - (now - Math.max(AnimeTrackerUtils.toMillis(state?.lastCheckedAt), AnimeTrackerUtils.toMillis(state?.lastAttemptAt)));
 }
 
 function migrateLegacySmartNotificationState(state, legacyState) {
@@ -276,7 +270,7 @@ async function checkNewEpisodesOnce(disableGeneration) {
     await bgStorageSet({ [SMART_NOTIF_STATE_KEY]: state });
 
     if (checked < Math.min(due.length, SMART_NOTIF_MAX_PER_TICK)) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await AnimeTrackerUtils.sleep(1500);
     }
   }
 

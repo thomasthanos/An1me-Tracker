@@ -12,6 +12,7 @@ const path = require("path");
 const REPO = path.join(__dirname, "..");
 global.globalThis = global;
 global.self = global;
+require(path.join(REPO, "src/common/utils.js"));
 require(path.join(REPO, "src/common/data/title-match.js"));
 const { bestMatch } = globalThis.AnimeTrackerTitleMatch;
 

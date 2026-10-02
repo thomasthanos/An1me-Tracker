@@ -224,7 +224,7 @@ const ProgressTracker = {
         if (saveTask.retryCount < 2) {
           saveTask.retryCount++;
           this.saveQueue.push(saveTask);
-          await new Promise((resolve) => setTimeout(resolve, 1000 * saveTask.retryCount));
+          await AnimeTrackerUtils.sleep(1000 * saveTask.retryCount);
         } else {
           Logger.warn("Dropping save task after max retries:", saveTask.uniqueId);
         }

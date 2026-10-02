@@ -53,20 +53,10 @@ function buildAnimeInfoSlugCandidates(slug) {
   return out;
 }
 
-const isMobileScraperUA = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod|Orion/i.test(navigator.userAgent || "");
-const SCRAPER_TIMEOUT_MS = isMobileScraperUA ? 6000 : 8000;
-
-const SCRAPER_HTML_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-
-function decodeScrapedHtmlEntities(text) {
-  return String(text || "")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
-    .replace(/&([a-z]+);/gi, (m, name) => SCRAPER_HTML_ENTITIES[name.toLowerCase()] ?? m);
-}
+const SCRAPER_TIMEOUT_MS = AnimeTrackerUtils.isMobileDevice() ? 6000 : 8000;
 
 function cleanScrapedTitle(raw) {
-  const text = decodeScrapedHtmlEntities(String(raw || "").replace(/<[^>]+>/g, " "))
+  const text = AnimeTrackerUtils.decodeHtmlEntities(String(raw || "").replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
   if (!text || text.length < 2 || text.length > 300) return null;
@@ -80,7 +70,7 @@ function extractScrapedDetail(html, labelPattern, maxLength = 500) {
   );
   const match = String(html || "").match(pattern);
   if (!match) return null;
-  const value = decodeScrapedHtmlEntities(match[1].replace(/<[^>]+>/g, " "))
+  const value = AnimeTrackerUtils.decodeHtmlEntities(match[1].replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
   return value || null;
@@ -316,7 +306,7 @@ async function fetchAnimePageInfo(slug) {
     totalEpisodes = latestEpisode;
   }
 
-  const pageText = decodeScrapedHtmlEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ");
+  const pageText = AnimeTrackerUtils.decodeHtmlEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ");
   const fillerText = pageText.match(/Filler\s+(?:Επεισόδια|Episodes?)\s*:\s*([0-9,\s–—-]+)/i)?.[1] || null;
   const canonText = pageText.match(/Canon\s+(?:Επεισόδια|Episodes?)\s*:\s*([0-9,\s–—-]+)/i)?.[1] || null;
   const hasSiteEpisodeTypes = fillerText !== null || canonText !== null;

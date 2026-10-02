@@ -389,13 +389,6 @@
   function isConnected() {
     return !!(_auth && _auth.accessToken && (!_auth.expiresAt || _auth.expiresAt > Date.now()));
   }
-  function getRedirectUri() {
-    try {
-      return chrome.identity.getRedirectURL();
-    } catch {
-      return "";
-    }
-  }
 
   async function ensureViewer() {
     if (!Core || !isConnected() || (_auth && _auth.viewer)) return;
@@ -417,27 +410,16 @@
     }
   }
 
-  function isMobileLikeEnv() {
-    const ua = navigator.userAgent || "";
-    if (/Orion|Firefox|FxiOS/i.test(ua)) return true;
-    if (/Android|iPhone|iPad|iPod|Mobile|CriOS|EdgiOS/i.test(ua)) return true;
-    if (/AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg/i.test(ua)) return true;
-    if (!chrome?.identity?.launchWebAuthFlow) return true;
-    let redirectUrl = "";
-    try {
-      redirectUrl = chrome.identity.getRedirectURL?.() || "";
-    } catch {
-      return true;
-    }
-    if (!/^https:\/\/[a-z0-9]+\.chromiumapp\.org/.test(redirectUrl)) return true;
-    return false;
+  // AniList login opens a web auth window; without one (Safari) the login arrives from a desktop via cloud sync.
+  function canLoginHere() {
+    return window.AnimeTracker.AuthEnv.supportsWebAuthFlow();
   }
 
   async function connect() {
     if (!ANILIST_CLIENT_ID) throw new Error("no_client_id");
-    if (isMobileLikeEnv()) throw new Error("mobile_unsupported");
+    if (!canLoginHere()) throw new Error("mobile_unsupported");
 
-    const redirectUri = getRedirectUri();
+    const redirectUri = window.AnimeTracker.AuthEnv.getRedirectUrl();
     if (!redirectUri) throw new Error("no_redirect_uri");
 
     const authUrl = `${AUTH_URL}` + `?client_id=${encodeURIComponent(ANILIST_CLIENT_ID)}` + `&response_type=token`;
@@ -570,7 +552,7 @@
     const slugByTitleSlug = new Map();
     const indexEntryTitles = (existingSlug, entry) => {
       for (const t of [entry?.title, entry?.romajiTitle, entry?.englishTitle, entry?.nativeTitle]) {
-        const ts = Core.slugify(t || "");
+        const ts = AnimeTrackerUtils.slugify(t || "");
         if (ts && !slugByTitleSlug.has(ts)) slugByTitleSlug.set(ts, existingSlug);
       }
     };
@@ -594,7 +576,7 @@
       const media = e.media || {};
       const mTitle = media.title || {};
       const title = mTitle.english || mTitle.romaji || "Unknown";
-      const baseSlug = Core.slugify(mTitle.romaji || title);
+      const baseSlug = AnimeTrackerUtils.slugify(mTitle.romaji || title);
       if (!baseSlug) {
         skipped++;
         continue;
@@ -606,7 +588,7 @@
         (mediaId && slugByMediaId.get(mediaId)) ||
         (animeData[slug] ? slug : null) ||
         slugByTitleSlug.get(slug) ||
-        [mTitle.english, mTitle.native].map((t) => Core.slugify(t || "")).find((s) => s && animeData[s]) ||
+        [mTitle.english, mTitle.native].map((t) => AnimeTrackerUtils.slugify(t || "")).find((s) => s && animeData[s]) ||
         null;
 
       if (existingSlug) {
@@ -900,8 +882,8 @@
             `;
     }
 
-    const redirectUri = escapeHtml(getRedirectUri());
-    const onMobile = isMobileLikeEnv();
+    const redirectUri = escapeHtml(window.AnimeTracker.AuthEnv.getRedirectUrl());
+    const onMobile = !canLoginHere();
 
     const trackerSignedIn = !!_firebaseSignedIn;
     const connectBlock = onMobile
@@ -994,17 +976,6 @@
     }
   }
 
-  function relativeTime(ts) {
-    const diff = Date.now() - Number(ts || 0);
-    if (!Number.isFinite(diff) || diff < 0) return "";
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
-  }
-
   function applySyncStatus(st) {
     if (!isConnected()) return;
 
@@ -1037,7 +1008,7 @@
     if (st && st.state === "error") {
       if (st.error === "reconnect")
         setStatus(
-          isMobileLikeEnv()
+          !canLoginHere()
             ? "AniList session expired — reconnect on a desktop browser and it will sync here automatically"
             : "AniList session expired — reconnect needed",
           "err",
@@ -1053,7 +1024,7 @@
     }
 
     if (st && st.state === "idle") {
-      const when = st.finishedAt ? relativeTime(st.finishedAt) : "";
+      const when = st.finishedAt ? window.AnimeTracker.UIHelpers.formatTimeAgo(st.finishedAt) : "";
       const updated = Number.isFinite(Number(st.ok)) ? Number(st.ok) : 0;
       const bits = [when, `${updated} updated`].filter(Boolean);
       setStatus(`Last sync · ${bits.join(" · ")}`, "ok");
@@ -1291,7 +1262,7 @@
     injectCard();
 
     try {
-      if (isMobileLikeEnv() && _firebaseSignedIn && !isConnected()) {
+      if (!canLoginHere() && _firebaseSignedIn && !isConnected()) {
         chrome.runtime.sendMessage({ type: "WAKE_AND_POLL_CLOUD_FORCE" }, () => {
           void chrome.runtime.lastError;
         });
@@ -1334,7 +1305,6 @@
     isConnected,
     connect,
     disconnect,
-    getRedirectUri,
     syncAuthToCloud: () => pushAuthToCloud("firebase-reconcile"),
   };
 })();

@@ -17,7 +17,7 @@ const METADATA_REPAIR_MODAL_FETCH_THRESHOLD = 8;
 // "from scratch" rather than a top-up.
 const METADATA_REPAIR_MODAL_FETCH_RATIO = 0.6;
 const METADATA_REPAIR_ORIGINS = new Set(["manual", "sign-in", "targeted", "background"]);
-const isMobileUA = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod|Orion/i.test(navigator.userAgent || "");
+const isMobileUA = AnimeTrackerUtils.isMobileDevice();
 const METADATA_REPAIR_MAX_ATTEMPTS = isMobileUA ? 1 : 2;
 const METADATA_REPAIR_RETRY_BASE_DELAY_MS = 1500;
 
@@ -67,7 +67,6 @@ function createMetadataRepairRunId() {
   return `repair:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 function isRetryableMetadataRepairError(error) {
   const message = String(error?.message || "").toLowerCase();
@@ -100,7 +99,7 @@ async function runMetadataRepairWithRetry(task, options = {}) {
       }
 
       const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
-      await delay(delayMs);
+      await AnimeTrackerUtils.sleep(delayMs);
     }
   }
 
@@ -737,7 +736,7 @@ async function runMetadataRepairBatch(options = {}) {
       }
 
       await setMetadataRepairState(state);
-      await delay(gentle ? METADATA_REPAIR_PLAYBACK_DELAY_MS : isMobileUA ? 1500 : METADATA_REPAIR_INTER_ITEM_DELAY_MS);
+      await AnimeTrackerUtils.sleep(gentle ? METADATA_REPAIR_PLAYBACK_DELAY_MS : isMobileUA ? 1500 : METADATA_REPAIR_INTER_ITEM_DELAY_MS);
     }
   } catch (error) {
     console.error("[BG] Library repair failed:", error);

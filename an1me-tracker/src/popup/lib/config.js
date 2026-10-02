@@ -14,6 +14,20 @@ const CONFIG = {
   MAX_RETRY_DELAY_MS: 30000,
 };
 
+// Storage keys of the popup's settings and progress state, shared by every popup module.
+const SETTING_KEYS = Object.freeze({
+  GOAL_SETTINGS_KEY: "goalSettings",
+  BADGE_STATE_KEY: "badgeUnlocks",
+  COPY_GUARD_STORAGE_KEY: "copyGuardEnabled",
+  SMART_NOTIF_STORAGE_KEY: "smartNotificationsEnabled",
+  AUTO_SKIP_FILLER_STORAGE_KEY: "autoSkipFillers",
+  SKIPTIME_HELPER_KEY: "skiptimeHelperEnabled",
+  AUTO_4K_SERVER_KEY: "auto4kServerEnabled",
+  AD_GUARD_KEY: "adGuardEnabled",
+  AUTO_RESUME_KEY: "autoResumeEnabled",
+  PASSWORD_SET_MARKER_KEY: "passwordSetMarker",
+});
+
 const DONATE_LINKS = {
   paypal: "https://www.paypal.me/ThomasThanos",
   revolut: "https://revolut.me/thomas2873",
@@ -607,6 +621,7 @@ const SeasonGrouping = {
 
 window.AnimeTracker = window.AnimeTracker || {};
 window.AnimeTracker.CONFIG = CONFIG;
+window.AnimeTracker.SETTING_KEYS = SETTING_KEYS;
 window.AnimeTracker.DONATE_LINKS = DONATE_LINKS;
 Object.defineProperty(window.AnimeTracker, "ANIME_PARTS_CONFIG", {
   get: ANIME_PARTS_CONFIG_SOURCE,
