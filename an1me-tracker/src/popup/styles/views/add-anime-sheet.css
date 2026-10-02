@@ -1,0 +1,55 @@
+/* Add Anime dialog layout overrides. */
+
+#addAnimeDialog .add-anime-header {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 32px;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 72px !important;
+  padding: 13px 18px;
+}
+
+#addAnimeDialog .add-anime-header-icon {
+  position: static;
+  justify-self: center;
+  align-self: center;
+  transform: none;
+  width: 44px !important;
+  height: 44px !important;
+}
+
+#addAnimeDialog .add-anime-header-icon svg{ width: 25px !important; height: 25px !important; }
+
+#addAnimeDialog .add-anime-header-text {
+  position: static;
+  transform: none;
+  align-self: center;
+  justify-self: stretch;
+  display: flex;
+  min-width: 0 !important;
+  height: 44px !important;
+  flex-direction: column;
+  justify-content: center;
+  text-align: left;
+}
+
+#addAnimeDialog .add-anime-header-text h3,
+#addAnimeDialog .add-anime-subtitle {
+  max-width: 100% !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#addAnimeDialog .add-anime-header-text h3{ margin: 0 0 3px; line-height: 1.1; }
+
+#addAnimeDialog .add-anime-subtitle{ margin: 0; font-size: 10px; line-height: 1.2; }
+
+#addAnimeDialog .add-anime-header .dialog-close {
+  position: static;
+  justify-self: end;
+  align-self: center;
+  transform: none;
+}
+
+*::-webkit-scrollbar{ width: 0 !important; height: 0 !important; display: none !important; }

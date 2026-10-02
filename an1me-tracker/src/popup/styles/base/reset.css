@@ -1,0 +1,15 @@
+/* Reset and document defaults. */
+
+body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--t1);
+  background: var(--bg-0);
+  width: var(--w);
+  max-height: var(--h);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+*{ scrollbar-width: none !important; }

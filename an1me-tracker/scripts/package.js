@@ -13,7 +13,7 @@ const { execFileSync } = require("child_process");
 const ROOT = path.join(__dirname, "..");
 const DIST = path.join(ROOT, "dist");
 const OUT = path.join(DIST, "an1me-tracker");
-const RUNTIME_ENTRIES = ["manifest.json", "background.js", "popup.html", "popup.css", "src"];
+const RUNTIME_ENTRIES = ["manifest.json", "background.js", "popup.html", "src"];
 
 function copyEntry(relPath) {
   const from = path.join(ROOT, relPath);

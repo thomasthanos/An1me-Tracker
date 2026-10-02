@@ -1,0 +1,317 @@
+/* Loading skeleton, status badges and the compact status sections (Completed, Dropped, Airing, On hold). */
+
+.skeleton-list{ display: flex; flex-direction: column; gap: var(--gap-card); }
+
+.skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 16px;
+  background: #161922;
+  border: 1px solid rgba(var(--ink-rgb), 0.06);
+  border-radius: var(--r-lg);
+  min-height: 78px;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-cover {
+  flex-shrink: 0;
+  width: 40px;
+  height: 56px;
+  border-radius: 8px;
+  background: linear-gradient(110deg, rgba(var(--ink-rgb), 0.04) 0%, rgba(var(--ink-rgb), 0.07) 50%, rgba(var(--ink-rgb), 0.04) 100%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s linear infinite;
+}
+
+.skeleton-text{ flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(110deg, rgba(var(--ink-rgb), 0.04) 0%, rgba(var(--ink-rgb), 0.07) 50%, rgba(var(--ink-rgb), 0.04) 100%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s linear infinite;
+}
+
+.skeleton-line--title{ width: 70%; }
+
+.skeleton-line--medium{ width: 55%; }
+
+.skeleton-line--short{ width: 40%; }
+
+.skeleton-line--meta{ width: 90%; height: 9px; opacity: 0.7; }
+
+.skeleton-card:nth-child(2) .skeleton-cover,
+.skeleton-card:nth-child(2) .skeleton-line{ animation-delay: -0.35s; }
+
+.skeleton-card:nth-child(3) .skeleton-cover,
+.skeleton-card:nth-child(3) .skeleton-line{ animation-delay: -0.7s; }
+
+.anime-list.no-transition *{ transition: none !important; }
+
+.status-chip-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0;
+  margin-top: 6px;
+  margin-bottom: 0;
+  flex-wrap: wrap;
+}
+
+.status-chip {
+  --chip-fg: var(--t2);
+  --chip-glass-rgb: var(--ink-rgb);
+  --chip-hover-fg: rgba(185, 196, 216, 0.82);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  border: 0;
+  background: transparent;
+  color: var(--chip-fg);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.1px;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    color var(--tn),
+    background var(--tn),
+    box-shadow var(--tn);
+}
+
+.status-chip:hover {
+  background: linear-gradient(180deg, rgba(var(--ink-rgb), 0.1) 0%, transparent 56%), rgba(var(--chip-glass-rgb), 0.075);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--ink-rgb), 0.07),
+    inset 0 -1px 2px rgba(var(--shadow-rgb), 0.14),
+    0 0 0 1px rgba(var(--chip-glass-rgb), 0.12);
+  backdrop-filter: blur(4px) saturate(112%);
+  -webkit-backdrop-filter: blur(4px) saturate(112%);
+  color: var(--chip-hover-fg);
+  opacity: 1;
+}
+
+.status-chip.active:hover {
+  background: linear-gradient(180deg, rgba(var(--ink-rgb), 0.12) 0%, transparent 54%), rgba(var(--chip-glass-rgb), 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--ink-rgb), 0.08),
+    inset 0 -1px 2px rgba(var(--shadow-rgb), 0.16),
+    0 0 0 1px rgba(var(--chip-glass-rgb), 0.16);
+}
+
+.status-chip.active{ background: transparent; font-weight: 700; }
+
+.status-chip-label{ display: inline-flex; align-items: center; }
+
+.status-chip-count{ color: rgba(99, 113, 141, 0.72); font-weight: 700; }
+
+.status-chip.active .status-chip-count{ color: currentColor; }
+
+.status-chip.airing{ --chip-fg: var(--primary); --chip-glass-rgb: var(--primary-rgb); --chip-hover-fg: rgba(123, 213, 244, 0.84); }
+
+.status-chip.airing::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 7px rgba(var(--primary-rgb), 0.65);
+  flex-shrink: 0;
+}
+
+.status-chip.on-hold{ --chip-fg: var(--warning); --chip-glass-rgb: var(--warning-rgb); --chip-hover-fg: rgba(224, 195, 116, 0.84); }
+
+.status-chip.completed{ --chip-fg: #35b46d; --chip-glass-rgb: 42, 152, 91; --chip-hover-fg: rgba(83, 184, 124, 0.9); }
+
+.status-chip.dropped{ --chip-fg: var(--danger); --chip-glass-rgb: var(--danger-rgb); --chip-hover-fg: rgba(226, 126, 137, 0.84); }
+
+.status-chip-sep{ color: var(--t3); font-size: 10px; line-height: 1; user-select: none; }
+
+.completed-list-section{ --lc: 79, 209, 143; }
+
+.dropped-list-section{ --lc: 255, 102, 117; }
+
+.onhold-list-section{ --lc: 240, 200, 75; }
+
+.airing-list-section{ --lc: 69, 202, 255; }
+
+.completed-list-section,
+.dropped-list-section,
+.onhold-list-section,
+.airing-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 4px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(var(--lc), 0.14);
+  background: linear-gradient(180deg, rgba(var(--lc), 0.035) 0%, rgba(var(--lc), 0.012) 100%);
+  overflow: hidden;
+}
+
+.completed-list-label,
+.dropped-list-label,
+.onhold-list-label,
+.airing-list-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  user-select: none;
+  background:
+    linear-gradient(180deg, rgba(var(--ink-rgb), 0.045) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(var(--lc), 0.1) 0%, rgba(var(--lc), 0.03) 100%);
+  box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.05);
+  transition: background var(--tf);
+}
+
+.completed-list-label:hover,
+.dropped-list-label:hover,
+.onhold-list-label:hover,
+.airing-list-label:hover {
+  background:
+    linear-gradient(180deg, rgba(var(--ink-rgb), 0.06) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(var(--lc), 0.16) 0%, rgba(var(--lc), 0.055) 100%);
+}
+
+.completed-list-label-left,
+.dropped-list-label-left,
+.onhold-list-label-left,
+.airing-list-label-left{ display: flex; align-items: baseline; gap: 8px; }
+
+.completed-list-label-title,
+.dropped-list-label-title,
+.onhold-list-label-title,
+.airing-list-label-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(var(--lc), 0.88);
+  letter-spacing: 0.08em;
+  transition: color var(--tf);
+}
+
+.completed-list-label-sub,
+.dropped-list-label-sub,
+.onhold-list-label-sub,
+.airing-list-label-sub{ font-size: 10px; color: rgba(99, 113, 141, 0.82); }
+
+/* One action bar at the bottom of a merged card, mirroring the standalone card: shown while the
+   card is expanded, hidden when it is collapsed. */
+.grp-card-actions {
+  display: none;
+  padding: 8px 10px 9px;
+  margin-top: 0;
+  border-top: 1px solid var(--b0);
+}
+
+.anime-season-group.expanded .grp-card-actions,
+.anime-movie-group.expanded .grp-card-actions{ display: flex; }
+
+/* Inside a status section the state is already given by the section itself, so the cards stop
+   repeating it. Scoped to the header/meta rows only: it must not hide the season status line
+   above, and it must not touch the main list (whose cards are outside these wrappers). */
+.completed-list-cards .anime-meta-row .meta-badge-complete,
+.completed-list-cards .grp-meta-row .meta-badge-complete,
+.completed-list-cards .grp-item-header .meta-badge-complete,
+.dropped-list-cards .anime-meta-row .meta-badge-dropped,
+.dropped-list-cards .grp-meta-row .meta-badge-dropped,
+.dropped-list-cards .grp-item-header .meta-badge-dropped,
+.airing-list-cards .anime-meta-row .meta-badge-airing,
+.airing-list-cards .grp-meta-row .meta-badge-airing,
+.airing-list-cards .grp-item-header .meta-badge-airing,
+.onhold-list-cards .anime-meta-row .meta-badge-onhold,
+.onhold-list-cards .grp-meta-row .meta-badge-onhold,
+.onhold-list-cards .grp-item-header .meta-badge-onhold{ display: none; }
+
+.completed-chevron,
+.dropped-chevron,
+.onhold-chevron,
+.airing-chevron{ width: 12px; height: 12px; color: var(--t3); flex-shrink: 0; transition: transform var(--tn); }
+
+/* Compact status sections (Completed / Dropped / Airing / On hold).
+   These used to collapse by animating grid-template-rows 0fr -> 1fr under a permanent
+   will-change. grid-template-rows is a LAYOUT property, so every frame of the 300ms animation
+   re-laid-out the whole section - and Completed holds every finished anime in the library.
+   While collapsed the content also stayed in the layout tree, merely clipped. Collapsed content
+   is now display:none (no layout at all) and opening plays a compositor-only fade, so the cost
+   no longer grows with the size of the list. */
+.completed-list-cards,
+.dropped-list-cards,
+.airing-list-cards,
+.onhold-list-cards {
+  display: block;
+  padding: 0;
+  border-top: 1px solid rgba(var(--lc), 0.09);
+}
+
+.completed-list-cards .list-inner,
+.dropped-list-cards .list-inner,
+.airing-list-cards .list-inner,
+.onhold-list-cards .list-inner {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.completed-list-cards .list-inner > *,
+.dropped-list-cards .list-inner > *,
+.airing-list-cards .list-inner > *,
+.onhold-list-cards .list-inner > *{ flex-shrink: 0; }
+
+.completed-list-cards.open .list-inner,
+.dropped-list-cards.open .list-inner,
+.airing-list-cards.open .list-inner,
+.onhold-list-cards.open .list-inner{ display: flex; }
+
+/* Only on a user click (render-list.js adds .revealing), never on a re-render of a section that
+   is already open. opacity + transform are composited: no layout or paint per frame. */
+.completed-list-cards.open.revealing .list-inner,
+.dropped-list-cards.open.revealing .list-inner,
+.airing-list-cards.open.revealing .list-inner,
+.onhold-list-cards.open.revealing .list-inner{ animation: compact-list-reveal 0.18s ease-out; }
+
+@keyframes compact-list-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.completed-list-cards .anime-card,
+.completed-list-cards .anime-season-group,
+.completed-list-cards .anime-movie-group,
+.dropped-list-cards .anime-card,
+.dropped-list-cards .anime-season-group,
+.dropped-list-cards .anime-movie-group,
+.onhold-list-cards .anime-card,
+.onhold-list-cards .anime-season-group,
+.onhold-list-cards .anime-movie-group,
+.airing-list-cards .anime-card,
+.airing-list-cards .anime-season-group,
+.airing-list-cards .anime-movie-group{ width: 100%; box-sizing: border-box; }
+
+.completed-list-cards .anime-card:hover,
+.completed-list-cards .anime-season-group:hover,
+.completed-list-cards .anime-movie-group:hover,
+.dropped-list-cards .anime-card:hover,
+.dropped-list-cards .anime-season-group:hover,
+.dropped-list-cards .anime-movie-group:hover,
+.onhold-list-cards .anime-card:hover,
+.onhold-list-cards .anime-season-group:hover,
+.onhold-list-cards .anime-movie-group:hover,
+.airing-list-cards .anime-card:hover,
+.airing-list-cards .anime-season-group:hover,
+.airing-list-cards .anime-movie-group:hover {
+  border-color: rgba(var(--primary-rgb), 0.18);
+  border-top-color: rgba(var(--primary-rgb), 0.26);
+  box-shadow: var(--s3);
+}

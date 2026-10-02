@@ -1,0 +1,128 @@
+/* Dialog overlay, dialog shell and form controls. */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(var(--shadow-rgb), 0.75);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+}
+
+.dialog-overlay.visible{ display: flex; }
+
+.dialog {
+  background: var(--bg-2);
+  border: 1px solid var(--b1);
+  border-top-color: var(--b2);
+  border-radius: var(--r-lg);
+  padding: 24px;
+  max-width: 290px;
+  width: 100%;
+  text-align: center;
+  box-shadow: var(--s4);
+  animation: dlg-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dialog-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--danger-rgb), 0.08);
+  border: 1px solid rgba(var(--danger-rgb), 0.2);
+  border-radius: 50%;
+  color: var(--danger);
+}
+
+.dialog-icon svg{ width: 24px; height: 24px; }
+
+.dialog h3{ font-size: 15px; font-weight: 700; color: var(--t1); margin-bottom: 7px; }
+
+.dialog p{ font-size: 11px; color: var(--t2); margin-bottom: 20px; line-height: 1.6; }
+
+.dialog-actions{ display: flex; gap: 8px; justify-content: center; }
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.06) 0%, rgba(var(--primary-rgb), 0.02) 100%);
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.06);
+}
+
+.dialog-header h3{ font-size: 13px; font-weight: 700; color: #e0eeff; margin: 0; letter-spacing: 0.2px; }
+
+.dialog-close {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--ink-rgb), 0.04);
+  border: 1px solid rgba(var(--ink-rgb), 0.07);
+  border-radius: var(--r-xs);
+  color: rgba(var(--ink-rgb), 0.35);
+  cursor: pointer;
+  transition: all var(--tf);
+}
+
+.dialog-close:hover{ background: rgba(var(--danger-rgb), 0.12); border-color: rgba(var(--danger-rgb), 0.25); color: #f47; }
+
+.dialog-close svg{ width: 13px; height: 13px; }
+
+.dialog-body{ padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 14px; }
+
+.add-anime-dialog .dialog-actions {
+  padding: 16px 20px 18px;
+  margin: 0;
+  background: linear-gradient(180deg, rgba(10, 14, 24, 0.85) 0%, rgba(8, 11, 20, 0.97) 100%);
+  border-top: 1px solid rgba(var(--ink-rgb), 0.07);
+  display: flex;
+  gap: 12px;
+}
+
+.form-group{ display: flex; flex-direction: column; gap: 5px; margin: 0; }
+
+.form-group:last-child{ margin: 0; }
+
+.form-group label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(160, 190, 220, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"] {
+  width: 100%;
+  padding: 9px 12px;
+  background: rgba(var(--ink-rgb), 0.04);
+  border: 1px solid rgba(var(--ink-rgb), 0.08);
+  border-radius: var(--r-sm);
+  color: #d8eaff;
+  font-size: 13px;
+  font-family: inherit;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+  outline: none;
+}
+
+.form-group input::placeholder{ color: rgba(var(--ink-rgb), 0.2); }
+
+.form-group input:focus {
+  background: rgba(var(--primary-rgb), 0.05);
+  border-color: rgba(var(--primary-rgb), 0.35);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.07);
+}
+
+.form-group input.error{ border-color: rgba(var(--danger-rgb), 0.5); box-shadow: 0 0 0 3px rgba(var(--danger-rgb), 0.07); }

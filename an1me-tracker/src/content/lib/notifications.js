@@ -16,16 +16,21 @@ const Notifications = {
     this.cleanupFunctions = [];
   },
 
+  // Inter ships with the extension (web_accessible_resources), so the page never asks Google for it.
   ensureFont: (() => {
     let loaded = false;
     return () => {
       if (loaded) return;
-      const link = Object.assign(document.createElement("link"), {
+      const face = (file, unicodeRange) =>
+        `@font-face { font-family: 'Inter'; src: url('${chrome.runtime.getURL(`src/fonts/${file}`)}') format('woff2'); font-weight: 300 800; font-display: swap; unicode-range: ${unicodeRange}; }`;
+      const style = Object.assign(document.createElement("style"), {
         id: "anime-tracker-font",
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap",
+        textContent: [
+          face("Inter-latin-ext.woff2", "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF"),
+          face("Inter-latin.woff2", "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"),
+        ].join(" "),
       });
-      document.head.appendChild(link);
+      document.head.appendChild(style);
       loaded = true;
     };
   })(),

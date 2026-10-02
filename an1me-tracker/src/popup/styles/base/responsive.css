@@ -1,0 +1,206 @@
+/* Media queries: reduced motion, narrow and touch screens. */
+
+@media (max-width: 400px) {
+  .add-anime-actions-buttons{ margin-left: 0; width: 100%; }
+  .add-anime-actions-buttons .btn{ flex: 1; }
+  .add-anime-dialog{ width: 95vw !important; border-radius: var(--r-md); }
+  .add-anime-header,
+  .add-anime-actions{ padding-left: 14px; padding-right: 14px; }
+  .add-anime-body{ padding: 12px 14px; padding-bottom: 14px; }
+}
+
+@media screen and (max-width: 600px) and (min-height: 700px) {
+  body{ width: 100vw; height: 100dvh; max-width: 100%; max-height: 100%; overflow: hidden; }
+
+  .app{ width: 100vw; height: 100dvh; max-width: 100%; max-height: 100%; }
+
+  .auth-section{ padding: 20px; justify-content: center; }
+
+  .auth-content{ width: 100%; max-width: 340px; margin: 0 auto; }
+
+  .main-app{ width: 100vw; height: 100dvh; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; }
+
+  .main-content{ flex: 1 1 0; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 16px; }
+
+  .footer{ flex-shrink: 0; min-height: 30px; padding: 5px 18px; font-size: 10px; }
+
+  .anime-card{ padding: 12px 14px; }
+
+  .category-tab{ padding: 0 12px; font-size: 11.5px; }
+
+  .stats-bar{ padding: 7px 16px 6px; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .header,
+  .search-input,
+  .footer,
+  .goals-smart-banner,
+  .ach-featured {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .header{ background: linear-gradient(180deg, rgba(8, 15, 27, 0.99), rgba(4, 9, 17, 0.99)); }
+
+  .search-input{ background: rgba(8, 13, 23, 0.99); }
+
+  .footer::after,
+  .goals-smart-banner::before,
+  .goals-smart-banner::after{ display: none; }
+
+  .footer {
+    background: rgba(3, 7, 14, 0.985);
+    box-shadow: 0 -1px 0 rgba(var(--ink-rgb), 0.06);
+  }
+
+  .goals-smart-banner {
+    background:
+      radial-gradient(circle at 92% 16%, rgba(var(--primary-rgb), 0.08), transparent 42%),
+      rgba(9, 13, 23, 0.97);
+    box-shadow: 0 4px 14px rgba(var(--shadow-rgb), 0.22);
+  }
+
+  .ach-featured {
+    background:
+      radial-gradient(circle at top right, rgba(var(--ach-rgb, var(--primary-rgb)), 0.16), transparent 55%),
+      rgba(15, 21, 36, 0.97);
+    box-shadow: 0 4px 14px rgba(var(--shadow-rgb), 0.26);
+  }
+
+  .anime-card,
+  .anime-season-group,
+  .anime-movie-group {
+    content-visibility: visible;
+    contain-intrinsic-size: auto;
+  }
+
+  .season-item-movie .season-item-header,
+  .movie-item-header{ grid-template-columns: minmax(0, 1fr) 216px; }
+
+  .season-item-movie .season-item-right,
+  .movie-item-right {
+    width: 216px;
+    min-width: 216px;
+    grid-template-columns: 38px 72px 44px 34px 16px;
+  }
+
+  .season-item-movie .season-item-actions,
+  .movie-item .movie-item-actions {
+    position: static;
+    grid-column: 4;
+    justify-self: end;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .season-item-movie:hover .grp-metric,
+  .season-item-movie:focus-within .grp-metric,
+  .movie-item:hover .grp-metric,
+  .movie-item:focus-within .grp-metric{ opacity: 1; }
+
+  .season-item-movie .grp-row-chevron,
+  .movie-item .grp-row-chevron {
+    grid-column: 5;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .movie-open-link::before {
+    content: "";
+    position: absolute;
+    inset: -4px;
+  }
+}
+
+@media (max-width: 390px) and (hover: none) and (pointer: coarse) {
+  .season-item-movie .season-item-header,
+  .movie-item-header {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+  }
+
+  .season-item-movie .season-item-right,
+  .movie-item-right{ justify-self: end; }
+}
+
+@media (max-width: 390px) {
+  #settingsView .settings-view-inner{ padding: 0 14px; }
+
+  #settingsView .settings-data-top,
+  #settingsView .settings-backup-actions{ grid-template-columns: 1fr; }
+
+  #settingsView #anilistCard .anilist-actions-row{ grid-template-columns: 1fr 1fr; }
+
+  #settingsView #anilistCard .anilist-collapsible{ grid-column: 1 / -1; justify-self: start; margin-left: 0; }
+
+  #settingsView .settings-danger-row{ grid-template-columns: 1fr; }
+
+  #settingsView .settings-about-row{ align-items: stretch; flex-direction: column; }
+
+  #settingsView .settings-about-donate{ justify-content: center; }
+
+  .auth-content{ width: min(360px, calc(100% - 20px)); padding: 32px 22px 28px; border-radius: 28px; }
+
+  .jp-text{ font-size: 30px; letter-spacing: 2px; }
+
+  .en-text{ font-size: 11px; letter-spacing: 6px; }
+
+  .auth-input-shell,
+  .auth-input{ min-height: 52px; height: 52px; }
+
+  .btn-auth-primary{ height: 56px; font-size: 18px; }
+}
+
+/* Every reduced-motion override, in the order the components above declare them. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-cover,
+  .skeleton-line,
+  .app.stats-mode #statsView,
+  .app.goals-mode #goalsView .goals-view-inner,
+  .app.settings-mode #settingsView .settings-view-inner{ animation: none; }
+
+  .anime-list{ transition: none; }
+
+  .completed-list-cards.open.revealing .list-inner,
+  .dropped-list-cards.open.revealing .list-inner,
+  .airing-list-cards.open.revealing .list-inner,
+  .onhold-list-cards.open.revealing .list-inner{ animation: none; }
+
+  .add-anime-dialog,
+  .filler-action-bar,
+  .episodes-counter,
+  .slug-detected-hint{ animation: none; transition: none; }
+  .episodes-counter-fill{ transition: none; }
+
+  .set-password-overlay.visible,
+  .set-password-dialog.dialog{ animation: none; }
+
+  .set-password-dialog .btn-primary.is-loading::before{ animation: none; }
+
+  .at-toast,
+  .at-toast--leaving{ transition: opacity 0.12s ease; }
+  .at-toast-progress{ animation: none; transform: scaleX(1); }
+
+  .ach-ring-fill{ transition: none; }
+  .ach-card,
+  .ach-featured{ transition: none; }
+  .ach-card:active,
+  .ach-featured:active{ transform: none; }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  #settingsView #anilistCard .anilist-collapsible-body{ animation: none; }
+
+  #settingsView #anilistCard .anilist-collapsible[open] .anilist-import-row,
+  #settingsView #anilistCard .anilist-collapsible[open] .anilist-hint{ animation: none; }
+}

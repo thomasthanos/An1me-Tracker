@@ -1,0 +1,111 @@
+/* Bundled fonts and the design tokens (colors, radii, spacing, motion) every sheet uses.
+   Inter and Bebas Neue are the Google Fonts latin/latin-ext subsets, shipped under the SIL OFL
+   (src/fonts/OFL-*.txt) so the popup makes no request to Google. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../../../fonts/Inter-latin-ext.woff2") format("woff2");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../../../fonts/Inter-latin.woff2") format("woff2");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Bebas Neue";
+  src: url("../../../fonts/BebasNeue-latin-ext.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Bebas Neue";
+  src: url("../../../fonts/BebasNeue-latin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "PROXON";
+  src: url("../../../fonts/PROXON.ttf") format("truetype");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ComicSans";
+  src: url("../../../fonts/comic_sans.ttf") format("truetype");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg-0: #070a11;
+  --bg-1: #0b111c;
+  --bg-2: #111826;
+  --bg-3: #161f30;
+  --bg-4: #1d2840;
+  --bg-card: #0f1726;
+  --t1: #f0f4ff;
+  --t2: #aab6d0;
+  --t3: #71809c;
+  --cyan: #54d2ff;
+  --primary: var(--cyan);
+  --primary-rgb: 84, 210, 255;
+  --amber: #f5cd57;
+  --warning: var(--amber);
+  --warning-rgb: 245, 205, 87;
+  --green: #57db97;
+  --success: var(--green);
+  --success-rgb: 87, 219, 151;
+  --danger: #ff6675;
+  --danger-rgb: 255, 102, 117;
+  --purple: #a477ff;
+  --purple-rgb: 164, 119, 255;
+  --ink-rgb: 255, 255, 255;
+  --shadow-rgb: 0, 0, 0;
+  --primary-soft: rgba(var(--primary-rgb), 0.11);
+  --primary-fill: rgba(var(--primary-rgb), 0.18);
+  --primary-ring: rgba(var(--primary-rgb), 0.32);
+  --warning-soft: rgba(var(--warning-rgb), 0.12);
+  --success-soft: rgba(var(--success-rgb), 0.12);
+  --danger-soft: rgba(var(--danger-rgb), 0.11);
+  --b0: rgba(var(--ink-rgb), 0.045);
+  --b1: rgba(var(--ink-rgb), 0.075);
+  --b2: rgba(var(--ink-rgb), 0.13);
+  --s2: 0 2px 12px rgba(var(--shadow-rgb), 0.45);
+  --s3: 0 4px 24px rgba(var(--shadow-rgb), 0.55);
+  --s4: 0 8px 40px rgba(var(--shadow-rgb), 0.65);
+  --grad-cyan: linear-gradient(135deg, var(--cyan) 0%, #1f9ae6 100%);
+  --grad-amber: linear-gradient(135deg, var(--amber) 0%, #e0a72c 100%);
+  --accent: var(--grad-cyan);
+  --r-lg: 18px;
+  --r-md: 14px;
+  --r-sm: 10px;
+  --r-xs: 6px;
+  --r-pill: 999px;
+  --tf: 0.12s ease;
+  --tn: 0.2s ease;
+  --w: 420px;
+  --h: 590px;
+  --gap-card: 10px;
+  --pad-h: 18px;
+  --font-display: "PROXON", "Bebas Neue", sans-serif;
+  --font-stat: "ComicSans", "Bebas Neue", sans-serif;
+  --font-body: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}

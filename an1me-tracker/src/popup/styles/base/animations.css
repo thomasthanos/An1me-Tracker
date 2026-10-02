@@ -1,0 +1,97 @@
+/* Keyframes. */
+
+@keyframes btn-shimmer {
+  0%{ left: -80%; }
+
+  100%{ left: 130%; }
+}
+
+@keyframes search-glow-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 18px -9px oklch(0.79 0.145 220 / 0.2),
+      0 1px 2px rgba(var(--shadow-rgb), 0.28),
+      inset 0 1px 0 rgba(var(--ink-rgb), 0.05);
+  }
+  50% {
+    box-shadow:
+      0 0 22px -8px oklch(0.79 0.145 220 / 0.28),
+      0 1px 2px rgba(var(--shadow-rgb), 0.28),
+      inset 0 1px 0 rgba(var(--ink-rgb), 0.05);
+  }
+}
+
+@keyframes skeletonShimmer {
+  0%{ background-position: 200% 0; }
+  100%{ background-position: -200% 0; }
+}
+
+@keyframes list-loading-spin {
+  to{ transform: rotate(360deg); }
+}
+
+@keyframes dlg-in {
+  from{ opacity: 0; transform: scale(0.93) translateY(-10px); }
+
+  to{ opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes spin {
+  from{ transform: rotate(0deg); }
+  to{ transform: rotate(360deg); }
+}
+
+@keyframes add-anime-in {
+  from{ opacity: 0; transform: scale(0.96) translateY(8px); }
+  to{ opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes fadeIn {
+  from{ opacity: 0; transform: translateY(-3px); }
+
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+@keyframes viewContentIn {
+  from{ opacity: 0; }
+
+  to{ opacity: 1; }
+}
+
+@keyframes setPwOverlayIn {
+  from{ opacity: 0; }
+  to{ opacity: 1; }
+}
+
+@keyframes setPwDialogIn {
+  from{ opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to{ opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes setPwSpin {
+  to{ transform: rotate(360deg); }
+}
+
+@keyframes atToastProgress {
+  from{ transform: scaleX(1); }
+  to{ transform: scaleX(0); }
+}
+
+@keyframes shimmer {
+  0%{ background-position: -200% 0; }
+
+  100%{ background-position: 200% 0; }
+}
+
+@keyframes settings-import-expand {
+  from{ opacity: 0; transform: translateY(-4px) scaleY(0.96); }
+
+  to{ opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+@keyframes settings-import-controls-in {
+  from{ opacity: 0; transform: translateY(-6px); }
+
+  to{ opacity: 1; transform: translateY(0); }
+}
