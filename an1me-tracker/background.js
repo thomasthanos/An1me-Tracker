@@ -2565,6 +2565,8 @@ const BG_PLAYBACK_FIELD_MAP = {
 const BG_PLAYBACK_DEFAULT_ON = new Set(["copyGuardEnabled", "auto4kServerEnabled", "adGuardEnabled"]);
 const BG_USER_PREFS_KEY = "userPreferences";
 const BG_PLAYBACK_UPDATED_AT_KEY = "playbackSettingsUpdatedAt";
+const BG_CLOUD_DESKTOP_PLAYBACK_KEY = "cloud_desktop_playback_settings";
+const BG_MOBILE_DISABLED_PLAYBACK_KEYS = new Set(["copyGuardEnabled", "skiptimeHelperEnabled", "auto4kServerEnabled"]);
 
 async function applyCloudPlaybackSettings(cloudPlayback) {
   if (!cloudPlayback || typeof cloudPlayback !== "object") return false;
@@ -2572,7 +2574,12 @@ async function applyCloudPlaybackSettings(cloudPlayback) {
   if (!cloudUpdatedAt) return false;
 
   try {
-    const localKeys = Object.values(BG_PLAYBACK_FIELD_MAP).concat([BG_PLAYBACK_UPDATED_AT_KEY, BG_USER_PREFS_KEY]);
+    const isMobile = !!AnimeTrackerUtils?.isMobileDevice?.();
+    const localKeys = Object.values(BG_PLAYBACK_FIELD_MAP).concat([
+      BG_PLAYBACK_UPDATED_AT_KEY,
+      BG_USER_PREFS_KEY,
+      BG_CLOUD_DESKTOP_PLAYBACK_KEY,
+    ]);
     const outcome = await runBgLibraryTransaction(localKeys, async (coordinated) => {
       // The transaction snapshot only carries keys in LIBRARY_MUTATION_KEY_SET, which does not include
       // adGuardEnabled, autoResumeEnabled or userPreferences. They used to read as undefined here -
@@ -2589,7 +2596,30 @@ async function applyCloudPlaybackSettings(cloudPlayback) {
 
       const writes = { [BG_PLAYBACK_UPDATED_AT_KEY]: cloudUpdatedAt };
       let changed = false;
+
+      if (isMobile) {
+        // Cache incoming desktop values so mobile can push other settings without overwriting PC preferences
+        const desktopPlayback = {
+          copyGuard: cloudPlayback.copyGuard !== false,
+          skiptimeHelper: cloudPlayback.skiptimeHelper === true,
+          auto4kServer: cloudPlayback.auto4kServer !== false,
+        };
+        if (JSON.stringify(stored[BG_CLOUD_DESKTOP_PLAYBACK_KEY] || null) !== JSON.stringify(desktopPlayback)) {
+          writes[BG_CLOUD_DESKTOP_PLAYBACK_KEY] = desktopPlayback;
+          changed = true;
+        }
+      }
+
       for (const [field, storageKey] of Object.entries(BG_PLAYBACK_FIELD_MAP)) {
+        if (isMobile && BG_MOBILE_DISABLED_PLAYBACK_KEYS.has(storageKey)) {
+          // On mobile devices, keep 4K, Skiptime contributor, and Copy Guard disabled
+          if (stored[storageKey] !== false) {
+            writes[storageKey] = false;
+            changed = true;
+          }
+          continue;
+        }
+
         const next = !!cloudPlayback[field];
         const current = stored[storageKey];
         const currentBool = BG_PLAYBACK_DEFAULT_ON.has(storageKey) ? current !== false : current === true;
@@ -2681,6 +2711,7 @@ const SIDECAR_SYNC_CONFIG = Object.freeze({
 const SIDECAR_RETRY_BACKOFF_MIN = Object.freeze([1, 5, 15, 60]);
 
 async function queueStoredPlaybackSettings() {
+  const isMobile = !!AnimeTrackerUtils?.isMobileDevice?.();
   const stored = await bgStorageGet([
     "copyGuardEnabled",
     "smartNotificationsEnabled",
@@ -2691,17 +2722,30 @@ async function queueStoredPlaybackSettings() {
     "autoResumeEnabled",
     "userPreferences",
     BG_PLAYBACK_UPDATED_AT_KEY,
+    BG_CLOUD_DESKTOP_PLAYBACK_KEY,
   ]);
   const updatedAt = stored[BG_PLAYBACK_UPDATED_AT_KEY] || new Date().toISOString();
   if (!stored[BG_PLAYBACK_UPDATED_AT_KEY]) {
     await bgStorageSet({ [BG_PLAYBACK_UPDATED_AT_KEY]: updatedAt });
   }
+
+  let copyGuardVal = stored.copyGuardEnabled !== false;
+  let skiptimeHelperVal = stored.skiptimeHelperEnabled === true;
+  let auto4kServerVal = stored.auto4kServerEnabled !== false;
+
+  if (isMobile) {
+    const cachedDesktop = stored[BG_CLOUD_DESKTOP_PLAYBACK_KEY] || {};
+    copyGuardVal = cachedDesktop.copyGuard !== undefined ? cachedDesktop.copyGuard !== false : true;
+    skiptimeHelperVal = cachedDesktop.skiptimeHelper !== undefined ? cachedDesktop.skiptimeHelper === true : false;
+    auto4kServerVal = cachedDesktop.auto4kServer !== undefined ? cachedDesktop.auto4kServer !== false : true;
+  }
+
   return queueSidecarSync("playbackSettings", {
-    copyGuard: stored.copyGuardEnabled !== false,
+    copyGuard: copyGuardVal,
     smartNotif: stored.smartNotificationsEnabled === true,
     autoSkipFiller: stored.autoSkipFillers === true,
-    skiptimeHelper: stored.skiptimeHelperEnabled === true,
-    auto4kServer: stored.auto4kServerEnabled !== false,
+    skiptimeHelper: skiptimeHelperVal,
+    auto4kServer: auto4kServerVal,
     adGuard: stored.adGuardEnabled !== false,
     autoResume: stored.autoResumeEnabled === true,
     userPreferences: stored.userPreferences || null,

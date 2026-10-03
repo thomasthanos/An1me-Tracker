@@ -1269,6 +1269,7 @@
   }
 
   function maybeAutoSelect4kServer() {
+    if (!globalThis.AnimeTrackerUtils?.auto4kEnabled?.(true)) return;
     runServerSelectionWatcher("__atAuto4kClickedFor", (container, activeSpan, markDone, Logger) => {
       const spans = Array.from(container.querySelectorAll(AT.CONFIG.SELECTORS.EMBED));
       

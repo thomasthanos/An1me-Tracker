@@ -169,6 +169,18 @@
 
 .settings-toggle-row[data-enabled="true"] .settings-toggle-control::after{ transform: translateX(14px); background: #fff; }
 
+.settings-toggle-row[data-mobile-disabled="true"],
+.settings-toggle-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings-toggle-row[data-mobile-disabled="true"] .settings-toggle-control,
+.settings-toggle-row:disabled .settings-toggle-control {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .settings-action {
   display: flex;
   align-items: center;

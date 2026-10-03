@@ -185,10 +185,10 @@
         PASSWORD_SET_MARKER_KEY,
       ]);
       storedSettings = {
-        copyGuard: stored[COPY_GUARD_STORAGE_KEY] !== false,
+        copyGuard: AnimeTrackerUtils.copyGuardEnabled(stored[COPY_GUARD_STORAGE_KEY]),
         smartNotif: stored[SMART_NOTIF_STORAGE_KEY] === true,
         autoSkipFiller: stored[AUTO_SKIP_FILLER_STORAGE_KEY] === true,
-        skiptimeHelper: stored[SKIPTIME_HELPER_KEY] === true,
+        skiptimeHelper: AnimeTrackerUtils.skiptimeHelperEnabled(stored[SKIPTIME_HELPER_KEY]),
         auto4kServer: AnimeTrackerUtils.auto4kEnabled(stored[AUTO_4K_SERVER_KEY]),
         adGuard: stored[AD_GUARD_KEY] !== false,
         autoResume: stored[AUTO_RESUME_KEY] === true,

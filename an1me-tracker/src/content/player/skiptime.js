@@ -582,7 +582,16 @@
   let submitCountdownTimer = null;
 
   const { sleep } = globalThis.AnimeTrackerUtils;
-  const canRun = () => helperEnabled && document.visibilityState === "visible" && /^\/watch\//.test(location.pathname);
+  function isMobile() {
+    return !!(
+      globalThis.AnimeTrackerUtils?.isMobileDevice?.() ||
+      (typeof navigator !== "undefined" && (
+        /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "") ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+      ))
+    );
+  }
+  const canRun = () => !isMobile() && helperEnabled && document.visibilityState === "visible" && /^\/watch\//.test(location.pathname);
 
   function cacheKey() {
     return STORAGE_CACHE_PREFIX + getEpisodeIdentity();
@@ -1293,6 +1302,10 @@
   }
 
   async function init() {
+    if (isMobile()) {
+      Logger.debug("Skiptime: Contributor disabled on mobile");
+      return;
+    }
     Logger.debug("Skiptime: init() running on", location.pathname);
     lastEpisodeIdentity = getEpisodeIdentity();
     listenForToggleChanges();

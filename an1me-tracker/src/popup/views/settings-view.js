@@ -7,18 +7,34 @@
   // so the text changed depending on whether you had just clicked a toggle or the view had re-rendered.
   // main.js reads this table through SettingsView.toggleSubtitle.
   const TOGGLE_COPY = Object.freeze({
-    settingsCopyGuard: { on: "Block copy outside allowed text", off: "Copy protection is turned off" },
+    settingsCopyGuard: {
+      on: "Block copy outside allowed text",
+      off: "Copy protection is turned off",
+      mobile: "Disabled on mobile (prevents touch lag)",
+    },
     settingsSmartNotif: { on: "You will be notified of new episodes", off: "Notify when new episodes drop" },
     settingsAutoSkipFiller: { on: "Filler episodes will be auto-skipped", off: "Skip filler, jump to next canon ep" },
-    settingsSkiptime: { on: "Capture intro/outro on an1me.to/watch", off: "Floating panel for intro/outro contributions" },
-    settingsAuto4kServer: { on: "Auto-switch to 4K/Remaster server when available", off: "Premium server auto-pick is off" },
+    settingsSkiptime: {
+      on: "Capture intro/outro on an1me.to/watch",
+      off: "Floating panel for intro/outro contributions",
+      mobile: "Disabled on mobile (desktop only)",
+    },
+    settingsAuto4kServer: {
+      on: "Auto-switch to 4K/Remaster server when available",
+      off: "Premium server auto-pick is off",
+      mobile: "Disabled on mobile (prevents overheating)",
+    },
     settingsAutoResume: { on: "Resume playback without asking", off: "Ask before resuming where you left off" },
     settingsAdGuard: { on: "Block pop-up ads on an1me.to", off: "Pop-up ads are allowed" },
   });
 
   function toggleSubtitle(id, enabled) {
     const copy = TOGGLE_COPY[id];
-    return copy ? (enabled ? copy.on : copy.off) : "";
+    if (!copy) return "";
+    if (globalThis.AnimeTrackerUtils?.isMobileDevice?.() && copy.mobile) {
+      return copy.mobile;
+    }
+    return enabled ? copy.on : copy.off;
   }
 
   function escapeHtml(value) {
@@ -105,11 +121,12 @@
         `;
   }
 
-  function renderToggleItem({ id, subtitleId, iconKey, title, subtitle, enabled }) {
-    const en = !!enabled;
+  function renderToggleItem({ id, subtitleId, iconKey, title, subtitle, enabled, disabled = false }) {
+    const en = !disabled && !!enabled;
+    const dis = !!disabled;
     return `
             <button class="settings-toggle-row" id="${id}" type="button"
-                    data-enabled="${en}" aria-pressed="${en}">
+                    data-enabled="${en}" aria-pressed="${en}" ${dis ? 'data-mobile-disabled="true" aria-disabled="true"' : ""}>
                 <span class="settings-toggle-icon-wrap">${svg(iconKey, "settings-toggle-icon-svg")}</span>
                 <span class="settings-toggle-text">
                     <span class="settings-toggle-title">${escapeHtml(title)}</span>
@@ -121,6 +138,7 @@
   }
 
   function renderPreferencesSection(state) {
+    const isMobile = !!(globalThis.AnimeTrackerUtils?.isMobileDevice?.());
     const items = [
       renderToggleItem({
         id: "settingsCopyGuard",
@@ -129,6 +147,7 @@
         title: "Copy Guard",
         subtitle: toggleSubtitle("settingsCopyGuard", state.copyGuard),
         enabled: state.copyGuard,
+        disabled: isMobile,
       }),
       renderToggleItem({
         id: "settingsSmartNotif",
@@ -153,6 +172,7 @@
         title: "Skiptime Contributor",
         subtitle: toggleSubtitle("settingsSkiptime", state.skiptimeHelper),
         enabled: state.skiptimeHelper,
+        disabled: isMobile,
       }),
       renderToggleItem({
         id: "settingsAuto4kServer",
@@ -161,6 +181,7 @@
         title: "Auto-Pick Premium",
         subtitle: toggleSubtitle("settingsAuto4kServer", state.auto4kServer),
         enabled: state.auto4kServer,
+        disabled: isMobile,
       }),
       renderToggleItem({
         id: "settingsAutoResume",
@@ -304,14 +325,14 @@
     if (!container) return;
     container.removeAttribute("hidden");
 
-    const { user = null, settings = {}, passwordIsSet = false, isMobile = false, needsReauth = false } = params;
+    const isMobileEffective = isMobile || !!(globalThis.AnimeTrackerUtils?.isMobileDevice?.());
 
     const state = {
-      copyGuard: settings.copyGuard !== false,
+      copyGuard: globalThis.AnimeTrackerUtils?.copyGuardEnabled ? globalThis.AnimeTrackerUtils.copyGuardEnabled(settings.copyGuard) : (!isMobileEffective && settings.copyGuard !== false),
       smartNotif: settings.smartNotif === true,
       autoSkipFiller: settings.autoSkipFiller === true,
-      skiptimeHelper: settings.skiptimeHelper === true,
-      auto4kServer: AnimeTrackerUtils.auto4kEnabled(settings.auto4kServer),
+      skiptimeHelper: globalThis.AnimeTrackerUtils?.skiptimeHelperEnabled ? globalThis.AnimeTrackerUtils.skiptimeHelperEnabled(settings.skiptimeHelper) : (!isMobileEffective && settings.skiptimeHelper === true),
+      auto4kServer: globalThis.AnimeTrackerUtils?.auto4kEnabled ? globalThis.AnimeTrackerUtils.auto4kEnabled(settings.auto4kServer) : (!isMobileEffective && settings.auto4kServer !== false),
       adGuard: settings.adGuard !== false,
       autoResume: settings.autoResume === true,
     };
@@ -443,10 +464,16 @@
   function updateToggle(id, enabled, subtitle) {
     const btn = document.getElementById(id);
     if (!btn) return;
+    const isMobile = !!(globalThis.AnimeTrackerUtils?.isMobileDevice?.());
+    const isMobileDisabledKey = isMobile && (id === "settingsCopyGuard" || id === "settingsSkiptime" || id === "settingsAuto4kServer");
     const prev = btn.getAttribute("aria-pressed") === "true";
-    const en = !!enabled;
+    const en = !isMobileDisabledKey && !!enabled;
     btn.dataset.enabled = en ? "true" : "false";
     btn.setAttribute("aria-pressed", en ? "true" : "false");
+    if (isMobileDisabledKey) {
+      btn.setAttribute("aria-disabled", "true");
+      btn.dataset.mobileDisabled = "true";
+    }
     if (subtitle) {
       const subtitleId = btn.querySelector(".settings-toggle-subtitle")?.id;
       if (subtitleId) {

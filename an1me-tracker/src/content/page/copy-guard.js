@@ -168,7 +168,21 @@
     }
   }
 
+  function isMobile() {
+    return !!(
+      window.AnimeTrackerUtils?.isMobileDevice?.() ||
+      (typeof navigator !== "undefined" && (
+        /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "") ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+      ))
+    );
+  }
+
   function install() {
+    if (isMobile()) {
+      // Disabled on mobile: avoids touch lag and gesture interception on touchscreens
+      return;
+    }
     document.addEventListener("copy", blockEvent, true);
     document.addEventListener("cut", blockEvent, true);
     document.addEventListener("selectstart", blockEvent, true);

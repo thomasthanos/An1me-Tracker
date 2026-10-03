@@ -124,7 +124,18 @@
   }
 
   function auto4kEnabled(value) {
-    return typeof value === "boolean" ? value : !isMobileDevice();
+    if (isMobileDevice()) return false;
+    return typeof value === "boolean" ? value : true;
+  }
+
+  function copyGuardEnabled(value) {
+    if (isMobileDevice()) return false;
+    return typeof value === "boolean" ? value : true;
+  }
+
+  function skiptimeHelperEnabled(value) {
+    if (isMobileDevice()) return false;
+    return typeof value === "boolean" ? value : false;
   }
 
   if (typeof document !== "undefined" && document.documentElement?.classList?.add) {
@@ -142,5 +153,7 @@
     storage,
     isMobileDevice,
     auto4kEnabled,
+    copyGuardEnabled,
+    skiptimeHelperEnabled,
   });
 })(typeof globalThis !== "undefined" ? globalThis : self);

@@ -520,8 +520,8 @@
       btnId: "settingsCopyGuard",
       subtitleId: "settingsCopyGuardSubtitle",
       storageKey: COPY_GUARD_STORAGE_KEY,
-      defaultsTo: true,
-      interpret: (raw) => raw !== false,
+      defaultsTo: AnimeTrackerUtils.copyGuardEnabled(undefined),
+      interpret: (raw) => AnimeTrackerUtils.copyGuardEnabled(raw),
     },
     smartNotif: {
       btnId: "settingsSmartNotif",
@@ -541,8 +541,8 @@
       btnId: "settingsSkiptime",
       subtitleId: "settingsSkiptimeSubtitle",
       storageKey: SKIPTIME_HELPER_KEY,
-      defaultsTo: false,
-      interpret: (raw) => raw === true,
+      defaultsTo: AnimeTrackerUtils.skiptimeHelperEnabled(undefined),
+      interpret: (raw) => AnimeTrackerUtils.skiptimeHelperEnabled(raw),
     },
     auto4kServer: {
       btnId: "settingsAuto4kServer",
@@ -1737,6 +1737,10 @@
     document.addEventListener("click", async (e) => {
       if (e.target.closest("#settingsCopyGuard")) {
         e.stopPropagation();
+        if (AnimeTrackerUtils.isMobileDevice()) {
+          AT.UIHelpers?.showToast?.("Copy Guard is disabled on mobile (prevents touch lag)", { type: "info", duration: 2500 });
+          return;
+        }
         await handleToggle({ btnId: "settingsCopyGuard", storageKey: COPY_GUARD_STORAGE_KEY }, renderCopyGuardSetting, {
           read: (btn) => btn.dataset.enabled !== "false",
         });
@@ -1788,6 +1792,10 @@
       }
       if (e.target.closest("#settingsSkiptime")) {
         e.stopPropagation();
+        if (AnimeTrackerUtils.isMobileDevice()) {
+          AT.UIHelpers?.showToast?.("Skiptime Contributor is disabled on mobile (desktop only)", { type: "info", duration: 2500 });
+          return;
+        }
         await handleToggle(
           { btnId: "settingsSkiptime", storageKey: SKIPTIME_HELPER_KEY },
           renderSkiptimeHelperSetting,
@@ -1802,6 +1810,10 @@
       }
       if (e.target.closest("#settingsAuto4kServer")) {
         e.stopPropagation();
+        if (AnimeTrackerUtils.isMobileDevice()) {
+          AT.UIHelpers?.showToast?.("Auto-Pick 4K is disabled on mobile (prevents overheating)", { type: "info", duration: 2500 });
+          return;
+        }
         await handleToggle({ btnId: "settingsAuto4kServer", storageKey: AUTO_4K_SERVER_KEY }, renderAuto4kServerSetting, {
           read: (btn) => btn.dataset.enabled !== "false",
         });
@@ -2316,7 +2328,7 @@
         if (!isOwn) isExternalUpdate = true;
       }
       if (changes[COPY_GUARD_STORAGE_KEY]) {
-        renderCopyGuardSetting(changes[COPY_GUARD_STORAGE_KEY].newValue !== false);
+        renderCopyGuardSetting(AnimeTrackerUtils.copyGuardEnabled(changes[COPY_GUARD_STORAGE_KEY].newValue));
       }
       if (changes[SMART_NOTIF_STORAGE_KEY]) {
         void loadSmartNotifSetting();
@@ -2325,7 +2337,7 @@
         renderAutoSkipFillerSetting(changes[AUTO_SKIP_FILLER_STORAGE_KEY].newValue === true);
       }
       if (changes[SKIPTIME_HELPER_KEY]) {
-        renderSkiptimeHelperSetting(changes[SKIPTIME_HELPER_KEY].newValue === true);
+        renderSkiptimeHelperSetting(AnimeTrackerUtils.skiptimeHelperEnabled(changes[SKIPTIME_HELPER_KEY].newValue));
       }
       if (changes[AUTO_4K_SERVER_KEY]) {
         renderAuto4kServerSetting(AnimeTrackerUtils.auto4kEnabled(changes[AUTO_4K_SERVER_KEY].newValue));

@@ -7,6 +7,16 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.9] — 2026-10-03
+
+### Fixed
+
+- **Device-Scoped Features & Settings Sync**:
+  - Automatically disabled heavy/thermal features on mobile devices (`auto4kServerEnabled`, `skiptimeHelperEnabled`, `copyGuardEnabled`) to eliminate phone overheating, excessive battery drain, and touchscreen gesture lag.
+  - Fixed cross-device settings sync bug: mobile sync now caches and preserves desktop values in `cloud_desktop_playback_settings`, preventing mobile from overwriting PC preferences with `false`, and ensuring mobile does not re-enable 4K or Copy Guard from incoming cloud updates.
+  - Updated popup settings view with informative mobile indicators ("Disabled on mobile (prevents touch lag)", "Disabled on mobile (prevents overheating)", "Disabled on mobile (desktop only)").
+  - Guaranteed shared playback preferences (`smartNotificationsEnabled`, `autoSkipFillers`, `adGuardEnabled`, `autoResumeEnabled`) continue syncing seamlessly between PC and mobile.
+
 ## [7.5.8] — 2026-10-03
 
 ### Changed
