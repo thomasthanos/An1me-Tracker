@@ -763,7 +763,7 @@
     const targetTotalTs = toMillis(targetEntry?.totalEpisodesUpdatedAt);
     const movedTotalTs = toMillis(moved.totalEpisodesUpdatedAt);
     if (targetTotal > 0 && movedTotal > 0 && targetTotal !== movedTotal && targetTotalTs >= movedTotalTs) {
-      const maxTracked = Math.max(0, ...(merged.episodes || []).map((episode) => Number(episode?.number) || 0));
+      const maxTracked = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber(merged);
       merged.totalEpisodes = Math.max(targetTotal, maxTracked);
       if (targetEntry.totalEpisodesUpdatedAt) merged.totalEpisodesUpdatedAt = targetEntry.totalEpisodesUpdatedAt;
       else delete merged.totalEpisodesUpdatedAt;

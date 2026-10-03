@@ -842,7 +842,7 @@
               changed = true;
             }
             if (hasDetectedTotal) {
-              const existingMaxEpisode = Math.max(0, ...(animeData[slug].episodes || []).map((ep) => Number(ep.number) || 0));
+              const existingMaxEpisode = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber(animeData[slug]);
               if (
                 metadataInfo.totalEpisodes >= existingMaxEpisode &&
                 (animeData[slug].totalEpisodes !== metadataInfo.totalEpisodes || animeData[slug].totalEpisodesSource !== "an1me")
@@ -1427,7 +1427,7 @@
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || message.type !== "GET_CURRENT_WATCH_INFO") return false;
     try {
-      const info = animeInfo || AnimeParser.extractAnimeInfo({ silent: true });
+      const info = animeInfo || AT.AnimeParser.extractAnimeInfo({ silent: true });
       if (info && info.animeSlug) {
         sendResponse({
           slug: info.animeSlug,

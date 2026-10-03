@@ -54,49 +54,8 @@
     }
   }
 
-  function parseEpisodeNumberFromText(text) {
-    if (!text || typeof text !== "string") return 0;
-    const match = text.match(/Episode\s*(\d+)/i) || text.match(/\bEp\s*(\d+)/i) || text.match(/\b(\d+)\b/);
-    const value = parseInt(match?.[1], 10);
-    return Number.isFinite(value) && value > 0 ? value : 0;
-  }
-
-  function getEpisodeNumberFromDom() {
-    const selectors = [
-      ".episode-list-item.current-episode",
-      ".episode-list-item.active",
-      ".episode-list .active",
-      ".episodes .current",
-      "[data-open-nav-episode].current-episode",
-      "[data-open-nav-episode].active",
-    ];
-
-    for (const selector of selectors) {
-      const node = document.querySelector(selector);
-      if (!node) continue;
-
-      const directValue =
-        node.getAttribute?.("data-episode-search-query") ||
-        node.getAttribute?.("data-open-nav-episode") ||
-        node.dataset?.episodeSearchQuery ||
-        node.dataset?.openNavEpisode;
-      const directNumber = parseInt(directValue, 10);
-      if (Number.isFinite(directNumber) && directNumber > 0) return directNumber;
-
-      const href = node.getAttribute?.("href") || node.querySelector?.("a[href]")?.getAttribute?.("href") || "";
-      const hrefMatch = href.match(/-episode-(\d+)(?:$|[/?#])/i);
-      const hrefNumber = parseInt(hrefMatch?.[1], 10);
-      if (Number.isFinite(hrefNumber) && hrefNumber > 0) return hrefNumber;
-
-      const textNumber = parseEpisodeNumberFromText(node.textContent || node.getAttribute?.("title") || "");
-      if (textNumber > 0) return textNumber;
-    }
-
-    return 0;
-  }
-
   function getEpisodeIdentity() {
-    const domEpisodeNumber = getEpisodeNumberFromDom();
+    const domEpisodeNumber = window.AnimeTrackerContent?.AnimeParser?.getEpisodeNumberFromDom?.() || 0;
     try {
       const info = window.AnimeTrackerContent?.AnimeParser?.extractAnimeInfo?.({ silent: true });
       if (info?.animeSlug && domEpisodeNumber > 0) {

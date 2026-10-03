@@ -1006,7 +1006,7 @@
       result.airingCount++;
 
       const latestAvail = Math.max(0, Number(info.latestEpisode) || 0);
-      const highestWatched = Math.max(0, ...(Array.isArray(anime.episodes) ? anime.episodes : []).map((ep) => Number(ep.number) || 0));
+      const highestWatched = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber(anime);
 
       if (latestAvail > highestWatched) {
         result.backlog += latestAvail - highestWatched;

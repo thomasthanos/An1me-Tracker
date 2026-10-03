@@ -87,15 +87,6 @@ const ProgressTracker = {
     return d <= 0 || d === 1440 || d === 6000 || d === 7200;
   },
 
-  getCoverImageUrl() {
-    try {
-      const coverImageElement = document.querySelector(".anime-main-image") || document.querySelector(".anime-featured img");
-      return coverImageElement?.src || null;
-    } catch (e) {
-      return null;
-    }
-  },
-
   shouldMarkComplete(currentTime, duration, outroStartSec = null) {
     const { CONFIG } = window.AnimeTrackerContent;
 
@@ -333,7 +324,7 @@ const ProgressTracker = {
         return;
       }
 
-      const detectedCoverImage = !existingProgress?.coverImage ? this.getCoverImageUrl() : existingProgress.coverImage;
+      const detectedCoverImage = !existingProgress?.coverImage ? window.AnimeTrackerContent.AnimeParser.extractCoverImage() : existingProgress.coverImage;
 
       let pagePath = existingProgress?.pagePath;
       try {

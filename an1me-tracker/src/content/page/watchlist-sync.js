@@ -1,31 +1,4 @@
 // watchlist-sync.js — syncs your status (Watching/Completed/…) with the site's own watchlist.
-function watchlistLibraryRequest(message) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      reject(new Error("Library mutation coordinator timed out"));
-    }, 20000);
-
-    try {
-      chrome.runtime.sendMessage(message, (response) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        const runtimeError = chrome.runtime.lastError;
-        if (runtimeError) reject(new Error(runtimeError.message));
-        else resolve(response || {});
-      });
-    } catch (error) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(error);
-    }
-  });
-}
-
 const WatchlistSync = {
   _AJAX_URL: "https://an1me.to/wp-admin/admin-ajax.php",
   _STANDALONE_COMPLETE_RE: /(?:^|[-_])(movie|film|ova|ona|special|fan-letter)(?:[-_]|$)/i,
@@ -171,58 +144,26 @@ const WatchlistSync = {
   },
 
   async _loadAnimeData() {
-    const Storage = window.AnimeTrackerContent?.Storage;
-    if (Storage?.get) {
-      const result = await Storage.get(["animeData"]);
-      if (Storage.isAbortResult?.(result)) return {};
-      return result?.animeData || {};
-    }
-
-    const snapshot = await watchlistLibraryRequest({ type: "LIBRARY_MUTATION_SNAPSHOT", keys: ["animeData"] });
-    if (!snapshot?.success) throw new Error(snapshot?.error || "Library mutation snapshot failed");
-    return snapshot.data?.animeData || {};
+    const { Storage } = window.AnimeTrackerContent;
+    const result = await Storage.get(["animeData"]);
+    if (Storage.isAbortResult(result)) return {};
+    return result?.animeData || {};
   },
 
   async _persistSyncedType(animeSlug, type) {
     if (!animeSlug) return;
     try {
-      const { Storage } = window.AnimeTrackerContent || {};
-      if (Storage && typeof Storage.mutate === "function") {
-        await Storage.mutate(["animeData"], (data) => {
-          const animeData = (data.animeData = data.animeData || {});
-          if (!animeData[animeSlug]) return false;
-          if (type === "remove") {
-            if (!("watchlistSyncedType" in animeData[animeSlug])) return false;
-            delete animeData[animeSlug].watchlistSyncedType;
-          } else {
-            if (animeData[animeSlug].watchlistSyncedType === type) return false;
-            animeData[animeSlug].watchlistSyncedType = type;
-          }
-        });
-        return;
-      }
-      for (let attempt = 0; attempt < 6; attempt += 1) {
-        const snapshot = await watchlistLibraryRequest({ type: "LIBRARY_MUTATION_SNAPSHOT", keys: ["animeData"] });
-        if (!snapshot?.success) throw new Error(snapshot?.error || "Library mutation snapshot failed");
-        const animeData = snapshot.data?.animeData || {};
-        if (!animeData[animeSlug]) return;
+      await window.AnimeTrackerContent.Storage.mutate(["animeData"], (data) => {
+        const animeData = (data.animeData = data.animeData || {});
+        if (!animeData[animeSlug]) return false;
         if (type === "remove") {
-          if (!("watchlistSyncedType" in animeData[animeSlug])) return;
+          if (!("watchlistSyncedType" in animeData[animeSlug])) return false;
           delete animeData[animeSlug].watchlistSyncedType;
         } else {
-          if (animeData[animeSlug].watchlistSyncedType === type) return;
+          if (animeData[animeSlug].watchlistSyncedType === type) return false;
           animeData[animeSlug].watchlistSyncedType = type;
         }
-
-        const response = await watchlistLibraryRequest({
-          type: "LIBRARY_MUTATION_COMMIT",
-          expectedRevision: snapshot.revision,
-          data: { animeData },
-        });
-        if (response?.success) return;
-        if (!response?.conflict) throw new Error(response?.error || "Library mutation commit failed");
-      }
-      throw new Error("Library mutation conflicted too many times");
+      });
     } catch {}
   },
 

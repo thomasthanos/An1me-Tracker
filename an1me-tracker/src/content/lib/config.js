@@ -21,7 +21,6 @@ const ContentConfig = {
   MAX_SAVED_PROGRESS_ENTRIES: 10,
 
   // Site-coupled DOM selectors (one home so a site markup change is a one-line fix).
-  // Episode-list selectors stay per-file on purpose — they differ by detection strategy.
   SELECTORS: {
     VIDEO: "video.art-video",
     VIDEO_FALLBACK: "video",
@@ -29,6 +28,15 @@ const ContentConfig = {
     PLAYER_SELECTION: ".player-selection",
     EMBED: "[data-embed-id]",
     ACTIVE_EMBED: "[data-embed-id].active",
+    // The playing episode in the episode list, most specific first.
+    CURRENT_EPISODE: [
+      ".episode-list-item.current-episode",
+      ".episode-list-item.active",
+      ".episode-list .active",
+      ".episodes .current",
+      "[data-open-nav-episode].current-episode",
+      "[data-open-nav-episode].active",
+    ],
   },
 
   // Named timing values (were scattered magic numbers across the player files).

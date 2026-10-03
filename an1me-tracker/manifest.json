@@ -69,6 +69,9 @@
       ],
       "js": [
         "src/common/utils.js",
+        "src/common/data/library-keys.js",
+        "src/common/logger.js",
+        "src/content/lib/storage.js",
         "src/common/data/zoned-time.js",
         "src/common/data/cache-policy.js",
         "src/common/data/media-type.js",

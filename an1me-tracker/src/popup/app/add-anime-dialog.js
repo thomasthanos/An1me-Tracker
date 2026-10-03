@@ -775,7 +775,7 @@
             currentEntry.mediaTypeUpdatedAt = now;
             currentEntry.mediaTypeSource = "an1me";
           }
-          const maxTracked = Math.max(0, ...existingEpisodes.map((ep) => Number(ep?.number) || 0));
+          const maxTracked = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber({ episodes: existingEpisodes });
           if (finalTotal && finalTotal >= maxTracked && (currentEntry.totalEpisodes !== finalTotal || currentEntry.totalEpisodesSource !== "an1me")) {
             currentEntry.totalEpisodes = finalTotal;
             currentEntry.totalEpisodesUpdatedAt = now;

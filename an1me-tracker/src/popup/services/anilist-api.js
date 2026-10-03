@@ -335,7 +335,7 @@
           touched = true;
         }
         const importedTotal = Number(media.episodes) || 0;
-        const maxTracked = Math.max(0, ...(existing.episodes || []).map((ep) => Number(ep?.number) || 0));
+        const maxTracked = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber(existing);
         if (importedTotal >= maxTracked && importedTotal > 0 && !existing.totalEpisodes) {
           existing.totalEpisodes = importedTotal;
           existing.totalEpisodesUpdatedAt = importedAt;
@@ -1141,7 +1141,7 @@ const AnilistService = {
         changed = true;
       }
       const authoritativeTotal = Number(info.totalEpisodes) || 0;
-      const maxTracked = Math.max(0, ...(entry.episodes || []).map((ep) => Number(ep?.number) || 0));
+      const maxTracked = globalThis.AnimeTrackerEntryState.getHighestEpisodeNumber(entry);
       if (
         authoritativeTotal > 0 &&
         !newerLiveTotal &&

@@ -105,7 +105,7 @@ const AnimeParser = {
       }
 
       if (!episodeFound && !episodeSlug) {
-        episodeNumber = this.findEpisodeFromDOM() || 1;
+        episodeNumber = this.getEpisodeNumberFromDom() || 1;
         if (episodeNumber > 1) {
           episodeSlug = `episode-${episodeNumber}`;
           episodeFound = true;
@@ -126,10 +126,11 @@ const AnimeParser = {
       }
 
       const originalSlug = animeSlug;
-      const explicitTotalEpisodes = this.detectExplicitTotalEpisodes();
-      const releaseStatus = this.detectReleaseStatus(explicitTotalEpisodes, episodeNumber);
-      let totalEpisodes = explicitTotalEpisodes || this.detectTotalEpisodes(originalSlug, releaseStatus);
-      const mediaType = this.detectMediaType();
+      const infoRows = this.readInfoRows();
+      const explicitTotalEpisodes = this.detectExplicitTotalEpisodes(infoRows);
+      const releaseStatus = this.detectReleaseStatus(explicitTotalEpisodes, episodeNumber, infoRows);
+      let totalEpisodes = explicitTotalEpisodes || this.detectTotalEpisodes(originalSlug, releaseStatus, infoRows);
+      const mediaType = this.detectMediaType(infoRows);
 
       const offsetMapping = window.AnimeTrackerContent?.EPISODE_OFFSET_MAPPING || {};
       const offset = offsetMapping[originalSlug] || 0;
@@ -267,43 +268,45 @@ const AnimeParser = {
     return null;
   },
 
-  findEpisodeFromDOM() {
-    const activeEpisodeSelectors = [
-      ".episode-list .active",
-      ".episodes .current",
-      '[class*="episode"].active',
-      '[class*="episode"].selected',
-      ".ep-item.active",
-      ".episode.active",
-      ".episode.current",
-      'li.active a[href*="episode"]',
-      'a.active[href*="episode"]',
-    ];
+  // The site's number for the playing episode, read from the episode list: the item's data attribute,
+  // its link, or its text. 0 when the list does not mark one.
+  getEpisodeNumberFromDom() {
+    const fromText = (text) => {
+      const match = String(text || "").match(/Episode\s*(\d+)/i) || String(text || "").match(/\bEp\s*(\d+)/i) || String(text || "").match(/\b(\d+)\b/);
+      const value = parseInt(match?.[1], 10);
+      return Number.isFinite(value) && value > 0 ? value : 0;
+    };
+    for (const selector of window.AnimeTrackerContent.CONFIG.SELECTORS.CURRENT_EPISODE) {
+      const node = document.querySelector(selector);
+      if (!node) continue;
 
-    for (const selector of activeEpisodeSelectors) {
-      try {
-        const activeEpisode = document.querySelector(selector);
-        if (activeEpisode) {
-          const epText = activeEpisode.textContent || activeEpisode.getAttribute("title") || "";
-          const epNumMatch = epText.match(/Episode\s*(\d+)/i) || epText.match(/Ep\s*(\d+)/i) || epText.match(/^\s*(\d+)\s*$/);
-          if (epNumMatch) {
-            const episodeNumber = parseInt(epNumMatch[1], 10);
-            return episodeNumber;
-          }
-        }
-      } catch {}
+      const direct = parseInt(node.getAttribute("data-episode-search-query") || node.getAttribute("data-open-nav-episode"), 10);
+      if (Number.isFinite(direct) && direct > 0) return direct;
+
+      const href = node.getAttribute("href") || node.querySelector("a[href]")?.getAttribute("href") || "";
+      const fromHref = parseInt(href.match(/-episode-(\d+)(?:$|[/?#])/i)?.[1], 10);
+      if (Number.isFinite(fromHref) && fromHref > 0) return fromHref;
+
+      const textNumber = fromText(node.textContent || node.getAttribute("title"));
+      if (textNumber > 0) return textNumber;
     }
-
-    return null;
+    return 0;
   },
 
-  detectReleaseStatus(totalEpisodes = null, currentEpisode = 0) {
+  // The anime info table as [{ label, value }] (dt/dd or th/td pairs), read once per extraction.
+  readInfoRows() {
+    const clean = (node) => (node?.textContent || "").replace(/\s+/g, " ").trim();
+    try {
+      return [...document.querySelectorAll("dt, th")].map((label) => ({ label: clean(label), value: clean(label.nextElementSibling) }));
+    } catch {
+      return [];
+    }
+  },
+
+  detectReleaseStatus(totalEpisodes = null, currentEpisode = 0, infoRows = this.readInfoRows()) {
     try {
       let airedText = null;
-      const labels = document.querySelectorAll("dt, th");
-      for (const label of labels) {
-        const labelText = (label.textContent || "").replace(/\s+/g, " ").trim();
-        const valueText = (label.nextElementSibling?.textContent || "").replace(/\s+/g, " ").trim();
+      for (const { label: labelText, value: valueText } of infoRows) {
         if (/^(?:status|κατάσταση)(?=\s|:|$)/i.test(labelText)) {
           if (/Finished\s+Airing|Completed|Finished|Ολοκληρώθηκε|Ολοκληρωμένο/i.test(valueText)) return "FINISHED";
           if (/Currently\s+Airing|Releasing|Ongoing|Airing|Προβάλλεται\s+τώρα|Σε\s+εξέλιξη/i.test(valueText)) return "RELEASING";
@@ -326,17 +329,13 @@ const AnimeParser = {
     return null;
   },
 
-  detectExplicitTotalEpisodes() {
+  detectExplicitTotalEpisodes(infoRows = this.readInfoRows()) {
     try {
       const labelRegex = /^(?:episodes?|επεισόδια)(?=\s|:|$)/i;
-      const labelNodes = document.querySelectorAll("dt, th");
 
-      for (const labelNode of labelNodes) {
-        const labelText = (labelNode.textContent || "").replace(/\s+/g, " ").trim();
+      for (const { label: labelText, value: valueText } of infoRows) {
         if (!labelRegex.test(labelText)) continue;
 
-        const valueNode = labelNode.nextElementSibling;
-        const valueText = (valueNode?.textContent || "").replace(/\s+/g, " ").trim();
         const match = valueText.match(/\b(\d{1,4})\b/);
         if (!match) continue;
 
@@ -350,15 +349,12 @@ const AnimeParser = {
     return null;
   },
 
-  detectMediaType() {
+  detectMediaType(infoRows = this.readInfoRows()) {
     try {
       const normalizer = globalThis.AnimeTrackerMediaType?.normalize;
       if (!normalizer) return null;
-      const labels = document.querySelectorAll("dt, th");
-      for (const label of labels) {
-        const text = (label.textContent || "").replace(/\s+/g, " ").trim();
+      for (const { label: text, value } of infoRows) {
         if (!/^(?:type|τύπος)(?=\s|:|$)/i.test(text)) continue;
-        const value = (label.nextElementSibling?.textContent || "").replace(/\s+/g, " ").trim();
         const mediaType = normalizer(value);
         if (mediaType) return mediaType;
       }
@@ -366,9 +362,9 @@ const AnimeParser = {
     return null;
   },
 
-  detectTotalEpisodes(animeSlug, releaseStatus = null) {
+  detectTotalEpisodes(animeSlug, releaseStatus = null, infoRows = this.readInfoRows()) {
     try {
-      const explicitTotal = this.detectExplicitTotalEpisodes();
+      const explicitTotal = this.detectExplicitTotalEpisodes(infoRows);
       if (Number.isFinite(explicitTotal) && explicitTotal > 0) {
         return explicitTotal;
       }
