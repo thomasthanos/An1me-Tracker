@@ -8,6 +8,7 @@
   // counters visible and use this threshold only to trigger a bounded resume nudge.
   const METADATA_REPAIR_STALE_MS = 3 * 60 * 1000;
   const METADATA_REPAIR_RESUME_NUDGE_COOLDOWN_MS = 30 * 1000;
+  const METADATA_REPAIR_WAKE_INTERVAL_MS = 10 * 1000;
   const METADATA_REPAIR_MODAL_FETCH_THRESHOLD = 8;
   const METADATA_REPAIR_MODAL_FETCH_RATIO = 0.6;
 
@@ -15,6 +16,127 @@
   let metadataRepairPromise = null;
   let lastMetadataRepairResumeNudgeAt = 0;
   let metadataRepairApplyVersion = 0;
+  let metadataRepairWakeTimer = null;
+  let metadataRepairWakeInFlight = false;
+  let metadataRepairWakeEpoch = 0;
+  let metadataRepairPopupClosed = false;
+  let metadataRepairFailureRefreshTimer = null;
+
+  function clearMetadataRepairFailureRefreshTimer() {
+    if (metadataRepairFailureRefreshTimer !== null) clearTimeout(metadataRepairFailureRefreshTimer);
+    metadataRepairFailureRefreshTimer = null;
+  }
+
+  async function refreshMetadataRepairFailures() {
+    metadataRepairFailureRefreshTimer = null;
+    const state = AT.PopupState.lastMetadataRepairState;
+    if (metadataRepairPopupClosed || state?.status === "running" || !(state?.failed > 0) ||
+        (typeof document !== "undefined" && document.visibilityState === "hidden")) return;
+    const version = metadataRepairApplyVersion;
+    try {
+      const stored = await AT.Storage.get(["metadataRepairState"]);
+      if (version !== metadataRepairApplyVersion || metadataRepairPopupClosed) return;
+      await applyMetadataRepairState(stored.metadataRepairState || null);
+    } catch {}
+  }
+
+  function scheduleMetadataRepairFailureRefresh() {
+    const state = AT.PopupState.lastMetadataRepairState;
+    if (state?.status === "running" || !(state?.failed > 0) || metadataRepairPopupClosed || typeof setTimeout !== "function") return;
+    clearMetadataRepairFailureRefreshTimer();
+    metadataRepairFailureRefreshTimer = setTimeout(refreshMetadataRepairFailures, 500);
+  }
+
+  function clearMetadataRepairWakeTimer() {
+    if (metadataRepairWakeTimer !== null) clearTimeout(metadataRepairWakeTimer);
+    metadataRepairWakeTimer = null;
+  }
+
+  function canWakeMetadataRepair() {
+    const state = AT.PopupState.lastMetadataRepairState;
+    return !metadataRepairPopupClosed && (state?.status === "running" || state?.followUpPending === true) &&
+      (typeof document === "undefined" || document.visibilityState !== "hidden");
+  }
+
+  function scheduleMetadataRepairWake() {
+    if (!canWakeMetadataRepair() || metadataRepairWakeInFlight || metadataRepairWakeTimer !== null || typeof setTimeout !== "function") return;
+    metadataRepairWakeTimer = setTimeout(wakeMetadataRepair, METADATA_REPAIR_WAKE_INTERVAL_MS);
+  }
+
+  async function wakeMetadataRepair() {
+    clearMetadataRepairWakeTimer();
+    if (!canWakeMetadataRepair() || metadataRepairWakeInFlight) return;
+    const epoch = metadataRepairWakeEpoch;
+    metadataRepairWakeInFlight = true;
+    try {
+      await sendRuntimeMessage({ type: "RESUME_LIBRARY_REPAIR" }, 15000);
+      if (epoch !== metadataRepairWakeEpoch || !canWakeMetadataRepair()) return;
+      // Read storage again instead of rendering the pre-resume response. Its worker
+      // may already have advanced the queue before the message arrives here.
+      const stored = await AT.Storage.get(["metadataRepairState"]);
+      if (epoch !== metadataRepairWakeEpoch || !canWakeMetadataRepair()) return;
+      const latest = stored.metadataRepairState || null;
+      const current = AT.PopupState.lastMetadataRepairState;
+      if (!latest || latest.runId !== current?.runId || latest.updatedAt !== current?.updatedAt || latest.status !== current?.status) {
+        await applyMetadataRepairState(latest);
+      }
+    } catch {
+      // A suspended worker or closed response channel is retried on the next tick.
+      // The persisted queue and successful cache entries remain authoritative.
+    } finally {
+      metadataRepairWakeInFlight = false;
+      scheduleMetadataRepairWake();
+    }
+  }
+
+  // Old reports are historical outcomes, not proof that current cache data is still
+  // missing. Reconcile only failures with a newer successful snapshot; unresolved
+  // retryable entries stay visible. This changes the view, never background state.
+  async function reconcileMetadataRepairFailures(state) {
+    if (!state || state.status === "running" || !(state.failed > 0)) return state;
+    const failures = (state.failedItems || state.logs || []).filter(log => ["error", "retry"].includes(log.type) && log.slug && Number(log.at) > 0);
+    if (!failures.length || !AT.CachePolicy) return state;
+    const knownSlugs = new Set(failures.map(log => log.slug));
+    const unknownFailures = !Array.isArray(state.failedItems) ? Math.max(0, Number(state.failed) - failures.length) : 0;
+    const legacyCandidates = unknownFailures > 0
+      ? [...new Set((state.items || []).map(item => item.slug).filter(slug => slug && !knownSlugs.has(slug)))] : [];
+    const keys = [...knownSlugs, ...legacyCandidates].flatMap(slug => [`animeinfo_${slug}`, `episodeTypes_${slug}`]);
+    let stored;
+    try { stored = await AT.Storage.get(keys); } catch { return state; }
+    let recovered = 0;
+    const recoveredBySlug = new Map();
+    const counts = { cached: Number(state.cached) || 0, skipped: Number(state.skipped) || 0 };
+    for (const log of failures) {
+      const info = stored[`animeinfo_${log.slug}`], filler = stored[`episodeTypes_${log.slug}`];
+      const movie = AT.FillerService?.isLikelyMovie?.(log.slug, info?.mediaType) === true;
+      if (!AT.CachePolicy.isInfoFresh(info) || info.retryable || info.error ||
+          (!movie && (!AT.CachePolicy.isFillerFresh(filler, info) || filler.retryable || filler.error)) ||
+          Math.max(Number(info.cachedAt) || 0, Number(filler?.cachedAt) || 0) < Number(log.at)) continue;
+      recovered++;
+      const skipped = movie || filler?.notFound;
+      counts[skipped ? "skipped" : "cached"]++;
+      recoveredBySlug.set(log.slug, { type: movie ? "movie" : filler?.notFound ? "nofill" : "cached", detail: "Recovered • cache refreshed" });
+    }
+    // Pre-7.5.5 reports did not retain identities beyond the sixty visible rows.
+    // Only clear those unknown failures if every other queued item has newer,
+    // healthy snapshots; otherwise keep the remaining count for a manual retry.
+    const cutoff = Date.parse(state.completedAt || state.updatedAt || "") || Math.max(...failures.map(log => Number(log.at)));
+    if (unknownFailures > 0 && recovered === failures.length && legacyCandidates.length >= unknownFailures && cutoff > 0 &&
+        legacyCandidates.every(slug => {
+          const info = stored[`animeinfo_${slug}`], filler = stored[`episodeTypes_${slug}`];
+          const movie = AT.FillerService?.isLikelyMovie?.(slug, info?.mediaType) === true;
+          return AT.CachePolicy.isInfoFresh(info) && !info.retryable && !info.error &&
+            (movie || (AT.CachePolicy.isFillerFresh(filler, info) && !filler.retryable && !filler.error)) &&
+            Math.max(Number(info.cachedAt) || 0, Number(filler?.cachedAt) || 0) >= cutoff;
+        })) {
+      recovered += unknownFailures;
+      counts.cached += unknownFailures;
+    }
+    const logs = (state.logs || []).map(log => recoveredBySlug.has(log.slug) ? { ...log, ...recoveredBySlug.get(log.slug) } : log);
+    return recovered ? { ...state, ...counts, logs,
+      ...(state.failedItems ? { failedItems: state.failedItems.filter(log => !recoveredBySlug.has(log.slug)) } : {}),
+      failed: Math.max(0, Number(state.failed) - recovered) } : state;
+  }
 
   function getMetadataRepairProgress(state) {
     const progress = AT.FillerFetchUI?.getBackgroundProgress?.(state);
@@ -75,6 +197,7 @@
     }
 
     scheduleCompletionRepair(slug);
+    scheduleMetadataRepairFailureRefresh();
   }
 
   const _pendingRepairSlugs = new Set();
@@ -130,16 +253,26 @@
       delete FillerService.KNOWN_FILLERS[slug];
     }
     scheduleCompletionRepair(slug);
+    scheduleMetadataRepairFailureRefresh();
   }
 
   async function applyMetadataRepairState(state, options = {}) {
     const applyVersion = ++metadataRepairApplyVersion;
     const { ensureOpen = false, autoOpenRunning = false } = options;
 
+    state = await reconcileMetadataRepairFailures(state);
+    if (applyVersion !== metadataRepairApplyVersion) return state;
+
     const previousState = AT.PopupState.lastMetadataRepairState || null;
     const previousStatus = previousState?.status || null;
     if (state?.status === "throttled") return previousState;
     AT.PopupState.lastMetadataRepairState = state || null;
+    if (state?.status === "running" || state?.followUpPending === true) scheduleMetadataRepairWake();
+    else {
+      metadataRepairWakeEpoch++;
+      clearMetadataRepairWakeTimer();
+    }
+    if (state?.status === "running" || !(state?.failed > 0)) clearMetadataRepairFailureRefreshTimer();
     const { FillerFetchUI } = AT;
 
     if (!state) {
@@ -375,6 +508,24 @@
       scheduleDeferredListRefresh = d.scheduleDeferredListRefresh;
       sendRuntimeMessage = d.sendRuntimeMessage;
       updateStats = d.updateStats;
+      if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => {
+        metadataRepairWakeEpoch++;
+        clearMetadataRepairWakeTimer();
+        clearMetadataRepairFailureRefreshTimer();
+        if (canWakeMetadataRepair()) void wakeMetadataRepair();
+        else void refreshMetadataRepairFailures();
+      });
+      window.addEventListener?.("pagehide", () => {
+        metadataRepairPopupClosed = true;
+        metadataRepairWakeEpoch++;
+        clearMetadataRepairWakeTimer();
+        clearMetadataRepairFailureRefreshTimer();
+      });
+      window.addEventListener?.("pageshow", () => {
+        metadataRepairPopupClosed = false;
+        if (canWakeMetadataRepair()) void wakeMetadataRepair();
+        else void refreshMetadataRepairFailures();
+      });
       AT.SyncStatusController.init({
         statusElement: elements.syncStatus,
         textElement: elements.syncText,

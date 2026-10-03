@@ -206,6 +206,7 @@ function metadataBackoffResult(entry, fallbackError) {
 async function buildLibraryRepairPlan(animeData, options = {}) {
   const forceInfoRefresh = options.forceInfoRefresh === true;
   const forceFillerRefresh = options.forceFillerRefresh === true;
+  const retryFailures = options.retryFailures === true;
   const isMobile = options.isMobile === true || isMobileUA;
   const onlySlugs = Array.isArray(options.onlySlugs) && options.onlySlugs.length ? new Set(options.onlySlugs) : null;
   const prioritySlugs = new Set(Array.isArray(options.prioritySlugs) ? options.prioritySlugs : []);
@@ -226,6 +227,7 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
   let cached = 0;
   let skipped = 0;
   let failed = 0;
+  const failedItems = [];
 
   for (const [slug, anime] of entries) {
     if (isMobile) {
@@ -249,10 +251,12 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
       globalThis.AnimeTrackerCachePolicy?.isFillerUsableSnapshot?.(fillerEntry) &&
       fillerEntry._source === "an1me" &&
       Number(fillerEntry.sourceCachedAt) >= Number(infoEntry.cachedAt);
-    const hasFreshInfo = !forceInfoRefresh && isAnimeInfoCacheFresh(infoEntry);
+    const retryInfo = retryFailures && infoEntry?.retryable === true;
+    const retryFiller = retryFailures && fillerEntry?.retryable === true;
+    const hasFreshInfo = !forceInfoRefresh && !retryInfo && isAnimeInfoCacheFresh(infoEntry);
     const hasFreshFiller = movieLike
       ? true
-      : !forceFillerRefresh && (isEpisodeTypesCacheFresh(fillerEntry, infoEntry) || settledFillerUsable);
+      : !forceFillerRefresh && !retryFiller && (isEpisodeTypesCacheFresh(fillerEntry, infoEntry) || settledFillerUsable);
 
     const needsInfo = !hasFreshInfo;
     const needsFiller = !movieLike && !hasFreshFiller;
@@ -280,6 +284,7 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
       cached += outcome.cached;
       skipped += outcome.skipped;
       failed += outcome.failed;
+      if (outcome.failed) failedItems.push({ slug: log.slug, name: log.name, type: log.type, at: log.at });
       logs = appendMetadataRepairLog(logs, log);
       continue;
     }
@@ -289,6 +294,8 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
       title: anime?.title || slug,
       mediaType: anime?.mediaType || null,
       mediaTypeUpdatedAt: anime?.mediaTypeUpdatedAt || null,
+      forceInfoRefresh: forceInfoRefresh || retryInfo,
+      forceFillerRefresh: forceFillerRefresh || retryFiller,
     });
   }
 
@@ -299,6 +306,7 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
     cached,
     skipped,
     failed,
+    failedItems,
     logs,
     items,
     queueIndex: 0,
@@ -611,7 +619,7 @@ function repairEpisodeTypesCache(slug, title, forceRefresh = true, mediaType = n
 }
 
 async function finalizeMetadataRepair(state, patch = {}) {
-  let followUpPending = state?.pendingSignInSweep === true;
+  let followUpPending = state?.pendingSignInSweep === true || state?.pendingManualRetry === true;
   if (!followUpPending) {
     try {
       const pending = await bgStorageGet([PENDING_METADATA_REPAIR_KEY, PENDING_REPAIR_SLUGS_KEY]);
@@ -704,8 +712,8 @@ async function runMetadataRepairBatch(options = {}) {
           mediaType: item.mediaType || null,
           mediaTypeUpdatedAt: item.mediaTypeUpdatedAt || null,
           includeEpisodeTypes: true,
-          forceInfoRefresh: state.options?.forceInfoRefresh !== false,
-          forceFillerRefresh: state.options?.forceFillerRefresh !== false,
+          forceInfoRefresh: item.forceInfoRefresh === true || state.options?.forceInfoRefresh !== false,
+          forceFillerRefresh: item.forceFillerRefresh === true || state.options?.forceFillerRefresh !== false,
         });
         infoResult = resolved.infoResult || { status: "unavailable", entry: null };
         fillerResult = resolved.fillerResult || { status: "nofill", entry: null };
@@ -743,6 +751,11 @@ async function runMetadataRepairBatch(options = {}) {
         cached: (state.cached || 0) + counts.cached,
         skipped: (state.skipped || 0) + counts.skipped,
         failed: (state.failed || 0) + counts.failed,
+        ...(Array.isArray(state.failedItems) ? {
+          failedItems: counts.failed
+            ? [...state.failedItems, { slug: logEntry.slug, name: logEntry.name, type: logEntry.type, at: logEntry.at }]
+            : state.failedItems,
+        } : {}),
         logs: appendMetadataRepairLog(state.logs, logEntry),
         lastLog: logEntry,
         currentSlug: nextItem?.slug || null,
@@ -799,11 +812,15 @@ async function startLibraryRepair(options = {}) {
     const shouldPromoteToSignIn =
       requestedOrigin === "sign-in" && existingOrigin !== "manual" && (existingOrigin !== "sign-in" || !hasExplicitUiMode);
     const shouldQueueSignInSweep = requestedOrigin === "sign-in" && existing.pendingSignInSweep !== true;
+    // Old/automatic plans counted backoff failures as already processed. Finish the
+    // current queue, then retry those entries once without restarting successful work.
+    const shouldQueueManualRetry = requestedOrigin === "manual" && existing.options?.retryFailures !== true;
 
     if (
       shouldPromoteToManual ||
       shouldPromoteToSignIn ||
       shouldQueueSignInSweep ||
+      shouldQueueManualRetry ||
       !existing.runId ||
       !hasExplicitMetadataRepairFetchTotal(existing)
     ) {
@@ -822,6 +839,8 @@ async function startLibraryRepair(options = {}) {
         uiMode,
         fetchTotal: getMetadataRepairFetchTotal(existing),
         pendingSignInSweep: existing.pendingSignInSweep === true || shouldQueueSignInSweep,
+        pendingManualRetry: existing.pendingManualRetry === true || shouldQueueManualRetry,
+        options: { ...existing.options, auto: requestedOrigin === "manual" ? false : existing.options?.auto },
       };
       await setMetadataRepairState(existing);
     }
@@ -854,7 +873,8 @@ async function startLibraryRepair(options = {}) {
 
   const stored = await bgStorageGet(["animeData"]);
   const animeData = stored.animeData || {};
-  const plan = await buildLibraryRepairPlan(animeData, options);
+  const retryFailures = requestedOrigin === "manual";
+  const plan = await buildLibraryRepairPlan(animeData, { ...options, retryFailures });
   const now = new Date().toISOString();
   const fetchTotal = plan.items.length;
 
@@ -877,6 +897,7 @@ async function startLibraryRepair(options = {}) {
     cached: plan.cached,
     skipped: plan.skipped,
     failed: plan.failed,
+    failedItems: plan.failedItems,
     currentSlug: plan.items[0]?.slug || null,
     currentTitle: plan.items[0]?.title || null,
     items: plan.items,
@@ -885,6 +906,7 @@ async function startLibraryRepair(options = {}) {
       forceInfoRefresh: plan.forceInfoRefresh,
       forceFillerRefresh: plan.forceFillerRefresh,
       auto: options.auto === true,
+      retryFailures,
     },
   };
 
@@ -906,6 +928,21 @@ async function startLibraryRepair(options = {}) {
   runMetadataRepairBatch().catch((error) => {
     console.error("[BG] Failed to start library repair batch:", error);
   });
+  return state;
+}
+
+// A visible popup periodically sends this message while a persisted job is running.
+// Unlike START, it never creates a new sweep or promotes an automatic job to manual.
+async function resumeLibraryRepair() {
+  let state = await getMetadataRepairState();
+  if (state?.status !== "running" && state?.followUpPending === true) {
+    await maybeStartPendingMetadataRepair();
+    state = await getMetadataRepairState();
+  }
+  if (state?.status === "running" && !metadataRepairInProgress) {
+    scheduleMetadataRepairFallback(1);
+    runMetadataRepairBatch().catch((error) => console.error("[BG] Failed to resume library queue:", error));
+  }
   return state;
 }
 
@@ -945,6 +982,10 @@ async function maybeStartPendingMetadataRepair() {
   const targetedSlugs = Array.isArray(stored[PENDING_REPAIR_SLUGS_KEY]) ? stored[PENDING_REPAIR_SLUGS_KEY].filter(Boolean) : [];
 
   const existingState = await getMetadataRepairState();
+  if (existingState?.status !== "running" && existingState?.pendingManualRetry === true) {
+    await startLibraryRepair({ origin: "manual", auto: false, forceInfoRefresh: false, forceFillerRefresh: false });
+    return true;
+  }
   const isRunning = existingState && existingState.status === "running";
   const pendingSignInSweep = existingState?.pendingSignInSweep === true;
   const isTargeted = targetedSlugs.length > 0 && !pendingSignInSweep;

@@ -3647,6 +3647,13 @@ const messageHandlers = {
     return true;
   },
 
+  RESUME_LIBRARY_REPAIR(_message, _sender, sendResponse) {
+    resumeLibraryRepair()
+      .then((state) => sendResponse({ success: true, state }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  },
+
   AN1ME_GATEWAY_FETCH(message, _sender, sendResponse) {
     an1meFetch(String(message.url || ""), { as: message.as, timeoutMs: message.timeoutMs })
       .then((result) => sendResponse(result))
@@ -3703,10 +3710,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
-    bgStorageSet({
-      animeData: {},
-      videoProgress: {},
-      settings: { watchThreshold: 0.85, notifications: true },
+    // Re-registering/restoring an extension can leave existing storage in place.
+    // Initialize missing keys only; an install event must never reset user data.
+    runBgLibraryTransaction(["animeData", "videoProgress"], (existing) => {
+      const missing = Object.fromEntries(["animeData", "videoProgress"].filter(key => existing[key] === undefined).map(key => [key, {}]));
+      return Object.keys(missing).length ? { data: missing } : null;
+    }).then(async () => {
+      const existing = await bgStorageGet(["settings"]);
+      if (existing.settings === undefined) await bgStorageSet({ settings: { watchThreshold: 0.85, notifications: true } });
     }).catch((e) => console.error("[BG] Failed to init storage on install:", e));
   } else if (details.reason === "update") {
     const style = [

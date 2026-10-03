@@ -7,6 +7,21 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.5] — 2026-10-03
+
+### Fixed
+
+- Fetch automatically resumes its persisted queue when a Safari background worker sleeps.
+  Wake-ups run only during an active import with a visible popup, stop on completion or
+  popup close, and cannot restart a completed job or replace it with an old response.
+- Manual Fetch retries failed metadata immediately, one entry at a time, while keeping
+  successful caches warm. Automatic sweeps retain service backoff to avoid request storms.
+  A manual request during an automatic sweep also retries its previously skipped failures.
+- Old failure reports reconcile newer successful cache snapshots. Recovered warnings clear;
+  unresolved failures remain visible, and display reconciliation never overwrites a newer job.
+- Install initialization fills only missing storage keys. Existing library, progress, settings
+  and metadata caches survive extension re-registration as well as version updates.
+
 ## [7.5.4] — 2026-10-03
 
 ### Fixed

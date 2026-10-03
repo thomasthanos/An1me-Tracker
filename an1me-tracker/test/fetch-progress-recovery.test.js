@@ -197,7 +197,7 @@ function repair(initial) {
     const result = await h.AT.MetadataRepair.fetchAllFillers();
     assert.equal(result.status, status); assert.equal(result.runId, 'real-job'); assert.equal(h.rendered.at(-1).logs[0].detail, 'actual failure');
   });
-  for (const kind of ['info', 'filler']) await test(`an immediate repeat fetch keeps ${kind} backoff visible as needs retry without making HTTP calls`, async () => {
+  for (const kind of ['info', 'filler']) await test(`an automatic sweep keeps ${kind} backoff visible as needs retry without making HTTP calls`, async () => {
     const now = Date.now();
     const info = { schemaVersion: 5, status: 'FINISHED', totalEpisodes: 12, cachedAt: now };
     const filler = { schemaVersion: 3, filler: [], canon: [1], totalEpisodes: 12, cachedAt: now };
@@ -207,7 +207,7 @@ function repair(initial) {
     assert.equal(plan.items.length, 0, 'backoff must still prevent a fetch storm');
     assert.equal(plan.failed, 1); assert.equal(plan.cached, 0);
     assert.equal(h.c.countMetadataRepairOutcome(plan.logs[0]).failed, 1);
-    const state = await h.c.startLibraryRepair({ auto: false, origin: 'manual' });
+    const state = await h.c.startLibraryRepair({ auto: true, origin: 'background' });
     assert.equal(state.failed, 1); assert.equal(state.status, 'completed');
   });
   await test('a failed refresh preserves usable filler arrays and stamps the original retry error', async () => {
