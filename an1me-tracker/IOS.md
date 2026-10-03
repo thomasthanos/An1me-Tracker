@@ -24,12 +24,19 @@ On iOS 27 you can skip the computer: **SideInstaller** installs SideStore on the
 
 ## 2. Install An1me Tracker
 
-1. On the iPhone, open the
-   [releases page](https://github.com/thomasthanos/an1me-extensions/releases) in Safari and download
-   `An1meTracker-<version>.ipa` from the newest **An1me.to Tracker — iPhone** release.
-2. Tap the download → **Share** → **SideStore** (or in SideStore: **My Apps → +** and pick the file).
-   Keep LocalDevVPN connected while it installs.
+1. In SideStore, open **Sources → +** and paste this source URL:
+
+   ```text
+   https://github.com/thomasthanos/an1me-extensions/releases/download/tracker-source/source.json
+   ```
+
+2. Confirm the source, open **An1me.to Tracker** and tap **Install**. Keep LocalDevVPN connected while
+   it installs.
 3. Open the **An1me Tracker** app once.
+
+The source URL downloads JSON for **Add Source**. For a manual IPA install instead, download
+`An1meTracker-<version>.ipa` from the [releases page](https://github.com/thomasthanos/an1me-extensions/releases)
+and use **My Apps → +** to select it. An IPA download URL cannot be added as a Source.
 
 ## 3. Turn the extension on in Safari
 
@@ -53,7 +60,12 @@ New-episode alerts are not available on iPhone: Safari extensions cannot show no
 
 - SideStore re-signs the app every 7 days by itself while LocalDevVPN and Wi-Fi are on. If you go more
   than 7 days without that, open SideStore and tap **Refresh All**.
-- To update, install the newer `.ipa` the same way; your data stays (it lives in the cloud and in Safari).
+- With the source added, new builds appear in SideStore: tap **Update** to install them. The build
+  workflow updates the source after each successful release. **Refresh** renews the signature; it
+  does not download a newer version.
+- If you installed the IPA manually, add the source. If SideStore does not associate the installed
+  app with it, install the app from the source over the existing installation; do not uninstall it
+  first. The bundle ID stays the same, so updates keep your data.
 - A free Apple ID allows **3 apps** at a time (SideStore is one) and **10 App IDs per 7 days**. This app
   uses **2 App IDs**: the app and its Safari extension.
 
