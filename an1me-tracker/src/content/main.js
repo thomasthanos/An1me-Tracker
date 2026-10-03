@@ -773,7 +773,7 @@
 
   const {
     getBaseSlug,
-    clearHighlightStorageListener,
+    resetEpisodeList,
     highlightWatchedEpisodes,
     injectEpisodeBadgeStyles,
     decorateCurrentEpisode,
@@ -789,7 +789,7 @@
     VideoMonitor.cleanup();
     Notifications.cleanup();
     ProgressTracker.reset();
-    clearHighlightStorageListener();
+    resetEpisodeList();
 
     navigationGeneration += 1;
     trackingState = TrackingState.IDLE;
@@ -1175,7 +1175,7 @@
 
     let triggered = false;
     let pollTimer = null;
-    let mo = null;
+    let stopWatching = null;
     let killTimer = null;
 
     const cleanup = () => {
@@ -1183,11 +1183,9 @@
         clearInterval(pollTimer);
         pollTimer = null;
       }
-      if (mo) {
-        try {
-          mo.disconnect();
-        } catch {}
-        mo = null;
+      if (stopWatching) {
+        stopWatching();
+        stopWatching = null;
       }
       if (killTimer) {
         clearTimeout(killTimer);
@@ -1217,18 +1215,14 @@
       if (run()) cleanup();
     }, CONFIG.DELAYS.SERVER_WATCH_POLL);
 
-    let moThrottle = null;
-    mo = new MutationObserver(() => {
-      if (moThrottle) return;
-      moThrottle = setTimeout(() => {
-        moThrottle = null;
-        if (!mo) return;
+    stopWatching = AT.PageEvents.observe(
+      document.body,
+      { childList: true, subtree: true },
+      () => {
         if (run()) cleanup();
-      }, CONFIG.DELAYS.SERVER_WATCH_MO_DEBOUNCE);
-    });
-    try {
-      mo.observe(document.body, { childList: true, subtree: true });
-    } catch {}
+      },
+      { throttleMs: CONFIG.DELAYS.SERVER_WATCH_MO_DEBOUNCE },
+    );
 
     killTimer = setTimeout(cleanup, CONFIG.DELAYS.SERVER_WATCH_KILL);
 
@@ -1353,7 +1347,7 @@
           durationRefreshAttempted = false;
           durationRefreshAttempts = 0;
           resetPlaybackAccumulator("spa navigation");
-          clearHighlightStorageListener();
+          resetEpisodeList();
           ProgressTracker.reset();
           setTimeout(init, AT.CONFIG.DELAYS.INIT);
         }

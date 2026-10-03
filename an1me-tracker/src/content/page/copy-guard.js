@@ -15,7 +15,7 @@
   const ALLOWED_SELECTOR = ALLOWED_SELECTORS.join(", ");
   const EDITABLE_SELECTOR = 'input, textarea, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]';
   let enabled = true;
-  let styleObserver = null;
+  let stopStyleWatch = null;
   let _selectorAuditDone = false;
 
   function getElement(target) {
@@ -132,17 +132,16 @@
     if (enabled) {
       ensureStyle();
       _lastEnsureStyleAt = Date.now();
-      if (!styleObserver) {
-        styleObserver = new MutationObserver(scheduleEnsureStyle);
-        styleObserver.observe(document.head || ROOT, { childList: true, subtree: false });
+      if (!stopStyleWatch) {
+        stopStyleWatch = window.AnimeTrackerContent.PageEvents.observe(document.head || ROOT, { childList: true }, scheduleEnsureStyle);
       }
       return;
     }
 
     removeStyle();
-    if (styleObserver) {
-      styleObserver.disconnect();
-      styleObserver = null;
+    if (stopStyleWatch) {
+      stopStyleWatch();
+      stopStyleWatch = null;
     }
   }
 
@@ -183,8 +182,7 @@
       setEnabled(result[STORAGE_KEY] !== false);
     });
 
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-      if (namespace !== "local" || !changes[STORAGE_KEY]) return;
+    window.AnimeTrackerContent.PageEvents.onStorage(STORAGE_KEY, (changes) => {
       setEnabled(changes[STORAGE_KEY].newValue !== false);
     });
   }

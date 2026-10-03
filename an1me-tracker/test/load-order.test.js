@@ -18,6 +18,8 @@ const SHARED = {
   "AnimeTracker.AuthEnv": "src/popup/lib/auth-env.js",
   "AT.AuthEnv": "src/popup/lib/auth-env.js",
   "AT.SETTING_KEYS": "src/popup/lib/config.js",
+  PageEvents: "src/content/lib/page-events.js",
+  PlayerDom: "src/content/lib/player-dom.js",
 };
 
 function contexts() {

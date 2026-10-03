@@ -142,11 +142,6 @@
     return window.AnimeTrackerContent.AnimeParser.parseTimeToSeconds(text);
   }
 
-  function queryVideoInDocument(doc) {
-    if (!doc?.querySelector) return null;
-    return doc.querySelector("video.art-video") || doc.querySelector("video");
-  }
-
   function isUsableControlsHost(host) {
     if (!host || !host.isConnected) return false;
     try {
@@ -163,30 +158,6 @@
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new Event("change", { bubbles: true }));
     field.dispatchEvent(new Event("blur", { bubbles: true }));
-  }
-
-  function waitForSelector(selector, timeoutMs = 3500) {
-    return new Promise((resolve) => {
-      const existing = document.querySelector(selector);
-      if (existing) return resolve(existing);
-
-      let resolved = false;
-      const obs = new MutationObserver(() => {
-        const node = document.querySelector(selector);
-        if (node && !resolved) {
-          resolved = true;
-          obs.disconnect();
-          resolve(node);
-        }
-      });
-      obs.observe(document.documentElement, { childList: true, subtree: true });
-      setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        obs.disconnect();
-        resolve(null);
-      }, timeoutMs);
-    });
   }
 
   function buildPanelHtml() {
@@ -233,10 +204,8 @@
     isSubmittable,
     formatTime,
     parseTimeToSeconds,
-    queryVideoInDocument,
     isUsableControlsHost,
     dispatchFieldEvents,
-    waitForSelector,
     buildPanelHtml,
   };
 })();
@@ -633,10 +602,8 @@
     isSubmittable,
     formatTime,
     parseTimeToSeconds,
-    queryVideoInDocument,
     isUsableControlsHost,
     dispatchFieldEvents,
-    waitForSelector,
     buildPanelHtml,
   } = U;
 
@@ -646,12 +613,10 @@
   let panelDoc = null;
   let video = null;
   let helperEnabled = false;
-  let toggleListener = null;
-  let videoObserver = null;
-  let controlsObserver = null;
-  let controlsObserverThrottle = null;
-  let urlObserver = null;
-  let urlObserverThrottle = null;
+  let stopToggleSync = null;
+  let stopVideoWatch = null;
+  let stopControlsWatch = null;
+  let stopIdentityWatch = null;
   let episodeWatchTimer = null;
   let lastEpisodeIdentity = null;
   let submitCountdownTimer = null;
@@ -727,54 +692,11 @@
     } catch {}
   }
 
-  function getVideoMonitorVideo() {
-    try {
-      const monitor = window.AnimeTrackerContent?.VideoMonitor;
-      if (typeof monitor?.findVideo === "function") {
-        const found = monitor.findVideo();
-        if (found) return found;
-      }
-    } catch (e) {
-      Logger.debug("Skiptime: VideoMonitor lookup failed", e);
-    }
-    return null;
-  }
+  const { PlayerDom, PageEvents } = window.AnimeTrackerContent;
 
-  function findIframeVideo() {
-    const iframes = document.querySelectorAll("iframe");
-    for (const iframe of iframes) {
-      try {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        const iframeVideo = queryVideoInDocument(iframeDoc);
-        if (iframeVideo) return iframeVideo;
-      } catch (e) {
-        Logger.debug("Skiptime: iframe video lookup skipped", e);
-      }
-    }
-    return null;
-  }
-
+  // The video's own document first: the controls host lives next to the video.
   function getSearchDocuments() {
-    const docs = [];
-    const seen = new Set();
-
-    const pushDoc = (doc) => {
-      if (!doc || seen.has(doc)) return;
-      seen.add(doc);
-      docs.push(doc);
-    };
-
-    pushDoc(video?.ownerDocument);
-    pushDoc(document);
-
-    const iframes = document.querySelectorAll("iframe");
-    for (const iframe of iframes) {
-      try {
-        pushDoc(iframe.contentDocument || iframe.contentWindow?.document);
-      } catch {}
-    }
-
-    return docs;
+    return PlayerDom.documents(video?.ownerDocument);
   }
 
   function getControlsMountTarget() {
@@ -797,28 +719,14 @@
   }
 
   function getVideoElement() {
-    return getVideoMonitorVideo() || queryVideoInDocument(document) || findIframeVideo();
+    return PlayerDom.findVideo() || PlayerDom.findAnyVideo();
   }
 
   function findTimeControlText() {
-    const docsToSearch = [];
-    if (video?.ownerDocument) docsToSearch.push(video.ownerDocument);
-    docsToSearch.push(document);
-
-    for (const doc of docsToSearch) {
-      const text = doc?.querySelector?.(".art-control-time")?.textContent?.trim();
+    for (const doc of getSearchDocuments()) {
+      const text = doc.querySelector(".art-control-time")?.textContent?.trim();
       if (text && text.includes("/")) return text;
     }
-
-    const iframes = document.querySelectorAll("iframe");
-    for (const iframe of iframes) {
-      try {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        const text = iframeDoc?.querySelector?.(".art-control-time")?.textContent?.trim();
-        if (text && text.includes("/")) return text;
-      } catch {}
-    }
-
     return "";
   }
 
@@ -1004,7 +912,7 @@
       return false;
     }
     openBtn.click();
-    const panel = await waitForSelector("#an1-skip-panel", 3500);
+    const panel = await PageEvents.waitFor("#an1-skip-panel", 3500);
     if (!panel) {
       Logger.throttled(`skiptime-panel-open-timeout:${getEpisodeIdentity()}`, "WARN", 10000, "Skiptime: panel did not open after trigger", {
         episodeId: getEpisodeIdentity(),
@@ -1027,7 +935,7 @@
     for (const t of TARGETS) {
       const value = cache[t.key];
       if (!value) continue;
-      const field = await waitForSelector("#" + t.fieldId, 3000);
+      const field = await PageEvents.waitFor("#" + t.fieldId, 3000);
       if (!field) {
         showToast(`Field #${t.fieldId} not found`, "error");
         return false;
@@ -1135,10 +1043,9 @@
   }
 
   function ensureControlsObserver() {
-    if (controlsObserver || !helperEnabled) return;
+    if (stopControlsWatch || !helperEnabled) return;
 
     const runCheck = () => {
-      controlsObserverThrottle = null;
       if (!helperEnabled) return;
       const host = getControlsHost();
       if (host) ensureControlsHostVisible(host);
@@ -1150,21 +1057,12 @@
       Logger.debug("Skiptime: controls host available, mounting dropdown");
       mountPanel();
     };
-    controlsObserver = new MutationObserver(() => {
-      if (controlsObserverThrottle) return;
-      controlsObserverThrottle = setTimeout(runCheck, 250);
-    });
-
-    const observeTargets = getSearchDocuments()
-      .map((doc) => doc?.documentElement)
-      .filter(Boolean);
-
-    if (observeTargets.length === 0) return;
-    observeTargets.forEach((target) => {
-      try {
-        controlsObserver.observe(target, { childList: true, subtree: true });
-      } catch {}
-    });
+    const stops = getSearchDocuments()
+      .map((doc) => doc.documentElement)
+      .filter(Boolean)
+      .map((root) => PageEvents.observe(root, { childList: true, subtree: true }, runCheck, { throttleMs: 250 }));
+    if (stops.length === 0) return;
+    stopControlsWatch = () => stops.forEach((stop) => stop());
   }
 
   function ensureEpisodeWatcher() {
@@ -1330,22 +1228,15 @@
         document.addEventListener("pointerdown", onDocumentPointerDown, true);
       }
 
-      if (!urlObserver) {
+      if (!stopIdentityWatch && document.body) {
         const runIdentityCheck = () => {
-          urlObserverThrottle = null;
           const nextEpisodeIdentity = getEpisodeIdentity();
           if (!nextEpisodeIdentity || nextEpisodeIdentity === lastEpisodeIdentity) return;
           handleEpisodeIdentityChange(nextEpisodeIdentity).catch((e) => {
             Logger.debug("Skiptime: mutation-driven refresh failed", e);
           });
         };
-        urlObserver = new MutationObserver(() => {
-          if (urlObserverThrottle) return;
-          urlObserverThrottle = setTimeout(runIdentityCheck, 500);
-        });
-        if (document.body) {
-          urlObserver.observe(document.body, { childList: true, subtree: true });
-        }
+        stopIdentityWatch = PageEvents.observe(document.body, { childList: true, subtree: true }, runIdentityCheck, { throttleMs: 500 });
       }
 
       await refreshPanelState();
@@ -1382,26 +1273,10 @@
       panelDoc.removeEventListener("keydown", onKeyDown, true);
       panelDoc.removeEventListener("pointerdown", onDocumentPointerDown, true);
     }
-    if (videoObserver) {
-      videoObserver.disconnect();
-      videoObserver = null;
-    }
-    if (controlsObserver) {
-      controlsObserver.disconnect();
-      controlsObserver = null;
-    }
-    if (controlsObserverThrottle) {
-      clearTimeout(controlsObserverThrottle);
-      controlsObserverThrottle = null;
-    }
-    if (urlObserver) {
-      urlObserver.disconnect();
-      urlObserver = null;
-    }
-    if (urlObserverThrottle) {
-      clearTimeout(urlObserverThrottle);
-      urlObserverThrottle = null;
-    }
+    for (const stop of [stopVideoWatch, stopControlsWatch, stopIdentityWatch]) stop?.();
+    stopVideoWatch = null;
+    stopControlsWatch = null;
+    stopIdentityWatch = null;
     if (episodeWatchTimer) {
       clearInterval(episodeWatchTimer);
       episodeWatchTimer = null;
@@ -1465,24 +1340,21 @@
     mountPanel();
 
     if (!video) {
-      if (videoObserver) videoObserver.disconnect();
-      const startTime = Date.now();
-      videoObserver = new MutationObserver(() => {
-        const v = getVideoElement();
-        if (v && !video) {
+      stopVideoWatch?.();
+      stopVideoWatch = PageEvents.observe(
+        document.documentElement,
+        { childList: true, subtree: true },
+        () => {
+          const v = getVideoElement();
+          if (!v || video) return;
           video = v;
-          videoObserver.disconnect();
-          videoObserver = null;
+          stopVideoWatch?.();
+          stopVideoWatch = null;
           Logger.debug("Skiptime: video element appeared, attaching metadata hook");
           attachVideoMetadataHooks();
-          return;
-        }
-        if (Date.now() - startTime > 15000) {
-          videoObserver.disconnect();
-          videoObserver = null;
-        }
-      });
-      videoObserver.observe(document.documentElement, { childList: true, subtree: true });
+        },
+        { timeoutMs: 15000 },
+      );
     }
   }
 
@@ -1493,14 +1365,10 @@
   }
 
   function listenForToggleChanges() {
-    if (toggleListener) return;
-    toggleListener = (changes, namespace) => {
-      if (namespace !== "local") return;
-      if (!changes[STORAGE_TOGGLE_KEY]) return;
-      const next = changes[STORAGE_TOGGLE_KEY].newValue === true;
-      applyEnabledState(next);
-    };
-    chrome.storage.onChanged.addListener(toggleListener);
+    if (stopToggleSync) return;
+    stopToggleSync = PageEvents.onStorage(STORAGE_TOGGLE_KEY, (changes) => {
+      applyEnabledState(changes[STORAGE_TOGGLE_KEY].newValue === true);
+    });
   }
 
   async function init() {

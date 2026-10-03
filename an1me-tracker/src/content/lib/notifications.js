@@ -107,32 +107,6 @@ const Notifications = {
     setTimeout(() => el.remove(), delay);
   },
 
-  _resolveTarget() {
-    for (const iframe of document.querySelectorAll("iframe")) {
-      try {
-        const iDoc = iframe.contentDocument;
-        if (!iDoc) continue;
-        const player =
-          iDoc.querySelector(".art-video-player") || iDoc.querySelector(".artplayer-app") || iDoc.querySelector(".plyr__video-wrapper");
-        if (player) {
-          if (getComputedStyle(player).position === "static") {
-            player.style.position = "relative";
-          }
-          return { doc: iDoc, container: player };
-        }
-        const video = iDoc.querySelector("video");
-        if (video?.parentElement) {
-          const parent = video.parentElement;
-          if (getComputedStyle(parent).position === "static") {
-            parent.style.position = "relative";
-          }
-          return { doc: iDoc, container: parent };
-        }
-      } catch {}
-    }
-    return { doc: document, container: document.body };
-  },
-
   _ensureRootStyles(doc) {
     if (doc === document) {
       this.injectRootStyles();
@@ -218,17 +192,14 @@ const Notifications = {
       .toString()
       .padStart(2, "0")}`;
 
-    document.querySelectorAll("#anime-tracker-resume-prompt").forEach((el) => el.remove());
-    document.querySelectorAll("iframe").forEach((f) => {
-      try {
-        f.contentDocument?.querySelectorAll("#anime-tracker-resume-prompt").forEach((el) => el.remove());
-      } catch {}
-    });
+    for (const doc of window.AnimeTrackerContent.PlayerDom.documents()) {
+      doc.querySelectorAll("#anime-tracker-resume-prompt").forEach((el) => el.remove());
+    }
 
     this.ensureFont();
     this.injectRootStyles();
 
-    const { doc, container } = this._resolveTarget();
+    const { doc, container } = window.AnimeTrackerContent.PlayerDom.overlayTarget();
     this._ensureRootStyles(doc);
 
     const prompt = doc.createElement("div");
@@ -439,7 +410,7 @@ const Notifications = {
     this.ensureFont();
     this.injectRootStyles();
 
-    const { doc, container } = this._resolveTarget();
+    const { doc, container } = window.AnimeTrackerContent.PlayerDom.overlayTarget();
     this._ensureRootStyles(doc);
     this.injectNotificationStyles(doc);
 
@@ -649,7 +620,7 @@ const Notifications = {
     this.ensureFont();
     this.injectRootStyles();
 
-    const { doc, container } = this._resolveTarget();
+    const { doc, container } = window.AnimeTrackerContent.PlayerDom.overlayTarget();
     this._ensureRootStyles(doc);
     this.injectBacklogStyles(doc);
 

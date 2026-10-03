@@ -84,6 +84,7 @@
         "https://*.an1me.to/*"
       ],
       "js": [
+        "src/content/lib/page-events.js",
         "src/content/page/copy-guard.js"
       ],
       "run_at": "document_start",
@@ -107,6 +108,7 @@
         "https://*.an1me.to/*"
       ],
       "js": [
+        "src/content/lib/page-events.js",
         "src/content/page/ad-guard-bridge.js"
       ],
       "run_at": "document_start",
@@ -138,6 +140,8 @@
         "src/common/data/media-type.js",
         "src/common/data/entry-state.js",
         "src/content/lib/config.js",
+        "src/content/lib/page-events.js",
+        "src/content/lib/player-dom.js",
         "src/common/logger.js",
         "src/content/lib/storage.js",
         "src/content/page/anime-parser.js",
@@ -162,6 +166,7 @@
         "https://*.an1me.to/"
       ],
       "js": [
+        "src/content/lib/page-events.js",
         "src/common/data/multipart-mappings.js",
         "src/content/page/continue-watching.js"
       ],

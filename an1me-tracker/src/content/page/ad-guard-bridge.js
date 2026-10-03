@@ -24,8 +24,7 @@
       apply(result[STORAGE_KEY] !== false);
     });
 
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-      if (namespace !== "local" || !changes[STORAGE_KEY]) return;
+    window.AnimeTrackerContent.PageEvents.onStorage(STORAGE_KEY, (changes) => {
       apply(changes[STORAGE_KEY].newValue !== false);
     });
   } catch {}

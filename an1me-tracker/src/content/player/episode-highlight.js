@@ -30,88 +30,140 @@
     return Identity ? Identity.getBaseSlug(slug, options) : slug;
   }
 
-  let _highlightStorageListener = null;
-  function clearHighlightStorageListener() {
-    if (_highlightStorageListener) {
-      try {
-        chrome.storage.onChanged.removeListener(_highlightStorageListener);
-      } catch {}
-      _highlightStorageListener = null;
+  // The episode list is decorated from three sources - watched episodes (storage), filler episodes
+  // (background) and the current episode (the site's class) - and the site re-renders the list after
+  // load. One throttled observer re-applies all three for a minute after each (re)start; every pass
+  // is idempotent, so a pass caused by our own badges changes nothing and the list settles.
+  const LIST_WATCH_MS = 60000;
+  const listState = { slug: null, watched: null, fillers: null };
+  let stopListWatch = null;
+  let stopWatchedSync = null;
+
+  function resetEpisodeList() {
+    if (stopListWatch) stopListWatch();
+    if (stopWatchedSync) stopWatchedSync();
+    stopListWatch = null;
+    stopWatchedSync = null;
+    listState.slug = null;
+    listState.watched = null;
+    listState.fillers = null;
+  }
+
+  function episodeListItems() {
+    return document.querySelectorAll(".episode-list-item[data-episode-search-query]");
+  }
+
+  function applyWatched(slug, watchedSet) {
+    let highlighted = 0;
+    for (const item of episodeListItems()) {
+      const epNum = parseInt(item.getAttribute("data-episode-search-query"), 10);
+      if (isNaN(epNum)) continue;
+      if (watchedSet.has(toStoredListNumber(slug, epNum))) {
+        item.style.opacity = "";
+        item.style.color = "";
+        if (!item.classList.contains("at-watched-episode")) {
+          item.classList.add("at-watched-episode");
+          if (!item.querySelector(".at-watched-badge")) {
+            const badge = document.createElement("span");
+            badge.className = "at-watched-badge";
+            badge.textContent = "WATCHED";
+            item.appendChild(badge);
+          }
+        }
+        highlighted++;
+      } else if (item.classList.contains("at-watched-episode")) {
+        item.classList.remove("at-watched-episode");
+        item.querySelector(".at-watched-badge")?.remove();
+      }
     }
+    return highlighted;
+  }
+
+  function applyFillers(slug, fillerSet) {
+    let tagged = 0;
+    for (const item of episodeListItems()) {
+      const epNum = parseInt(item.getAttribute("data-episode-search-query"), 10);
+      if (!Number.isFinite(epNum)) continue;
+      const isFiller = fillerSet.has(toStoredListNumber(slug, epNum));
+      if (isFiller && !item.classList.contains("at-filler-episode")) {
+        item.classList.add("at-filler-episode");
+        if (!item.querySelector(".at-filler-badge")) {
+          const badge = document.createElement("span");
+          badge.className = "at-filler-badge";
+          badge.textContent = "FILLER";
+          item.appendChild(badge);
+        }
+        tagged++;
+      } else if (!isFiller && item.classList.contains("at-filler-episode")) {
+        item.classList.remove("at-filler-episode");
+        item.querySelector(".at-filler-badge")?.remove();
+      }
+    }
+    return tagged;
+  }
+
+  function applyCurrentBadge() {
+    document.querySelectorAll(".at-current-badge").forEach((badge) => {
+      const item = badge.closest(".episode-list-item");
+      if (!item || !item.classList.contains("current-episode")) badge.remove();
+    });
+    document.querySelectorAll(".episode-list-item.current-episode").forEach((item) => {
+      if (item.querySelector(".at-current-badge")) return;
+      const badge = document.createElement("span");
+      badge.className = "at-current-badge";
+      badge.textContent = "NOW";
+      item.appendChild(badge);
+    });
+  }
+
+  function applyListDecorations() {
+    if (listState.watched) applyWatched(listState.slug, listState.watched);
+    if (listState.fillers) applyFillers(listState.slug, listState.fillers);
+    applyCurrentBadge();
+  }
+
+  function watchEpisodeList() {
+    if (stopListWatch) stopListWatch();
+    const target = document.querySelector(".episode-list-display-box") || document.querySelector(".episode-head") || document.body;
+    stopListWatch = AT.PageEvents.observe(
+      target,
+      { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] },
+      applyListDecorations,
+      { throttleMs: 150, timeoutMs: LIST_WATCH_MS },
+    );
+  }
+
+  function watchedSetOf(anime) {
+    return new Set(anime.episodes.map((ep) => Number(ep.number)));
   }
 
   function highlightWatchedEpisodes(slug) {
     const { Logger } = AT;
-    clearHighlightStorageListener();
+    if (stopWatchedSync) stopWatchedSync();
+    listState.slug = slug;
     injectEpisodeBadgeStyles();
 
-    function applyHighlights(watchedSet) {
-      const items = document.querySelectorAll(".episode-list-item[data-episode-search-query]");
-      let highlighted = 0;
-      for (const item of items) {
-        const epNum = parseInt(item.getAttribute("data-episode-search-query"), 10);
-        if (isNaN(epNum)) continue;
-        if (watchedSet.has(toStoredListNumber(slug, epNum))) {
-          item.style.opacity = "";
-          item.style.color = "";
-          if (!item.classList.contains("at-watched-episode")) {
-            item.classList.add("at-watched-episode");
-            if (!item.querySelector(".at-watched-badge")) {
-              const badge = document.createElement("span");
-              badge.className = "at-watched-badge";
-              badge.textContent = "WATCHED";
-              item.appendChild(badge);
-            }
-          }
-          highlighted++;
-        } else if (item.classList.contains("at-watched-episode")) {
-          item.classList.remove("at-watched-episode");
-          item.querySelector(".at-watched-badge")?.remove();
-        }
-      }
-      return highlighted;
-    }
-
     chrome.storage.local.get(["animeData"], (result) => {
-      if (chrome.runtime.lastError || !result.animeData) return;
+      // A later episode page may have taken over while storage answered.
+      if (chrome.runtime.lastError || !result.animeData || listState.slug !== slug) return;
       const anime = result.animeData[slug];
       if (!anime?.episodes?.length) return;
 
-      const watchedSet = new Set(anime.episodes.map((ep) => Number(ep.number)));
+      const watchedSet = watchedSetOf(anime);
       if (watchedSet.size === 0) return;
+      listState.watched = watchedSet;
 
-      const count = applyHighlights(watchedSet);
-      if (count > 0) {
-        Logger.debug(`Highlighted ${count} watched episodes in episode list`);
-      } else {
-        const container = document.querySelector(".episode-list-display-box");
-        const target = container || document.body;
-        let retryDebounce = null;
-        const obs = new MutationObserver(() => {
-          if (retryDebounce) return;
-          retryDebounce = setTimeout(() => {
-            retryDebounce = null;
-            const retry = applyHighlights(watchedSet);
-            if (retry > 0) obs.disconnect();
-          }, 150);
-        });
-        obs.observe(target, { childList: true, subtree: true });
-        setTimeout(() => {
-          obs.disconnect();
-          if (retryDebounce) clearTimeout(retryDebounce);
-        }, 10000);
-      }
+      const count = applyWatched(slug, watchedSet);
+      if (count > 0) Logger.debug(`Highlighted ${count} watched episodes in episode list`);
+      watchEpisodeList();
     });
 
-    _highlightStorageListener = (changes) => {
-      if (!changes.animeData) return;
-      const newData = changes.animeData.newValue || {};
-      const anime = newData[slug];
+    stopWatchedSync = AT.PageEvents.onStorage("animeData", (changes) => {
+      const anime = (changes.animeData.newValue || {})[slug];
       if (!anime?.episodes?.length) return;
-      const watchedSet = new Set(anime.episodes.map((ep) => Number(ep.number)));
-      applyHighlights(watchedSet);
-    };
-    chrome.storage.onChanged.addListener(_highlightStorageListener);
+      listState.watched = watchedSetOf(anime);
+      applyWatched(slug, listState.watched);
+    });
   }
 
   function injectEpisodeBadgeStyles() {
@@ -156,59 +208,10 @@
     decorateCurrentEpisode();
   }
 
-  let _currentEpisodeObserver = null;
-  let _currentEpisodeObserverTimeout = null;
+
   function decorateCurrentEpisode() {
-    const apply = () => {
-      document.querySelectorAll(".at-current-badge").forEach((badge) => {
-        const item = badge.closest(".episode-list-item");
-        if (!item || !item.classList.contains("current-episode")) badge.remove();
-      });
-      const items = document.querySelectorAll(".episode-list-item.current-episode");
-      items.forEach((item) => {
-        if (item.querySelector(".at-current-badge")) return;
-        const badge = document.createElement("span");
-        badge.className = "at-current-badge";
-        badge.textContent = "NOW";
-        item.appendChild(badge);
-      });
-    };
-    apply();
-
-    if (_currentEpisodeObserver) {
-      try {
-        _currentEpisodeObserver.disconnect();
-      } catch {}
-      _currentEpisodeObserver = null;
-    }
-    if (_currentEpisodeObserverTimeout) {
-      clearTimeout(_currentEpisodeObserverTimeout);
-      _currentEpisodeObserverTimeout = null;
-    }
-
-    const target = document.querySelector(".episode-list-display-box") || document.querySelector(".episode-head") || document.body;
-    let _applyDebounce = null;
-    _currentEpisodeObserver = new MutationObserver(() => {
-      if (_applyDebounce) return;
-      _applyDebounce = setTimeout(() => {
-        _applyDebounce = null;
-        apply();
-      }, 150);
-    });
-    _currentEpisodeObserver.observe(target, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    _currentEpisodeObserverTimeout = setTimeout(() => {
-      try {
-        _currentEpisodeObserver?.disconnect();
-      } catch {}
-      _currentEpisodeObserver = null;
-      _currentEpisodeObserverTimeout = null;
-    }, 60000);
+    applyCurrentBadge();
+    watchEpisodeList();
   }
 
   function highlightFillerEpisodes(slug, title) {
@@ -217,54 +220,14 @@
 
     try {
       chrome.runtime.sendMessage({ type: "GET_FILLER_EPISODES", animeSlug: slug, animeTitle: title || null }, (response) => {
-        if (chrome.runtime.lastError || !response?.fillers) return;
+        if (chrome.runtime.lastError || !response?.fillers || listState.slug !== slug) return;
         const fillerSet = new Set(response.fillers.map(Number).filter((n) => Number.isFinite(n)));
         if (fillerSet.size === 0) return;
 
         injectEpisodeBadgeStyles();
-
-        const applyFiller = () => {
-          const items = document.querySelectorAll(".episode-list-item[data-episode-search-query]");
-          let tagged = 0;
-          for (const item of items) {
-            const epNum = parseInt(item.getAttribute("data-episode-search-query"), 10);
-            if (!Number.isFinite(epNum)) continue;
-            const isFiller = fillerSet.has(toStoredListNumber(slug, epNum));
-            if (isFiller && !item.classList.contains("at-filler-episode")) {
-              item.classList.add("at-filler-episode");
-              if (!item.querySelector(".at-filler-badge")) {
-                const badge = document.createElement("span");
-                badge.className = "at-filler-badge";
-                badge.textContent = "FILLER";
-                item.appendChild(badge);
-              }
-              tagged++;
-            } else if (!isFiller && item.classList.contains("at-filler-episode")) {
-              item.classList.remove("at-filler-episode");
-              item.querySelector(".at-filler-badge")?.remove();
-            }
-          }
-          return tagged;
-        };
-
-        if (applyFiller() === 0) {
-          const target = document.querySelector(".episode-list-display-box") || document.body;
-          let fillerRetryDebounce = null;
-          const obs = new MutationObserver(() => {
-            if (fillerRetryDebounce) return;
-            fillerRetryDebounce = setTimeout(() => {
-              fillerRetryDebounce = null;
-              if (applyFiller() > 0) obs.disconnect();
-            }, 150);
-          });
-          obs.observe(target, { childList: true, subtree: true });
-          setTimeout(() => {
-            obs.disconnect();
-            if (fillerRetryDebounce) clearTimeout(fillerRetryDebounce);
-          }, 10000);
-        } else {
-          Logger.debug(`Tagged filler episodes for ${slug}`);
-        }
+        listState.fillers = fillerSet;
+        if (applyFillers(slug, fillerSet) > 0) Logger.debug(`Tagged filler episodes for ${slug}`);
+        watchEpisodeList();
       });
     } catch (e) {
       Logger.debug("Filler coloring failed:", e.message);
@@ -354,7 +317,7 @@
   window.AnimeTrackerContent = window.AnimeTrackerContent || {};
   window.AnimeTrackerContent.EpisodeHighlight = {
     getBaseSlug,
-    clearHighlightStorageListener,
+    resetEpisodeList,
     highlightWatchedEpisodes,
     injectEpisodeBadgeStyles,
     decorateCurrentEpisode,

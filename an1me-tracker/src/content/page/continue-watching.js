@@ -628,8 +628,7 @@
   let renderDebounce = null;
 
   let mountedViaShare = false;
-  let shareWatcher = null;
-  let shareWatcherScheduled = false;
+  let unsubscribeShareWatcher = null;
   let trackResizeObserver = null;
 
   const { isContextValid, parseProgressKey, buildItems } = window.AnimeTrackerContent.CWUtils;
@@ -929,43 +928,34 @@
   }
 
   function startShareWatcher() {
-    if (shareWatcher) return;
-    if (typeof MutationObserver === "undefined") return;
+    if (unsubscribeShareWatcher) return;
     const root = document.body || document.documentElement;
     if (!root) return;
 
-    shareWatcher = new MutationObserver(() => {
-      if (shareWatcherScheduled) return;
-      shareWatcherScheduled = true;
-      queueMicrotask(() => {
-        shareWatcherScheduled = false;
-        if (dismissed) return;
-        const ourSection = document.getElementById(CONTAINER_ID);
-        if (!ourSection) return;
-        const shareNode = findShareAnchor();
-        if (!shareNode) return;
+    unsubscribeShareWatcher = window.AnimeTrackerContent.PageEvents.observe(root, { childList: true, subtree: true }, () => {
+      if (dismissed) return;
+      const ourSection = document.getElementById(CONTAINER_ID);
+      if (!ourSection) return;
+      const shareNode = findShareAnchor();
+      if (!shareNode) return;
 
-        if (mountedViaShare) {
-          shareNode.remove();
-          return;
-        }
-
-        const parent = shareNode.parentNode;
-        const next = shareNode.nextSibling;
+      if (mountedViaShare) {
         shareNode.remove();
-        if (parent) parent.insertBefore(ourSection, next);
-        mountedViaShare = true;
-      });
+        return;
+      }
+
+      const parent = shareNode.parentNode;
+      const next = shareNode.nextSibling;
+      shareNode.remove();
+      if (parent) parent.insertBefore(ourSection, next);
+      mountedViaShare = true;
     });
-    shareWatcher.observe(root, { childList: true, subtree: true });
   }
 
   function stopShareWatcher() {
-    if (shareWatcher) {
-      shareWatcher.disconnect();
-      shareWatcher = null;
-    }
-    shareWatcherScheduled = false;
+    if (!unsubscribeShareWatcher) return;
+    unsubscribeShareWatcher();
+    unsubscribeShareWatcher = null;
   }
 
   function render(items) {
@@ -1053,13 +1043,10 @@
   } catch {}
 
   try {
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-      if (namespace !== "local") return;
-      const changedKeys = Object.keys(changes || {});
-      if (changes.videoProgress || changes.animeData || changedKeys.some((key) => key.startsWith("animeinfo_"))) {
-        scheduleRender();
-      }
-    });
+    window.AnimeTrackerContent.PageEvents.onStorage(
+      (key) => key === "videoProgress" || key === "animeData" || key.startsWith("animeinfo_"),
+      scheduleRender,
+    );
   } catch {}
 
   loadAndRender();

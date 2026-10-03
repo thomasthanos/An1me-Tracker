@@ -792,8 +792,7 @@ window.AnimeTrackerContent = window.AnimeTrackerContent || {};
 window.AnimeTrackerContent.ProgressTracker = ProgressTracker;
 
 try {
-  chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace !== "local") return;
+  window.AnimeTrackerContent.PageEvents.onStorage(["videoProgress", "animeData"], (changes) => {
     const Util = (window.AnimeTrackerContent && window.AnimeTrackerContent.MergeUtils) || globalThis.AnimeTrackerMergeUtils || {};
 
     if (changes.videoProgress && ProgressTracker._vpCache) {
