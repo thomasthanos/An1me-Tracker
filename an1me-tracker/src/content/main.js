@@ -13,6 +13,7 @@
   let animeInfo = null;
   // Bumped by every init(). Async work started on one episode checks it before touching shared state.
   let navigationGeneration = 0;
+  let navigationDebounceTimeout = null;
   // When the unload handler last ran; see handleBeforeUnload.
   let lastUnloadHandledAt = 0;
 
@@ -46,6 +47,7 @@
     const { Storage, Logger, Notifications } = AT;
     if (backlogPromptHandled) return;
     if (!animeInfo || !animeInfo.animeSlug || !animeInfo.episodeNumber) return;
+    const generation = navigationGeneration;
 
     const currentEp = Number(animeInfo.episodeNumber) || 0;
     if (currentEp <= 1) return;
@@ -53,6 +55,7 @@
 
     try {
       const result = await Storage.get(["animeData"]);
+      if (generation !== navigationGeneration) return;
       if (Storage.isAbortResult(result)) return;
       const animeData = result.animeData || {};
       const entry = animeData[animeInfo.animeSlug];
@@ -69,6 +72,7 @@
         });
         if (Array.isArray(resp?.fillers)) fillers = resp.fillers;
       } catch {}
+      if (generation !== navigationGeneration) return;
       const fillerSet = new Set(fillers.map((n) => Number(n)));
 
       const missing = [];
@@ -169,11 +173,13 @@
   async function loadOutroStartFor(info) {
     cachedOutroStartSec = null;
     if (!info?.animeSlug || !info?.episodeNumber) return;
+    const generation = navigationGeneration;
     const epNum = Number(info.episodeNumber);
 
     try {
       const key = `skiptimeCache:${info.animeSlug}__episode-${epNum}`;
       const result = await chrome.storage.local.get([key]);
+      if (generation !== navigationGeneration) return;
       const stored = result?.[key];
       if (stored?.outroStart) {
         const sec = parseSkipTime(stored.outroStart);
@@ -183,6 +189,7 @@
         }
       }
     } catch {}
+    if (generation !== navigationGeneration) return;
 
     try {
       const video = AT.VideoMonitor?.getVideoElement?.();
@@ -218,7 +225,7 @@
         }
       });
       const sec = Number(resp?.outroStart) || 0;
-      if (sec > 0) cachedOutroStartSec = sec;
+      if (generation === navigationGeneration && sec > 0) cachedOutroStartSec = sec;
     } catch {}
   }
 
@@ -356,13 +363,20 @@
     try {
       let written = false;
       let animeData = null;
-      const mutateResult = await Storage.mutate(["animeData", "deletedAnime"], (data) => {
+      const mutateResult = await Storage.mutate(["animeData", "deletedAnime", "videoProgress"], (data) => {
         const ad = (data.animeData = data.animeData || {});
         const del = (data.deletedAnime = data.deletedAnime || {});
+        const vp = (data.videoProgress = data.videoProgress || {});
         written = writeSyncEpisode(info, duration, ad, "Immediate");
-        if (written) delete del[info.animeSlug];
+        let cleanupChanged = Object.prototype.hasOwnProperty.call(del, info.animeSlug);
+        delete del[info.animeSlug];
+        const ids = [info.uniqueId];
+        if (info.isDoubleEpisode && info.secondEpisodeNumber) ids.push(`${info.animeSlug}__episode-${info.secondEpisodeNumber}`);
+        for (const id of ids) {
+          if (vp[id]) { delete vp[id]; cleanupChanged = true; }
+        }
         animeData = ad;
-        if (!written) return false;
+        if (!written && !cleanupChanged) return false;
       });
       if (Storage.isAbortResult(mutateResult)) {
         Logger.warn("Immediate track skipped: storage read unavailable");
@@ -396,14 +410,6 @@
           }
         } catch {}
 
-        try {
-          const progressResult = await Storage.mutate(["videoProgress"], (data) => {
-            const videoProgress = (data.videoProgress = data.videoProgress || {});
-            if (!videoProgress[info.uniqueId]) return false;
-            delete videoProgress[info.uniqueId];
-          });
-          if (Storage.isAbortResult(progressResult)) return;
-        } catch {}
       } else if (isCurrentPage()) {
         trackingState = TrackingState.COMPLETED;
       }
@@ -422,7 +428,7 @@
 
   function debounce(func, wait) {
     let timeout;
-    return function executedFunction(...args) {
+    const executedFunction = function (...args) {
       const later = () => {
         clearTimeout(timeout);
         func(...args);
@@ -430,22 +436,36 @@
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
     };
+    executedFunction.cancel = () => clearTimeout(timeout);
+    return executedFunction;
+  }
+
+  async function persistDepartedCompletion(info, duration) {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: "TRACK_BEFORE_UNLOAD", animeInfo: info, duration });
+      if (result?.success === false) throw new Error(result.error || "Background completion failed");
+    } catch (error) {
+      AT.Logger.warn("Previous episode completion failed:", error);
+    }
   }
 
   async function tryRefreshTrackedDuration(videoElement, reason = "metadata") {
     const { ProgressTracker, Logger } = AT;
     if (!videoElement || !animeInfo?.uniqueId || durationRefreshAttempted) return;
     if (durationRefreshAttempts >= MAX_DURATION_REFRESH_ATTEMPTS) return;
+    const info = animeInfo;
+    const generation = navigationGeneration;
 
     const duration = Number(videoElement.duration) || 0;
     if (!Number.isFinite(duration) || duration <= 0) return;
 
     try {
       durationRefreshAttempts += 1;
-      const refreshed = await ProgressTracker.refreshTrackedEpisodeDuration(animeInfo, duration);
+      const refreshed = await ProgressTracker.refreshTrackedEpisodeDuration(info, duration);
+      if (generation !== navigationGeneration) return;
       if (refreshed) {
         durationRefreshAttempted = true;
-        await ProgressTracker.clearSavedProgress(animeInfo.uniqueId);
+        await ProgressTracker.clearSavedProgress(info.uniqueId);
       } else {
         if (durationRefreshAttempts >= MAX_DURATION_REFRESH_ATTEMPTS) durationRefreshAttempted = true;
       }
@@ -459,6 +479,7 @@
     const videoElement = VideoMonitor.getVideoElement();
 
     if (!videoElement || trackingState === TrackingState.COMPLETED || earlyTrackDone || !animeInfo) return;
+    const generation = navigationGeneration;
 
     const duration = videoElement.duration;
     const currentTime = videoElement.currentTime;
@@ -476,6 +497,7 @@
     if (!durationRefreshAttempted && durationRefreshAttempts < MAX_DURATION_REFRESH_ATTEMPTS) {
       await tryRefreshTrackedDuration(videoElement, "timeupdate");
     }
+    if (generation !== navigationGeneration) return;
 
     if (ProgressTracker.shouldMarkComplete(currentTime, duration, cachedOutroStartSec)) {
       if (shouldBlockCompletion(currentTime, duration)) {
@@ -497,7 +519,9 @@
   const handleVideoMetadata = async () => {
     const { VideoMonitor } = AT;
     const videoElement = VideoMonitor.getVideoElement();
+    const generation = navigationGeneration;
     await tryRefreshTrackedDuration(videoElement, "loadedmetadata");
+    if (generation !== navigationGeneration) return;
 
     if (animeInfo && cachedOutroStartSec === null) {
       loadOutroStartFor(animeInfo);
@@ -509,6 +533,9 @@
     const videoElement = VideoMonitor.getVideoElement();
 
     if (!videoElement || trackingState === TrackingState.COMPLETED || !animeInfo) return;
+    const info = animeInfo;
+    const generation = navigationGeneration;
+    const isCurrentPage = () => generation === navigationGeneration;
 
     const duration = videoElement.duration;
     const currentTime = videoElement.currentTime;
@@ -541,10 +568,13 @@
         `Marking complete: ${progress}% watched (need ${CONFIG.COMPLETED_PERCENTAGE}%), ${remainingTime}s remaining of ${durationMins}:${String(durationSecs).padStart(2, "0")}`,
       );
 
-      const alreadyTracked = await ProgressTracker.isEpisodeTracked(animeInfo.uniqueId);
+      const alreadyTracked = await ProgressTracker.isEpisodeTracked(info.uniqueId);
+      if (!isCurrentPage()) { await persistDepartedCompletion(info, duration); return; }
       if (alreadyTracked) {
-        const refreshed = await ProgressTracker.refreshTrackedEpisodeDuration(animeInfo, duration);
-        if (refreshed) await ProgressTracker.clearSavedProgress(animeInfo.uniqueId);
+        const refreshed = await ProgressTracker.refreshTrackedEpisodeDuration(info, duration);
+        if (!isCurrentPage()) return;
+        if (refreshed) await ProgressTracker.clearSavedProgress(info.uniqueId);
+        if (!isCurrentPage()) return;
         trackingState = TrackingState.COMPLETED;
         return;
       }
@@ -552,8 +582,8 @@
       trackingState = TrackingState.TRACKING;
 
       const trackingOperation = async () => {
-        await ProgressTracker.saveWatchedEpisode(animeInfo, duration);
-        await ProgressTracker.clearSavedProgress(animeInfo.uniqueId);
+        await ProgressTracker.saveWatchedEpisode(info, duration);
+        await ProgressTracker.clearSavedProgress(info.uniqueId);
       };
 
       let timeoutId;
@@ -563,15 +593,16 @@
 
       try {
         await Promise.race([trackingOperation(), timeoutPromise]);
+        if (!isCurrentPage()) return;
         Logger.success("Auto-tracked on timeupdate");
         maybePromptBacklog();
       } catch (error) {
         if (error.message === "handleTimeUpdate timeout") Logger.warn("Tracking operation timed out, will retry");
         else Logger.error("Track failed", error);
-        trackingState = TrackingState.IDLE;
+        if (isCurrentPage()) trackingState = TrackingState.IDLE;
       } finally {
         clearTimeout(timeoutId);
-        if (trackingState === TrackingState.TRACKING) trackingState = TrackingState.COMPLETED;
+        if (isCurrentPage() && trackingState === TrackingState.TRACKING) trackingState = TrackingState.COMPLETED;
       }
     }
   }, AT.CONFIG.DEBOUNCE_DELAY);
@@ -613,6 +644,9 @@
     const videoElement = VideoMonitor.getVideoElement();
 
     if (animeInfo && videoElement) {
+      const info = animeInfo;
+      const generation = navigationGeneration;
+      const isCurrentPage = () => generation === navigationGeneration;
       const duration = videoElement.duration || 0;
       const currentTime = videoElement.currentTime || 0;
 
@@ -630,25 +664,28 @@
       if (trackingState !== TrackingState.IDLE) return;
       trackingState = TrackingState.TRACKING;
 
-      const alreadyTracked = await ProgressTracker.isEpisodeTracked(animeInfo.uniqueId);
+      const alreadyTracked = await ProgressTracker.isEpisodeTracked(info.uniqueId);
+      if (!isCurrentPage()) { await persistDepartedCompletion(info, duration); return; }
       if (!alreadyTracked) {
         try {
-          await ProgressTracker.saveWatchedEpisode(animeInfo, videoElement.duration);
-          await ProgressTracker.clearSavedProgress(animeInfo.uniqueId);
+          await ProgressTracker.saveWatchedEpisode(info, videoElement.duration);
+          await ProgressTracker.clearSavedProgress(info.uniqueId);
+          if (!isCurrentPage()) return;
           trackingState = TrackingState.COMPLETED;
           maybePromptBacklog();
         } catch (error) {
           Logger.error("End track failed", error);
-          trackingState = TrackingState.IDLE;
+          if (isCurrentPage()) trackingState = TrackingState.IDLE;
         }
       } else {
         trackingState = TrackingState.COMPLETED;
         try {
-          const refreshed = await ProgressTracker.refreshTrackedEpisodeDuration(animeInfo, videoElement.duration);
-          if (refreshed) await ProgressTracker.clearSavedProgress(animeInfo.uniqueId);
+          const refreshed = await ProgressTracker.refreshTrackedEpisodeDuration(info, videoElement.duration);
+          if (refreshed) await ProgressTracker.clearSavedProgress(info.uniqueId);
         } catch (error) {
           Logger.warn(`Failed to refresh duration on end: ${error?.message}`);
         }
+        if (!isCurrentPage()) return;
         Logger.info("Episode ended (was tracked before)");
         showCompletionOnce();
       }
@@ -660,6 +697,9 @@
     const videoElement = VideoMonitor.getVideoElement();
 
     if (document.hidden && animeInfo && trackingState === TrackingState.IDLE && videoElement && videoElement.currentTime > 0) {
+      const info = animeInfo;
+      const generation = navigationGeneration;
+      const isCurrentPage = () => generation === navigationGeneration;
       const duration = videoElement.duration;
       const currentTime = videoElement.currentTime;
 
@@ -674,23 +714,25 @@
           return;
         }
         trackingState = TrackingState.TRACKING;
-        const alreadyTracked = await ProgressTracker.isEpisodeTracked(animeInfo.uniqueId);
+        const alreadyTracked = await ProgressTracker.isEpisodeTracked(info.uniqueId);
+        if (!isCurrentPage()) { await persistDepartedCompletion(info, duration); return; }
         if (!alreadyTracked) {
           try {
-            await ProgressTracker.saveWatchedEpisode(animeInfo, duration);
-            await ProgressTracker.clearSavedProgress(animeInfo.uniqueId);
+            await ProgressTracker.saveWatchedEpisode(info, duration);
+            await ProgressTracker.clearSavedProgress(info.uniqueId);
+            if (!isCurrentPage()) return;
             trackingState = TrackingState.COMPLETED;
             Logger.success("Auto-tracked on visibility change");
             maybePromptBacklog();
           } catch (error) {
             Logger.error("Auto-track failed on visibility change", error);
-            trackingState = TrackingState.IDLE;
+            if (isCurrentPage()) trackingState = TrackingState.IDLE;
           }
         } else {
           trackingState = TrackingState.COMPLETED;
           try {
-            const refreshed = await ProgressTracker.refreshTrackedEpisodeDuration(animeInfo, duration);
-            if (refreshed) await ProgressTracker.clearSavedProgress(animeInfo.uniqueId);
+            const refreshed = await ProgressTracker.refreshTrackedEpisodeDuration(info, duration);
+            if (refreshed) await ProgressTracker.clearSavedProgress(info.uniqueId);
           } catch (error) {
             Logger.warn("Failed to refresh duration on visibility change:", error);
           }
@@ -728,9 +770,6 @@
 
       trackingState = TrackingState.COMPLETED;
 
-      try {
-        ProgressTracker.saveWatchedEpisode(animeInfo, duration).catch((e) => window.__atSwallow("saveWatchedEpisode", e));
-      } catch {}
       try {
         chrome.runtime.sendMessage(
           {
@@ -787,22 +826,38 @@
     bumpLatestEpisodeFromPage,
   } = AT.EpisodeHighlight;
 
-  async function init() {
-    const { Logger, AnimeParser, ProgressTracker, VideoMonitor, Notifications } = AT;
-    Logger.debug("Init", window.location.pathname);
-
-    VideoMonitor.cleanupPage();
-    VideoMonitor.cleanup();
-    Notifications.cleanup();
-    ProgressTracker.reset();
-    resetEpisodeList();
-
+  function teardownWatchPage() {
     navigationGeneration += 1;
+    clearTimeout(navigationDebounceTimeout);
+    navigationDebounceTimeout = null;
+    handleTimeUpdateSettled.cancel();
+    AT.PlayerObserver.stop();
+    AT.VideoMonitor.cleanupPage();
+    AT.VideoMonitor.cleanup();
+    AT.SkiptimeHelper?.unmount();
+    AT.Notifications.cleanup();
+    AT.ProgressTracker.reset();
+    resetEpisodeList();
+    animeInfo = null;
+    cachedOutroStartSec = null;
+    completionNotificationShown = false;
+    backlogPromptHandled = false;
+    lastUnloadHandledAt = 0;
     trackingState = TrackingState.IDLE;
     earlyTrackDone = false;
     durationRefreshAttempted = false;
     durationRefreshAttempts = 0;
-    resetPlaybackAccumulator("init");
+    resetPlaybackAccumulator("page cleanup");
+  }
+
+  async function init() {
+    const { Logger, AnimeParser, ProgressTracker, VideoMonitor, Notifications } = AT;
+    Logger.debug("Init", window.location.pathname);
+
+    teardownWatchPage();
+    if (!/\/watch\//.test(window.location.pathname)) return;
+    const generation = navigationGeneration;
+    const isCurrentPage = () => generation === navigationGeneration;
 
     animeInfo = AnimeParser.extractAnimeInfo();
     if (!animeInfo) {
@@ -888,10 +943,12 @@
 
     try {
       const skipResult = await chrome.storage.local.get(["autoSkipFillers", FILLER_STAY_SELECTIONS_KEY]);
+      if (!isCurrentPage()) return;
       if (skipResult.autoSkipFillers === true) {
         const stayedFillers = normalizeStayedFillers(skipResult[FILLER_STAY_SELECTIONS_KEY] || {});
         const stayedEpisodes = stayedFillers[String(animeInfo.animeSlug).toLowerCase()] || [];
         const fillerResponse = await chrome.runtime.sendMessage({ type: "GET_FILLER_EPISODES", animeSlug: animeInfo.animeSlug });
+        if (!isCurrentPage()) return;
         const fillerEpisodes = fillerResponse?.fillers;
         if (Array.isArray(fillerEpisodes) && fillerEpisodes.includes(animeInfo.episodeNumber)) {
           if (stayedEpisodes.includes(animeInfo.episodeNumber)) {
@@ -904,9 +961,16 @@
               Logger.info(`⏭ Filler detected (Ep ${animeInfo.episodeNumber}), skipping to Ep ${nextCanon}`);
 
               let cancelled = false;
+              let redirectTimer = null;
+              VideoMonitor.addPageCleanup(() => {
+                cancelled = true;
+                clearTimeout(redirectTimer);
+                document.getElementById("at-auto-skip-filler-toast")?.remove();
+              });
               const skipDelayMs = 4500;
               try {
                 const toast = document.createElement("div");
+                toast.id = "at-auto-skip-filler-toast";
                 Object.assign(toast.style, {
                   position: "fixed",
                   top: "22px",
@@ -979,6 +1043,7 @@
                   whiteSpace: "nowrap",
                 });
                 cancelBtn.addEventListener("click", () => {
+                  if (!isCurrentPage()) return;
                   cancelled = true;
                   void rememberStayedFillerEpisode(animeInfo.animeSlug, animeInfo.episodeNumber);
                   try {
@@ -986,6 +1051,7 @@
                   } catch {}
                 });
                 skipBtn.addEventListener("click", () => {
+                  if (!isCurrentPage()) return;
                   cancelled = false;
                   window.location.href = siteWatchUrl(animeInfo.animeSlug, nextCanon);
                 });
@@ -1003,7 +1069,8 @@
                   { once: true },
                 );
               } catch {}
-              setTimeout(() => {
+              redirectTimer = setTimeout(() => {
+                if (!isCurrentPage()) return;
                 if (cancelled) {
                   Logger.info(`Filler skip cancelled for Ep ${animeInfo.episodeNumber}`);
                   return;
@@ -1019,6 +1086,7 @@
     } catch (e) {
       Logger.warn(`Auto-skip filler check failed: ${e?.message}`);
     }
+    if (!isCurrentPage()) return;
 
     highlightWatchedEpisodes(animeInfo.animeSlug);
     highlightFillerEpisodes(animeInfo.animeSlug, animeInfo.animeTitle);
@@ -1026,10 +1094,12 @@
     decorateCurrentEpisode();
 
     let alreadyTracked = await ProgressTracker.isEpisodeTracked(animeInfo.uniqueId);
+    if (!isCurrentPage()) return;
     // A double-episode page counts as tracked only when BOTH episodes are. Checking the first alone
     // marked the page COMPLETED, so the writer never ran and the second episode was never recorded.
     if (alreadyTracked && animeInfo.isDoubleEpisode && animeInfo.secondEpisodeNumber) {
       alreadyTracked = await ProgressTracker.isEpisodeTracked(`${animeInfo.animeSlug}__episode-${animeInfo.secondEpisodeNumber}`);
+      if (!isCurrentPage()) return;
     }
     if (alreadyTracked) {
       trackingState = TrackingState.COMPLETED;
@@ -1037,6 +1107,7 @@
     }
 
     VideoMonitor.startWatching(animeInfo, eventHandlers);
+    AT.SkiptimeHelper?.mount();
 
     try {
       setupServerSwitchObserver();
@@ -1052,48 +1123,22 @@
 
     try {
       const result = await chrome.storage.local.get(["auto4kServerEnabled"]);
-      const enabled = result.auto4kServerEnabled !== false;
+      if (!isCurrentPage()) return;
+      const enabled = globalThis.AnimeTrackerUtils.auto4kEnabled(result.auto4kServerEnabled);
       if (enabled) maybeAutoSelect4kServer();
     } catch (err) {
-      Logger.warn("Auto-4k setting read failed (defaulting ON):", err);
+      Logger.warn("Auto-4k setting read failed:", err);
     }
-
-    const periodicCheck = setInterval(() => {
-      if (trackingState === TrackingState.COMPLETED || !animeInfo) {
-        clearInterval(periodicCheck);
-        return;
-      }
-      const videoElement = VideoMonitor.getVideoElement();
-      if (videoElement && videoElement.duration > 0) {
-        const currentTime = videoElement.currentTime;
-        const duration = videoElement.duration;
-        if (ProgressTracker.shouldMarkComplete(currentTime, duration, cachedOutroStartSec)) {
-          const minWatch = AT.CONFIG.MIN_WATCH_SECONDS_BEFORE_COMPLETE || 120;
-          if (accumulatedPlaybackSeconds >= minWatch) {
-            Logger.info("Periodic check: threshold reached, tracking");
-            clearInterval(periodicCheck);
-            trackImmediately();
-          }
-        }
-      }
-    }, 5000);
-
-    const periodicCheckTimeout = setTimeout(() => clearInterval(periodicCheck), 30 * 60 * 1000);
-    VideoMonitor.addPageCleanup(() => {
-      clearInterval(periodicCheck);
-      clearTimeout(periodicCheckTimeout);
-    });
+    // timeupdate and ended already check completion; no duplicate five-second polling.
   }
 
   if (document.readyState === "loading")
     document.addEventListener("DOMContentLoaded", () => {
-      setTimeout(init, AT.CONFIG.DELAYS.INIT);
+      navigationDebounceTimeout = setTimeout(init, AT.CONFIG.DELAYS.INIT);
     });
-  else setTimeout(init, AT.CONFIG.DELAYS.INIT);
+  else navigationDebounceTimeout = setTimeout(init, AT.CONFIG.DELAYS.INIT);
 
   let lastUrl = location.href;
-  let navigationDebounceTimeout = null;
-  let historyPatched = false;
 
   const _SERVER_SWITCH_REBIND_DELAY_MS = 700;
 
@@ -1137,6 +1182,7 @@
 
   function setupServerSwitchObserver() {
     const { Logger, ProgressTracker, VideoMonitor } = AT;
+    let rebindTimer = null;
 
     const handleServerClick = (e) => {
       const span = e.target?.closest?.(".player-selection [data-embed-id]");
@@ -1157,7 +1203,8 @@
       VideoMonitor.armSilentResume(animeInfo.uniqueId, switchTime);
       Logger.info("Server switch detected — re-binding video monitor");
 
-      setTimeout(() => {
+      clearTimeout(rebindTimer);
+      rebindTimer = setTimeout(() => {
         try {
           VideoMonitor.rebindAfterServerSwitch();
         } catch (err) {
@@ -1168,6 +1215,7 @@
 
     document.addEventListener("click", handleServerClick, { capture: true, passive: true });
     VideoMonitor.addPageCleanup(() => {
+      clearTimeout(rebindTimer);
       document.removeEventListener("click", handleServerClick, { capture: true });
     });
   }
@@ -1298,29 +1346,7 @@
   const setupNavigationObserver = () => {
     const { Logger, ProgressTracker, VideoMonitor } = AT;
 
-    // Patched once for the document lifetime — intentionally NOT tied to VideoMonitor.cleanup() (runs each init), or SPA re-init would die after the first episode.
-    if (!historyPatched && !window.__atHistoryPatched) {
-      historyPatched = true;
-      window.__atHistoryPatched = true;
-      const dispatchUrlChange = () => {
-        try {
-          window.dispatchEvent(new Event("at:locationchange"));
-        } catch {}
-      };
-      const origPush = history.pushState;
-      const origReplace = history.replaceState;
-      history.pushState = function (...args) {
-        const ret = origPush.apply(this, args);
-        dispatchUrlChange();
-        return ret;
-      };
-      history.replaceState = function (...args) {
-        const ret = origReplace.apply(this, args);
-        dispatchUrlChange();
-        return ret;
-      };
-      window.addEventListener("popstate", dispatchUrlChange);
-    }
+    // navigation-bridge.js supplies document-lifetime history/popstate events from the page world.
 
     const _pathOf = (href) => {
       try {
@@ -1341,23 +1367,14 @@
       if (_isWatchPath(previousUrl)) {
         trackImmediately();
       }
-
+      teardownWatchPage();
       if (!_isWatchPath(location.href)) return;
-
-      if (navigationDebounceTimeout) clearTimeout(navigationDebounceTimeout);
       navigationDebounceTimeout = setTimeout(() => {
         if (_pathOf(location.href) === currPath) {
           Logger.info("URL changed, reinit...");
-          trackingState = TrackingState.IDLE;
-          earlyTrackDone = false;
-          durationRefreshAttempted = false;
-          durationRefreshAttempts = 0;
-          resetPlaybackAccumulator("spa navigation");
-          resetEpisodeList();
-          ProgressTracker.reset();
-          setTimeout(init, AT.CONFIG.DELAYS.INIT);
+          void init();
         }
-      }, 200);
+      }, 200 + AT.CONFIG.DELAYS.INIT);
     };
     window.addEventListener("at:locationchange", handleUrlChange);
 
@@ -1423,6 +1440,8 @@
   };
 
   setupNavigationObserver();
+  window.addEventListener("pagehide", () => { handleBeforeUnload(); teardownWatchPage(); });
+  window.addEventListener("pageshow", (event) => { if (event.persisted) void init(); });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || message.type !== "GET_CURRENT_WATCH_INFO") return false;

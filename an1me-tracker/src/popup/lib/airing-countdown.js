@@ -18,6 +18,7 @@
   const SELECTOR = "[data-next-airing-at]";
 
   let _timer = null;
+  let _enabled = false;
 
   // { text, overdue }. An empty text means "no schedule known"; a schedule that has merely passed
   // still formats to something visible, so a delayed episode reads as delayed rather than as
@@ -64,7 +65,8 @@
   }
 
   function start() {
-    stop();
+    _enabled = true;
+    if (_timer || document.hidden) return;
     // Nothing to tick until a list with countdowns is rendered; the interval is cheap enough that
     // checking on a 30s cadence costs less than wiring render hooks through every view.
     _timer = setInterval(() => {
@@ -74,6 +76,11 @@
   }
 
   function stop() {
+    _enabled = false;
+    pause();
+  }
+
+  function pause() {
     if (_timer) {
       clearInterval(_timer);
       _timer = null;
@@ -85,6 +92,7 @@
   window.addEventListener("pagehide", stop);
   document.addEventListener("visibilitychange", () => {
     // Catch up immediately on re-show rather than waiting out the remainder of the tick.
-    if (!document.hidden) refresh();
+    if (document.hidden) pause();
+    else if (_enabled) { refresh(); start(); }
   });
 })();

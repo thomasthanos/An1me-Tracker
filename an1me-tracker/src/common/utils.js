@@ -117,7 +117,14 @@
 
   // Phones get gentler background work: the OS suspends the worker sooner and the network is slower.
   function isMobileDevice() {
-    return typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+    return typeof navigator !== "undefined" && (
+      /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "") ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+    );
+  }
+
+  function auto4kEnabled(value) {
+    return typeof value === "boolean" ? value : !isMobileDevice();
   }
 
   root.AnimeTrackerUtils = Object.freeze({
@@ -130,5 +137,6 @@
     cacheSignature,
     storage,
     isMobileDevice,
+    auto4kEnabled,
   });
 })(typeof globalThis !== "undefined" ? globalThis : self);

@@ -548,8 +548,8 @@
       btnId: "settingsAuto4kServer",
       subtitleId: "settingsAuto4kServerSubtitle",
       storageKey: AUTO_4K_SERVER_KEY,
-      defaultsTo: true,
-      interpret: (raw) => raw !== false,
+      defaultsTo: AnimeTrackerUtils.auto4kEnabled(undefined),
+      interpret: (raw) => AnimeTrackerUtils.auto4kEnabled(raw),
     },
     autoResume: {
       btnId: "settingsAutoResume",
@@ -693,7 +693,7 @@
 
   function flushDeferredListRefresh() {
     if (!deferredListRefresh) return;
-    if (elements.animeList?.matches(":hover")) return;
+    if (document.hidden || isLibraryHovered()) return;
 
     const pending = deferredListRefresh;
     deferredListRefresh = null;
@@ -720,18 +720,20 @@
     deferredListRefresh = {
       filter,
       updateStats: deferredListRefresh?.updateStats || false || shouldUpdateStats,
-      timerId: setTimeout(function attempt() {
-        if (elements.animeList?.matches(":hover")) {
-          if (deferredListRefresh) deferredListRefresh.timerId = setTimeout(attempt, 800);
-          return;
-        }
+      timerId: document.hidden ? null : setTimeout(function attempt() {
+        // mouseleave/visibilitychange deliver the next attempt; no repeating hover poll.
+        if (deferredListRefresh) deferredListRefresh.timerId = null;
         flushDeferredListRefresh();
       }, delayMs),
     };
 
-    if (!elements.animeList.matches(":hover") && delayMs === 0) {
+    if (!document.hidden && !isLibraryHovered() && delayMs === 0) {
       flushDeferredListRefresh();
     }
+  }
+
+  function isLibraryHovered() {
+    return window.matchMedia?.("(hover: hover) and (pointer: fine)").matches === true && elements.animeList?.matches(":hover");
   }
 
   function normalizeCategory(value) {
@@ -1323,7 +1325,7 @@
 
   function pushLibraryPreferencesToCloud() {
     _libraryPrefsCloudTimer = null;
-    return Promise.resolve(chrome.storage.local.set({ playbackSettingsUpdatedAt: new Date().toISOString() }))
+    return Promise.resolve(AT.Storage.set({ playbackSettingsUpdatedAt: new Date().toISOString() }))
       .then(() => AT.FirebaseSync?.queuePlaybackSettingsSave?.())
       .catch((e) => window.__atSwallow("savePref:cloud", e));
   }
@@ -1581,6 +1583,7 @@
 
   function startPopupCloudRefresh() {
     stopPopupCloudRefresh();
+    if (document.hidden) return;
     popupCloudRefreshTimer = setInterval(() => {
       refreshPopupCloudData(false)
         .catch((e) => PopupLogger.debug("Sync", "Periodic cloud refresh skipped:", e?.message || e));
@@ -2228,6 +2231,33 @@
     // syncState write cancelled the first timer and scheduled one whose local flag was false, so the
     // list never re-rendered after watching an episode.
     let pendingListRender = false;
+    function flushPendingRenders() {
+      storageUpdateTimeout = null;
+      if (document.hidden) return;
+      if (pendingListRender) {
+        pendingListRender = false;
+        scheduleDeferredListRefresh({ delayMs: 0 });
+      }
+      const appRoot = document.querySelector(".app");
+      if (pendingStatsRender) {
+        pendingStatsRender = false;
+        const statsView = document.getElementById("statsView");
+        if (statsView && appRoot?.classList.contains("stats-mode")) {
+          try { AT.StatsView.render(statsView, animeData); } catch {}
+        }
+      }
+      if (pendingGoalsRender) {
+        pendingGoalsRender = false;
+        if (appRoot?.classList.contains("goals-mode")) {
+          try { renderGoalsView(); } catch {}
+        }
+      }
+    }
+    document.addEventListener("visibilitychange", () => {
+      clearTimeout(storageUpdateTimeout);
+      storageUpdateTimeout = null;
+      if (!document.hidden) { flushPendingRenders(); flushDeferredListRefresh(); }
+    });
     chrome.storage.onChanged.addListener((changes, namespace) => {
       if (namespace !== "local") return;
       if (
@@ -2298,7 +2328,7 @@
         renderSkiptimeHelperSetting(changes[SKIPTIME_HELPER_KEY].newValue === true);
       }
       if (changes[AUTO_4K_SERVER_KEY]) {
-        renderAuto4kServerSetting(changes[AUTO_4K_SERVER_KEY].newValue !== false);
+        renderAuto4kServerSetting(AnimeTrackerUtils.auto4kEnabled(changes[AUTO_4K_SERVER_KEY].newValue));
       }
       if (changes[AUTO_RESUME_KEY]) {
         renderAutoResumeSetting(changes[AUTO_RESUME_KEY].newValue === true);
@@ -2310,7 +2340,8 @@
         videoProgress = changes.videoProgress.newValue || {};
         if (!isOwn) isExternalUpdate = true;
 
-        if (typeof _ipPatch === "function") _ipPatch(videoProgress);
+        if (!document.hidden && typeof _ipPatch === "function") _ipPatch(videoProgress);
+        else pendingListRender = true;
 
         if (doesProgressChangeAffectLists(changes.videoProgress.oldValue || {}, changes.videoProgress.newValue || {})) {
           needsFullRender = true;
@@ -2349,33 +2380,9 @@
 
       if (needsFullRender) pendingListRender = true;
       const hasDeferredRender = pendingListRender || pendingStatsRender || pendingGoalsRender;
-      if (hasDeferredRender) {
+      if (hasDeferredRender && !document.hidden) {
         if (storageUpdateTimeout) clearTimeout(storageUpdateTimeout);
-        storageUpdateTimeout = setTimeout(async () => {
-          storageUpdateTimeout = null;
-          if (pendingListRender) {
-            pendingListRender = false;
-            scheduleDeferredListRefresh({ delayMs: 0 });
-          }
-          const appRoot = document.querySelector(".app");
-          if (pendingStatsRender) {
-            pendingStatsRender = false;
-            const statsView = document.getElementById("statsView");
-            if (statsView && appRoot && appRoot.classList.contains("stats-mode")) {
-              try {
-                window.AnimeTracker.StatsView.render(statsView, animeData);
-              } catch {}
-            }
-          }
-          if (pendingGoalsRender) {
-            pendingGoalsRender = false;
-            if (appRoot && appRoot.classList.contains("goals-mode")) {
-              try {
-                renderGoalsView();
-              } catch {}
-            }
-          }
-        }, CONFIG.STORAGE_UPDATE_DEBOUNCE_MS);
+        storageUpdateTimeout = setTimeout(flushPendingRenders, CONFIG.STORAGE_UPDATE_DEBOUNCE_MS);
       }
     });
 

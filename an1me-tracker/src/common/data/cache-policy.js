@@ -108,8 +108,8 @@
     // the backoff window is measured from retryAt, mirroring infoRefreshAt.
     const at = toMs(filler?.retryable ? filler?.retryAt || filler?.cachedAt : filler?.cachedAt) || 0;
     if (!at) return 0;
-    if (filler.notFound) return at + NOT_FOUND_TTL;
     if (filler.retryable) return at + RETRYABLE_TTL;
+    if (filler.notFound) return at + NOT_FOUND_TTL;
     if (info && info.status === "RELEASING") return at + EPISODE_TYPES_TTL;
     return at + FILLER_FINISHED_TTL;
   }
@@ -117,6 +117,8 @@
   function isFillerFresh(filler, info) {
     if (!filler || !filler.cachedAt) return false;
     if (Number(filler.schemaVersion || 0) < EPISODE_TYPES_SCHEMA_VERSION) return false;
+    // Older negative entries could be HTTP/network failures. Keep valid data warm.
+    if (filler.notFound && !filler.retryable && filler.negativeCacheVersion !== 1) return false;
     return Date.now() < fillerRefreshAt(filler, info);
   }
 

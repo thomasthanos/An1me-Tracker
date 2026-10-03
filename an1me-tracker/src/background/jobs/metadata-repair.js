@@ -548,6 +548,7 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
 
     const notFoundEntry = {
       notFound: true,
+      negativeCacheVersion: 1,
       schemaVersion: self.AnimeTrackerCachePolicy.EPISODE_TYPES_SCHEMA_VERSION,
       cachedAt: Date.now(),
     };

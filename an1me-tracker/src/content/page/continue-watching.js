@@ -625,6 +625,7 @@
   const SHARE_SELECTORS = ["#mainShare", ".mainShare", '[data-share="main"]'];
 
   let dismissed = false;
+  let renderGeneration = 0;
   let renderDebounce = null;
 
   let mountedViaShare = false;
@@ -765,8 +766,7 @@
       "</span>";
     close.addEventListener("click", () => {
       dismissed = true;
-      section.remove();
-      stopShareWatcher();
+      unmountShelf();
     });
 
     head.append(heading, spacer, nav, close);
@@ -958,11 +958,23 @@
     unsubscribeShareWatcher = null;
   }
 
+  const canRender = () => !dismissed && document.visibilityState === "visible" && /^\/?$/.test(location.pathname) && isContextValid();
+
+  function unmountShelf() {
+    renderGeneration += 1;
+    clearTimeout(renderDebounce);
+    renderDebounce = null;
+    trackResizeObserver?.disconnect();
+    trackResizeObserver = null;
+    stopShareWatcher();
+    document.getElementById(CONTAINER_ID)?.remove();
+  }
+
   function render(items) {
     const existing = document.getElementById(CONTAINER_ID);
 
-    if (dismissed || !items.length) {
-      if (existing) existing.remove();
+    if (!canRender() || !items.length) {
+      unmountShelf();
       return;
     }
 
@@ -1001,13 +1013,16 @@
   }
 
   function loadAndRender() {
-    if (dismissed || !isContextValid()) return;
+    if (!canRender()) return;
+    const generation = ++renderGeneration;
     chrome.storage.local.get(["videoProgress", "animeData"], (result) => {
+      if (generation !== renderGeneration || !canRender()) return;
       if (chrome.runtime.lastError) return;
       const videoProgress = result.videoProgress || {};
       const animeData = result.animeData || {};
       const infoKeys = collectAnimeInfoKeys(videoProgress, animeData);
       const finish = (infoResult) => {
+        if (generation !== renderGeneration || !canRender()) return;
         try {
           render(buildItems(videoProgress, animeData, pickAnimeInfoBySlug(infoResult)));
         } catch {}
@@ -1029,6 +1044,7 @@
   }
 
   function scheduleRender() {
+    if (!canRender()) return;
     if (renderDebounce) clearTimeout(renderDebounce);
     renderDebounce = setTimeout(() => {
       renderDebounce = null;
@@ -1048,6 +1064,15 @@
       scheduleRender,
     );
   } catch {}
+
+  const syncShelf = () => {
+    unmountShelf();
+    if (canRender()) scheduleRender();
+  };
+  window.addEventListener("at:locationchange", syncShelf);
+  document.addEventListener("visibilitychange", syncShelf);
+  window.addEventListener("pagehide", unmountShelf);
+  window.addEventListener("pageshow", (event) => { if (event.persisted) syncShelf(); });
 
   loadAndRender();
 })();

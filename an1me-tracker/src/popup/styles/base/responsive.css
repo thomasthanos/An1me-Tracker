@@ -32,6 +32,11 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+  .search-input:focus,
+  .search-input:focus-visible,
+  .search-container:focus-within .search-input {
+    animation: none;
+  }
   .header,
   .search-input,
   .footer,

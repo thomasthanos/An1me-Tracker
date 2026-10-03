@@ -576,11 +576,13 @@
   let stopVideoWatch = null;
   let stopControlsWatch = null;
   let stopIdentityWatch = null;
-  let episodeWatchTimer = null;
+  let mountRetryTimer = null;
+  let mountGeneration = 0;
   let lastEpisodeIdentity = null;
   let submitCountdownTimer = null;
 
   const { sleep } = globalThis.AnimeTrackerUtils;
+  const canRun = () => helperEnabled && document.visibilityState === "visible" && /^\/watch\//.test(location.pathname);
 
   function cacheKey() {
     return STORAGE_CACHE_PREFIX + getEpisodeIdentity();
@@ -997,10 +999,11 @@
   }
 
   function ensureControlsObserver() {
-    if (stopControlsWatch || !helperEnabled) return;
+    if (stopControlsWatch || !canRun()) return;
 
     const runCheck = () => {
-      if (!helperEnabled) return;
+      if (!canRun()) return;
+      void handleEpisodeIdentityChange(getEpisodeIdentity()).catch(e => Logger.debug("Skiptime: identity refresh failed", e));
       const host = getControlsHost();
       if (host) ensureControlsHostVisible(host);
 
@@ -1019,19 +1022,6 @@
     stopControlsWatch = () => stops.forEach((stop) => stop());
   }
 
-  function ensureEpisodeWatcher() {
-    if (episodeWatchTimer || !helperEnabled) return;
-    episodeWatchTimer = setInterval(() => {
-      if (!helperEnabled) return;
-      if (typeof document !== "undefined" && document.visibilityState && document.visibilityState !== "visible") return;
-      const nextEpisodeIdentity = getEpisodeIdentity();
-      if (!nextEpisodeIdentity || nextEpisodeIdentity === lastEpisodeIdentity) return;
-      handleEpisodeIdentityChange(nextEpisodeIdentity).catch((e) => {
-        Logger.debug("Skiptime: episode watcher refresh failed", e);
-      });
-    }, 2500);
-  }
-
   function injectStyles(targetDoc = document) {
     if (!targetDoc) return;
     if (targetDoc.getElementById(STYLE_ID)) return;
@@ -1043,7 +1033,9 @@
 
   async function refreshPanelState() {
     if (!panelEl) return;
+    const panel = panelEl;
     const cache = await loadCache();
+    if (panel !== panelEl || !canRun()) return;
     let captured = 0;
     TARGETS.forEach((t) => {
       const row = panelEl.querySelector(`.at-skip-row[data-key="${t.key}"]`);
@@ -1076,7 +1068,8 @@
   async function mountPanel() {
     Logger.debug(`Skiptime: mountPanel() entered (mounted=${mounted}, video=${!!video})`);
 
-    if (mountInProgress) return;
+    if (!canRun() || mountInProgress) return;
+    const generation = mountGeneration;
     if (mounted && panelEl?.isConnected) return;
     if (mounted && !panelEl?.isConnected) {
       mounted = false;
@@ -1192,6 +1185,7 @@
       }
 
       await refreshPanelState();
+      if (generation !== mountGeneration || !canRun()) return;
       setDropdownOpen(false);
       mounted = true;
       Logger.once(`skiptime-mounted:${lastEpisodeIdentity || "unknown"}`, "INFO", "Skiptime helper mounted inside controls", {
@@ -1200,9 +1194,10 @@
       });
 
       ensureControlsObserver();
-      ensureEpisodeWatcher();
-      setTimeout(() => {
-        if (!helperEnabled || mountInProgress) return;
+      clearTimeout(mountRetryTimer);
+      mountRetryTimer = setTimeout(() => {
+        mountRetryTimer = null;
+        if (!canRun() || mountInProgress) return;
         if (panelEl?.isConnected) return;
         Logger.debug("Skiptime: dropdown was removed after mount, retrying");
         mounted = false;
@@ -1213,11 +1208,14 @@
     } catch (err) {
       Logger.error("Skiptime: mountPanel crashed", err);
     } finally {
-      mountInProgress = false;
+      if (generation === mountGeneration) mountInProgress = false;
     }
   }
 
   function unmountPanel() {
+    mountGeneration += 1;
+    clearTimeout(mountRetryTimer);
+    mountRetryTimer = null;
     cancelSubmitCountdown();
     document.removeEventListener("keydown", onKeyDown, true);
     document.removeEventListener("pointerdown", onDocumentPointerDown, true);
@@ -1229,10 +1227,6 @@
     stopVideoWatch = null;
     stopControlsWatch = null;
     stopIdentityWatch = null;
-    if (episodeWatchTimer) {
-      clearInterval(episodeWatchTimer);
-      episodeWatchTimer = null;
-    }
     if (panelEl) {
       try {
         panelEl.remove();
@@ -1240,6 +1234,7 @@
       panelEl = null;
     }
     panelDoc = null;
+    video = null;
     const toast = document.getElementById(TOAST_ID);
     if (toast) {
       try {
@@ -1274,13 +1269,12 @@
   }
 
   function scheduleMount() {
-    if (!helperEnabled) return;
+    if (!canRun()) return;
 
     Logger.debug("Skiptime: scheduleMount -> controls dropdown");
     lastEpisodeIdentity = getEpisodeIdentity();
     video = getVideoElement();
     ensureControlsObserver();
-    ensureEpisodeWatcher();
     mountPanel();
     watchVideo();
   }
@@ -1324,6 +1318,14 @@
     unmount: unmountPanel,
     isMounted: () => mounted,
   };
+  const syncPageState = () => {
+    unmountPanel();
+    if (canRun()) scheduleMount();
+  };
+  window.addEventListener("at:locationchange", syncPageState);
+  document.addEventListener("visibilitychange", syncPageState);
+  window.addEventListener("pagehide", unmountPanel);
+  window.addEventListener("pageshow", (event) => { if (event.persisted) syncPageState(); });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init, { once: true });

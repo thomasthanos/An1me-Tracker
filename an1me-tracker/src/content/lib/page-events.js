@@ -13,6 +13,18 @@
     } catch {}
   };
 
+  // MAIN-world navigation-bridge.js supplies history/popstate events on every site page.
+  // Existing DOM deliveries provide a fallback without extra observation or polling.
+  let lastPath = window.location?.pathname;
+  function notifyLocationChange() {
+    const path = window.location?.pathname;
+    if (typeof path !== "string" || path === lastPath) return;
+    lastPath = path;
+    try { window.dispatchEvent(new Event("at:locationchange")); }
+    catch (error) { report("locationchange", error); }
+  }
+  window.addEventListener?.("at:locationchange", () => { lastPath = window.location?.pathname; });
+
   // ---- storage ----
 
   const storageSubscribers = new Set();
@@ -81,6 +93,8 @@
   }
 
   function deliver(records) {
+    // Page-world history calls may not reach isolated-world wrappers, but their DOM updates do.
+    notifyLocationChange();
     for (const subscriber of [...domSubscribers]) {
       if (subscriber.scheduled || !domSubscribers.has(subscriber)) continue;
       if (!records.some((record) => recordMatches(subscriber, record))) continue;

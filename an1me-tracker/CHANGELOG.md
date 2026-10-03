@@ -7,6 +7,33 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.1] — 2026-10-03
+
+### Changed
+
+- Library cards in collapsed or inactive status lists are built when opened. A 1,000-entry
+  regression fixture now builds 200 visible cards on opening instead of all 1,000.
+- Hidden library updates wait until the popup is visible. Mouse hover refreshes use mouseleave
+  instead of repeating polling; touch screens no longer get stuck in a hover refresh loop.
+- The skip helper uses navigation and DOM events instead of a permanent 2.5-second poll, and
+  releases its observers while hidden or outside a watch page. Duplicate completion polling was removed.
+- Progress intervals run only while the video plays in a visible page. Resume retries are cancelled
+  on cleanup, and late storage responses cannot restart monitoring for the previous episode.
+- Automatic 4K selection defaults off on phones and iPads, including iPad desktop user agents.
+  Explicit saved preferences remain authoritative. Search-field glow stops animating on touch screens.
+
+### Fixed
+
+- Watch-page navigation cleans up the player immediately, resets notification/backlog state, and
+  cancels delayed filler redirects and server rebinds. Back/forward cache restoration restarts monitoring.
+- Closing the tab saves completed episodes in one background transaction, clears anime deletion
+  tombstones and both resume points on double episodes. Duplicate content saves also perform cleanup.
+- Jikan HTTP, network and malformed-response failures use retryable backoff instead of long-lived
+  negative caches. Legacy negative entries are rechecked without invalidating valid metadata.
+- Continue Watching disconnects its resize/share observers when dismissed, empty, hidden or left
+  through navigation. Late storage callbacks cannot remount an old shelf.
+- Library preference timestamps now use the coordinated storage writer.
+
 ## [7.5.0] — 2026-10-03
 
 A cleanup release from a full codebase audit: duplicated helpers merged, dead code removed, the

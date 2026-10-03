@@ -3112,9 +3112,10 @@ async function persistBeforeUnloadTrack(animeInfo, duration) {
     throw new Error("Invalid animeInfo for TRACK_BEFORE_UNLOAD");
   }
 
-  return runBgLibraryTransaction(["animeData", "videoProgress"], async (result) => {
+  return runBgLibraryTransaction(["animeData", "videoProgress", "deletedAnime"], async (result) => {
   const animeData = result.animeData || {};
   const videoProgress = result.videoProgress || {};
+  const deletedAnime = result.deletedAnime || {};
 
   const slug = animeInfo.animeSlug;
   const mediaType = globalThis.AnimeTrackerMediaType?.normalize(animeInfo.mediaType) || null;
@@ -3266,14 +3267,23 @@ async function persistBeforeUnloadTrack(animeInfo, duration) {
   }
 
   let progressChanged = false;
-  if (animeInfo.uniqueId && videoProgress[animeInfo.uniqueId]) {
-    delete videoProgress[animeInfo.uniqueId];
-    progressChanged = true;
+  const progressIds = [animeInfo.uniqueId || `${slug}__episode-${animeInfo.episodeNumber}`];
+  if (animeInfo.isDoubleEpisode && animeInfo.secondEpisodeNumber) {
+    progressIds.push(`${slug}__episode-${animeInfo.secondEpisodeNumber}`);
   }
+  for (const id of progressIds) {
+    if (videoProgress[id]) {
+      delete videoProgress[id];
+      progressChanged = true;
+    }
+  }
+  const tombstoneChanged = Object.prototype.hasOwnProperty.call(deletedAnime, slug);
+  if (tombstoneChanged) delete deletedAnime[slug];
 
-  if (!changed && !progressChanged) return null;
+  if (!changed && !progressChanged && !tombstoneChanged) return null;
   const payload = { animeData };
   if (progressChanged) payload.videoProgress = videoProgress;
+  if (tombstoneChanged) payload.deletedAnime = deletedAnime;
   return { data: payload };
   });
 }

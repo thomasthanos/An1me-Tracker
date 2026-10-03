@@ -690,6 +690,7 @@ const ProgressTracker = {
 
       let writeResult = null;
       let progressTouched = false;
+      let cleanupChanged = false;
       let animeDataAfter = null;
       let videoProgressAfter = null;
       const data = await Storage.mutate(["animeData", "deletedAnime", "videoProgress"], (data) => {
@@ -700,8 +701,8 @@ const ProgressTracker = {
         writeResult = EpisodeWriter.writeEpisode(info, validDuration, animeData, {
           logPrefix: "saveWatchedEpisode",
         });
-        if (!writeResult.changed) return false;
-
+        progressTouched = false;
+        cleanupChanged = Object.prototype.hasOwnProperty.call(deletedAnime, info.animeSlug);
         delete deletedAnime[info.animeSlug];
 
         const tossIds = [info.uniqueId];
@@ -717,20 +718,21 @@ const ProgressTracker = {
         }
         animeDataAfter = animeData;
         videoProgressAfter = videoProgress;
+        if (!writeResult.changed && !cleanupChanged && !progressTouched) return false;
       });
       if (Storage.isAbortResult(data)) {
         Logger.error("Skip saveWatchedEpisode: storage read unavailable (would clobber animeData)");
         throw new Error("Storage read unavailable");
-      }
-      if (!writeResult || !writeResult.changed) {
-        Logger.debug("Episode already tracked:", info.uniqueId);
-        return false;
       }
       this._adCache = animeDataAfter;
       this._adCacheTime = Date.now();
       if (progressTouched) {
         this._vpCache = videoProgressAfter;
         this._vpCacheTime = Date.now();
+      }
+      if (!writeResult || !writeResult.changed) {
+        Logger.debug("Episode already tracked:", info.uniqueId);
+        return false;
       }
       const animeData = animeDataAfter;
 

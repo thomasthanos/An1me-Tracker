@@ -9,6 +9,10 @@
   const { editAnimeTitle } = AT.AddAnimeDialog;
 
   let elements, _ipPatch, getActiveFilter, markInternalSave, normalizeCompactStatus, suppressHoverUntilMouseMove, updateStats;
+  let lastCategory = null;
+  let lastCompactStatus = null;
+  let lastCompactOpen = false;
+  const compactExpansionStates = new Map();
 
   const COMPACT_TOGGLE_CHEVRONS = [
     ["airingListToggle", "airing-chevron"],
@@ -254,7 +258,17 @@
   function renderAnimeList(filter = "") {
     const { AnimeCardRenderer, ProgressManager, SeasonGrouping } = AT;
 
+    if (lastCompactStatus && lastCompactOpen) {
+      const section = elements.animeList.querySelector(`[data-compact-section="${lastCompactStatus}"]`);
+      if (section) compactExpansionStates.set(lastCompactStatus, captureExpansionState(section));
+    }
     const expansionState = captureExpansionState(elements.animeList);
+    const activeElement = document.activeElement;
+    const compactControl = activeElement && elements.animeList.contains(activeElement)
+      ? activeElement.closest?.("[data-compact-status], #airingListToggle, #onHoldListToggle, #completedListToggle, #droppedListToggle") : null;
+    const focusSelector = compactControl?.dataset?.compactStatus
+      ? `[data-compact-status="${normalizeCompactStatus(compactControl.dataset.compactStatus)}"]`
+      : compactControl?.id ? `#${compactControl.id}` : null;
 
     const categoryFilter = (slug, anime) => {
       if (AT.PopupState.currentCategory === "all") return true;
@@ -290,6 +304,7 @@
       .sort((a, b) => new Date(b.lastProgress || 0) - new Date(a.lastProgress || 0));
 
     if (entries.length === 0 && inProgressAnime.length === 0) {
+      lastCompactOpen = false;
       if (AT.PopupState.lastRenderedListMarkup !== "") {
         elements.animeList.replaceChildren();
         AT.PopupState.lastRenderedListMarkup = "";
@@ -341,20 +356,28 @@
       onHold: onHoldEntries,
     } = partitionGroupsByStatus(groupedEntries);
 
+    const availableStatuses = [
+      ["airing", airingEntries], ["on_hold", onHoldEntries],
+      ["completed", completedEntries], ["dropped", droppedEntries],
+    ].filter(([, groups]) => groups.length > 0);
+    AT.PopupState.currentCompactStatus = normalizeCompactStatus(AT.PopupState.currentCompactStatus);
+    if (!availableStatuses.some(([key]) => key === AT.PopupState.currentCompactStatus)) {
+      AT.PopupState.currentCompactStatus = availableStatuses[0]?.[0] || "airing";
+    }
+    const moviesOnlyCompleted = AT.PopupState.currentCategory === "movies" && completedEntries.length > 0 &&
+      !normalEntries.length && !inProgressAnime.length && !airingEntries.length && !onHoldEntries.length;
+    if (moviesOnlyCompleted && lastCategory !== "movies") AT.PopupState.currentCompactStatusOpen = true;
+    lastCategory = AT.PopupState.currentCategory;
+    // Hidden/collapsed lists can contain thousands of episode nodes. Build their cards on demand.
+    const compactCards = (key, groups) =>
+      key === AT.PopupState.currentCompactStatus && AT.PopupState.currentCompactStatusOpen
+        ? renderGroupsHtml(groups, orderMap, visibleProgress) : "";
     const trackedHtml = renderGroupsHtml(normalEntries, orderMap, visibleProgress);
-    const completedCardsHtml = renderGroupsHtml(completedEntries, orderMap, visibleProgress);
-    const droppedCardsHtml = renderGroupsHtml(droppedEntries, orderMap, visibleProgress);
-    const airingCardsHtml = renderGroupsHtml(airingEntries, orderMap, visibleProgress);
-    const onHoldCardsHtml = renderGroupsHtml(onHoldEntries, orderMap, visibleProgress);
+    const completedCardsHtml = compactCards("completed", completedEntries);
+    const droppedCardsHtml = compactCards("dropped", droppedEntries);
+    const airingCardsHtml = compactCards("airing", airingEntries);
+    const onHoldCardsHtml = compactCards("on_hold", onHoldEntries);
     const inProgressHtml = AnimeCardRenderer.createInProgressGroup(inProgressAnime);
-
-    const moviesOnlyCompleted =
-      AT.PopupState.currentCategory === "movies" &&
-      completedEntries.length > 0 &&
-      normalEntries.length === 0 &&
-      inProgressAnime.length === 0 &&
-      airingEntries.length === 0 &&
-      onHoldEntries.length === 0;
 
     const completedGroupHtml =
       completedEntries.length > 0
@@ -364,7 +387,7 @@
             label: "COMPLETED LIST",
             subLabel: `${countGroupEntries(completedEntries)} anime`,
             cardsHtml: completedCardsHtml,
-            isOpen: AT.PopupState.currentCompactStatusOpen || moviesOnlyCompleted,
+            isOpen: AT.PopupState.currentCompactStatusOpen,
           })
         : "";
     const droppedGroupHtml =
@@ -469,6 +492,7 @@
             `
         : "";
     const compactSectionsHtml = compactStatusItems
+      .filter((item) => item.key === AT.PopupState.currentCompactStatus)
       .map(
         (item) => `
                 <div data-compact-section="${item.key}"${item.key === AT.PopupState.currentCompactStatus ? "" : " hidden"}>
@@ -499,7 +523,16 @@
     elements.animeList.replaceChildren(fragment);
     AT.PopupState.lastRenderedListMarkup = combinedHtml;
 
+    const savedCompact = compactExpansionStates.get(AT.PopupState.currentCompactStatus);
+    if (savedCompact) {
+      for (const key of ["expandedCards", "expandedSeasonGroups", "expandedSeasonItems", "expandedMovieGroups"]) {
+        for (const slug of savedCompact[key]) expansionState[key].add(slug);
+      }
+    }
     restoreExpansionState(elements.animeList, expansionState);
+    lastCompactStatus = AT.PopupState.currentCompactStatus;
+    lastCompactOpen = AT.PopupState.currentCompactStatusOpen;
+    if (focusSelector) elements.animeList.querySelector(focusSelector)?.focus({ preventScroll: true });
 
     if (scrollHost && savedScroll > 0 && scrollHost.scrollTop !== savedScroll) {
       scrollHost.scrollTop = savedScroll;
@@ -555,6 +588,7 @@
           }
           AT.PopupState.currentCompactStatusOpen = opening;
           AT.saveLibraryPreferences?.();
+          renderAnimeList(getActiveFilter());
         }
         refreshCompactChevrons();
         return;
@@ -567,20 +601,7 @@
         const nextStatus = normalizeCompactStatus(chip.dataset.compactStatus || "");
         if (nextStatus !== AT.PopupState.currentCompactStatus) {
           AT.PopupState.currentCompactStatus = nextStatus;
-          list.querySelectorAll("[data-compact-status]").forEach((btn) => {
-            const isActive = normalizeCompactStatus(btn.dataset.compactStatus || "") === nextStatus;
-            btn.classList.toggle("active", isActive);
-            btn.setAttribute("aria-pressed", isActive ? "true" : "false");
-          });
-          list.querySelectorAll("[data-compact-section]").forEach((section) => {
-            const isActive = normalizeCompactStatus(section.dataset.compactSection || "") === nextStatus;
-            section.toggleAttribute("hidden", !isActive);
-            if (isActive) {
-              const cards = section.querySelector(".airing-list-cards, .onhold-list-cards, .completed-list-cards, .dropped-list-cards");
-              if (cards) cards.classList.toggle("open", AT.PopupState.currentCompactStatusOpen);
-            }
-          });
-          refreshCompactChevrons();
+          renderAnimeList(getActiveFilter());
           AT.saveLibraryPreferences?.({ rememberCompactStatus: true });
         }
         return;

@@ -7,6 +7,7 @@ const ANISKIP_MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const SLUG_TO_MAL_KEY_PREFIX = "malIdForSlug:";
 const SLUG_TO_MAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const SLUG_TO_MAL_HTTP_MISS_TTL_MS = 60 * 60 * 1000;
+const SLUG_TO_MAL_RETRY_TTL_MS = 5 * 60 * 1000;
 
 const ANISKIP_BUNDLE_KEY = "aniSkipOutroBundle";
 const SLUG_TO_MAL_BUNDLE_KEY = "malIdForSlugBundle";
@@ -67,9 +68,9 @@ async function getMalIdForSlug(slug, title) {
   const cached = bundle[slug];
   // Hits written before `matched` existed came from a blind first-search-result pick, which can be a
   // different show entirely. Re-resolve those rather than trusting them for 30 days; misses are kept.
-  if (cached && (cached.matched === true || !cached.malId)) {
+  if (cached && (cached.matched === true || (!cached.malId && cached.negativeCacheVersion === 1))) {
     const age = Date.now() - (Number(cached.cachedAt) || 0);
-    const ttl = cached.httpMiss ? SLUG_TO_MAL_HTTP_MISS_TTL_MS : SLUG_TO_MAL_TTL_MS;
+    const ttl = cached.retryable ? SLUG_TO_MAL_RETRY_TTL_MS : cached.httpMiss ? SLUG_TO_MAL_HTTP_MISS_TTL_MS : SLUG_TO_MAL_TTL_MS;
     if (age < ttl) return cached.malId || null;
   }
   if (!title) return null;
@@ -83,14 +84,10 @@ async function getMalIdForSlug(slug, title) {
       clearTimeout(timer);
     }
     if (!res.ok) {
-      // 429 means "ask again later", not "this show has no MAL entry". Caching it as a miss
-      // locked the show out of skip times for the whole httpMiss TTL.
-      if (res.status === 429) return null;
-      bundle[slug] = { malId: null, cachedAt: Date.now(), httpMiss: true };
-      scheduleSlugMalBundleFlush();
-      return null;
+      throw new Error(`jikan_search_http_${res.status}`);
     }
     const data = await res.json();
+    if (!Array.isArray(data?.data)) throw new Error("jikan_search_invalid_data");
     // Scored against every title Jikan returns, with the same matcher the filler lookup uses. Taking
     // data[0] from a limit=1 search accepted Jikan's top hit as truth - and this id also feeds the
     // Jikan filler fallback, so a wrong pick broke Skip Outro and filler marks together.
@@ -106,11 +103,11 @@ async function getMalIdForSlug(slug, title) {
     const malId = match ? Number(match.id) || null : null;
     bundle[slug] = malId
       ? { malId, cachedAt: Date.now(), matched: true }
-      : { malId: null, cachedAt: Date.now(), httpMiss: true };
+      : { malId: null, cachedAt: Date.now(), httpMiss: true, negativeCacheVersion: 1 };
     scheduleSlugMalBundleFlush();
     return malId;
   } catch {
-    bundle[slug] = { malId: null, cachedAt: Date.now(), httpMiss: true };
+    bundle[slug] = { malId: null, cachedAt: Date.now(), retryable: true, negativeCacheVersion: 1 };
     scheduleSlugMalBundleFlush();
     return null;
   }

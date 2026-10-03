@@ -189,7 +189,7 @@
         smartNotif: stored[SMART_NOTIF_STORAGE_KEY] === true,
         autoSkipFiller: stored[AUTO_SKIP_FILLER_STORAGE_KEY] === true,
         skiptimeHelper: stored[SKIPTIME_HELPER_KEY] === true,
-        auto4kServer: stored[AUTO_4K_SERVER_KEY] !== false,
+        auto4kServer: AnimeTrackerUtils.auto4kEnabled(stored[AUTO_4K_SERVER_KEY]),
         adGuard: stored[AD_GUARD_KEY] !== false,
         autoResume: stored[AUTO_RESUME_KEY] === true,
       };

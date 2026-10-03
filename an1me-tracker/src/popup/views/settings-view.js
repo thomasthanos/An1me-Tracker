@@ -311,7 +311,7 @@
       smartNotif: settings.smartNotif === true,
       autoSkipFiller: settings.autoSkipFiller === true,
       skiptimeHelper: settings.skiptimeHelper === true,
-      auto4kServer: settings.auto4kServer !== false,
+      auto4kServer: AnimeTrackerUtils.auto4kEnabled(settings.auto4kServer),
       adGuard: settings.adGuard !== false,
       autoResume: settings.autoResume === true,
     };

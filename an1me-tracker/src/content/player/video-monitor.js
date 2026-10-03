@@ -6,6 +6,7 @@ const VideoMonitor = {
   cleanupFunctions: [],
   silentResumeFor: null,
   silentResumeTime: 0,
+  bindingGeneration: 0,
 
   armSilentResume(uniqueId, resumeTime = 0) {
     this.silentResumeFor = uniqueId || null;
@@ -50,6 +51,7 @@ const VideoMonitor = {
 
   cleanup() {
     const { Logger } = window.AnimeTrackerContent;
+    this.bindingGeneration += 1;
 
     this.cleanupFunctions.forEach((fn) => {
       try {
@@ -83,9 +85,22 @@ const VideoMonitor = {
     }
 
     this.videoElement = video;
+    const generation = this.bindingGeneration;
+    const isCurrent = () => this.bindingGeneration === generation && this.videoElement === video;
+    const pendingTimers = new Set();
+    const schedule = (fn, delay) => {
+      if (!isCurrent()) return;
+      const timer = setTimeout(() => {
+        pendingTimers.delete(timer);
+        if (isCurrent()) fn();
+      }, delay);
+      pendingTimers.add(timer);
+      return timer;
+    };
+    this.addCleanup(() => { pendingTimers.forEach(clearTimeout); pendingTimers.clear(); });
 
     if (eventHandlers.handleVideoMetadata) {
-      Promise.resolve().then(() => eventHandlers.handleVideoMetadata());
+      Promise.resolve().then(() => { if (isCurrent()) eventHandlers.handleVideoMetadata(); });
     }
 
     document.addEventListener("visibilitychange", eventHandlers.handleVisibilityChange, { passive: true });
@@ -109,7 +124,7 @@ const VideoMonitor = {
           let attempt = 0;
           const MAX = 30;
           const seek = () => {
-            if (!this.videoElement || this.videoElement !== video) return;
+            if (!isCurrent()) return;
             if (video.readyState >= 2 && video.duration > 0) {
               const target = Math.min(resumeAt, Math.max(0, video.duration - 1));
               if (Math.abs((video.currentTime || 0) - target) < 5) {
@@ -124,12 +139,12 @@ const VideoMonitor = {
                 Logger.warn("Silent resume seek failed:", err);
               }
             } else if (attempt++ < MAX) {
-              setTimeout(seek, 500);
+              schedule(seek, 500);
             } else {
               Logger.debug("Silent resume gave up (video never became ready)");
             }
           };
-          setTimeout(seek, 300);
+          schedule(seek, 300);
         }
       } else {
         window.__atResumeShownFor = window.__atResumeShownFor || new Set();
@@ -141,13 +156,14 @@ const VideoMonitor = {
           const pref = await chrome.storage.local.get(["autoResumeEnabled"]);
           autoResumeEnabled = pref.autoResumeEnabled === true;
         } catch {}
+        if (!isCurrent()) return;
         const autoResume = (savedProgress) => {
-          if (resumePromptShown) return;
+          if (!isCurrent() || resumePromptShown) return;
           resumePromptShown = true;
           window.__atResumeShownFor.add(promptKey);
           let tries = 0;
           const seek = () => {
-            if (!this.videoElement || this.videoElement !== video) return;
+            if (!isCurrent()) return;
             if (video.readyState >= 2 && video.duration > 0) {
               const target = Math.min(savedProgress.currentTime, Math.max(0, video.duration - 1));
               try {
@@ -158,14 +174,14 @@ const VideoMonitor = {
                 Logger.warn("Auto-resume seek failed:", err);
               }
             } else if (tries++ < 20) {
-              setTimeout(seek, 500);
+              schedule(seek, 500);
             }
           };
-          setTimeout(seek, 500);
+          schedule(seek, 500);
         };
 
         const showPromptOnce = (savedProgress) => {
-          if (resumePromptShown) return;
+          if (!isCurrent() || resumePromptShown) return;
           if (window.__atResumeShownFor.has(promptKey)) {
             resumePromptShown = true;
             return;
@@ -188,11 +204,12 @@ const VideoMonitor = {
           let retryCount = 0;
           const MAX_RETRIES = 20;
           const checkReady = () => {
-            if (!this.videoElement || this.videoElement !== video) return;
+            if (!isCurrent()) return;
             if (video.readyState >= 2 && video.duration > 0) {
               Notifications.showResumePrompt(
                 savedProgress,
                 () => {
+                  if (!isCurrent()) return;
                   // Same clamp as the silent and auto resume paths: a saved position at or past the
                   // end (stale entry, or a server swap to a shorter encode) would otherwise seek to
                   // the end and instantly re-complete the episode.
@@ -202,6 +219,7 @@ const VideoMonitor = {
                   Logger.success(`Resumed @ ${Math.round(target)}s`);
                 },
                 () => {
+                  if (!isCurrent()) return;
                   window.AnimeTrackerContent.ProgressTracker?.allowRewind?.(savedProgress.uniqueId);
                   video.currentTime = 0;
                   video.play().catch(() => {});
@@ -210,16 +228,17 @@ const VideoMonitor = {
             } else {
               retryCount++;
               if (retryCount < MAX_RETRIES) {
-                setTimeout(checkReady, 500);
+                schedule(checkReady, 500);
               } else {
                 Logger.debug(`Video not ready after ${MAX_RETRIES} retries`);
               }
             }
           };
-          setTimeout(checkReady, 1000);
+          schedule(checkReady, 1000);
         };
 
         const initialProgress = await ProgressTracker.getSavedProgress(animeInfo.uniqueId);
+        if (!isCurrent()) return;
         if (initialProgress && initialProgress.currentTime > CONFIG.MIN_PROGRESS_TO_SAVE) {
           showPromptOnce(initialProgress);
         } else {
@@ -244,7 +263,7 @@ const VideoMonitor = {
             stopListening();
             showPromptOnce(entry);
           });
-          const resumeWaitTimer = setTimeout(stopListening, RESUME_LISTEN_WINDOW_MS);
+          const resumeWaitTimer = schedule(stopListening, RESUME_LISTEN_WINDOW_MS);
           this.addCleanup(stopListening);
         }
       }
@@ -252,8 +271,8 @@ const VideoMonitor = {
 
     let _lastSavedTime = -1;
     const tickSave = () => {
-      const v = this.videoElement;
-      if (!v || !animeInfo || v.paused) return;
+      const v = video;
+      if (!isCurrent() || !animeInfo || v.paused || document.visibilityState !== "visible") return;
       const currentTime = v.currentTime;
       const duration = v.duration;
       if (!(currentTime > 0) || !(duration > 0)) return;
@@ -264,7 +283,7 @@ const VideoMonitor = {
     };
 
     const startSaveInterval = () => {
-      if (this.progressSaveInterval) return;
+      if (!isCurrent() || video.paused || document.visibilityState !== "visible" || this.progressSaveInterval) return;
       this.progressSaveInterval = setInterval(tickSave, CONFIG.PROGRESS_SAVE_INTERVAL);
     };
     const stopSaveInterval = () => {
@@ -282,10 +301,16 @@ const VideoMonitor = {
       else stopSaveInterval();
     };
     document.addEventListener("visibilitychange", visibilityHandler);
+    video.addEventListener("play", startSaveInterval);
+    video.addEventListener("pause", stopSaveInterval);
+    video.addEventListener("ended", stopSaveInterval);
 
     this.addCleanup(() => {
       stopSaveInterval();
       document.removeEventListener("visibilitychange", visibilityHandler);
+      video.removeEventListener("play", startSaveInterval);
+      video.removeEventListener("pause", stopSaveInterval);
+      video.removeEventListener("ended", stopSaveInterval);
     });
 
     Logger.debug("Video monitoring active");

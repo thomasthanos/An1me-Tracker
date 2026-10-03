@@ -420,8 +420,14 @@ async function fetchJikanEpisodes(title, options = {}) {
       } finally {
         clearTimeout(searchTimer);
       }
-      if (!searchRes.ok) return null;
+      if (searchRes.status === 404) return null;
+      if (!searchRes.ok) {
+        const error = new Error(`jikan_search_http_${searchRes.status}`);
+        error.rateLimited = searchRes.status === 429;
+        throw error;
+      }
       const searchData = await searchRes.json();
+      if (!Array.isArray(searchData?.data)) throw new Error("jikan_search_invalid_data");
 
       // This used to demand exact normalized title equality, so a single differing word meant no
       // filler data at all. Scored against the same matcher the index uses instead.
@@ -460,15 +466,18 @@ async function fetchJikanEpisodes(title, options = {}) {
         err.rateLimited = true;
         throw err;
       }
-      if (!epRes.ok) return null;
+      if (epRes.status === 404 && page === 1) return null;
+      if (!epRes.ok) throw new Error(`jikan_episodes_http_${epRes.status}`);
       const epData = await epRes.json();
-      if (epData?.data) allEpisodes.push(...epData.data);
+      if (!Array.isArray(epData?.data)) throw new Error("jikan_episodes_invalid_data");
+      allEpisodes.push(...epData.data);
       hasNext = epData?.pagination?.has_next_page === true;
       page++;
       if (hasNext) await AnimeTrackerUtils.sleep(400);
     }
 
-    if (allEpisodes.length === 0 || hasNext) return null;
+    if (hasNext) throw new Error("jikan_episodes_incomplete");
+    if (allEpisodes.length === 0) return null;
 
     const episodeTypes = { canon: [], filler: [], mixed: [], anime_canon: [], totalEpisodes: allEpisodes.length };
     for (const ep of allEpisodes) {
@@ -485,8 +494,8 @@ async function fetchJikanEpisodes(title, options = {}) {
 
     return episodeTypes;
   } catch (error) {
-    if (error?.rateLimited) throw error;
-    return null;
+    // Let metadata-repair preserve prior data and apply its short retryable backoff.
+    throw error;
   }
 }
 
