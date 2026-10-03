@@ -409,17 +409,28 @@ function rebaseEpisodeTypes(episodeTypes, offset, seasonLength) {
 
 async function fetchJikanEpisodes(title, options = {}) {
   try {
+    if (globalThis.__jikanCircuitBroken && Date.now() < (globalThis.__jikanCircuitBrokenUntil || 0)) {
+      return null;
+    }
+
     let malId = Number(options.malId) || 0;
 
     if (!malId) {
       const searchCtrl = new AbortController();
-      const searchTimer = setTimeout(() => searchCtrl.abort(), 6000);
+      const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
+      const searchTimer = setTimeout(() => searchCtrl.abort(), isMobile ? 2500 : 3500);
       let searchRes;
       try {
         searchRes = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=5`, { signal: searchCtrl.signal });
       } catch (fetchErr) {
         const isAbort = fetchErr?.name === "AbortError";
-        const err = new Error(isAbort ? "jikan_search_timeout" : (fetchErr?.message || "jikan_fetch_failed"));
+        if (isAbort) {
+          globalThis.__jikanCircuitBroken = true;
+          globalThis.__jikanCircuitBrokenUntil = Date.now() + (60 * 60 * 1000);
+          (typeof dlog === "function" ? dlog : () => {})("[AnimeTracker] Jikan search timed out — opening circuit breaker");
+          return null;
+        }
+        const err = new Error(fetchErr?.message || "jikan_fetch_failed");
         err.rateLimited = true;
         throw err;
       } finally {
@@ -458,10 +469,18 @@ async function fetchJikanEpisodes(title, options = {}) {
 
     while (hasNext && page <= 10) {
       const epCtrl = new AbortController();
-      const epTimer = setTimeout(() => epCtrl.abort(), 10000);
+      const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
+      const epTimer = setTimeout(() => epCtrl.abort(), isMobile ? 3500 : 5000);
       let epRes;
       try {
         epRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, { signal: epCtrl.signal });
+      } catch (epErr) {
+        if (epErr?.name === "AbortError") {
+          globalThis.__jikanCircuitBroken = true;
+          globalThis.__jikanCircuitBrokenUntil = Date.now() + (60 * 60 * 1000);
+          return null;
+        }
+        throw epErr;
       } finally {
         clearTimeout(epTimer);
       }

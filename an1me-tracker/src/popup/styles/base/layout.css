@@ -3,12 +3,23 @@
 .app {
   display: flex;
   flex-direction: column;
+  width: var(--w);
   height: var(--h);
+  min-width: var(--w);
+  min-height: var(--h);
   background: var(--bg-0);
   background-image: radial-gradient(ellipse at 50% 0%, rgba(var(--primary-rgb), 0.04) 0%, transparent 60%);
 }
 
-.main-app{ display: flex; flex-direction: column; height: var(--h); width: var(--w); overflow: hidden; }
+.main-app {
+  display: flex;
+  flex-direction: column;
+  width: var(--w);
+  height: var(--h);
+  min-width: var(--w);
+  min-height: var(--h);
+  overflow: hidden;
+}
 
 .header {
   background: var(--bg-1);

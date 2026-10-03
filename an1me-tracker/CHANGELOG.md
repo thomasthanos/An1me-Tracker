@@ -7,6 +7,21 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.6] — 2026-10-03
+
+### Fixed
+
+- Resolved desktop Chrome/PC popup window collapse: enforce fixed dimensions on desktop
+  while properly scoping mobile sheet fluid stretching to touch/mobile devices only.
+- Fixed mobile & desktop metadata fetch timeouts: added automatic circuit breaker and
+  fast timeout handling for the discontinued Jikan public API (`api.jikan.moe`), eliminating
+  connection hangs and false "filler timed out" failure badges on seasonal anime.
+- Shows without dedicated AnimeFillerList entries now resolve cleanly and immediately as
+  "No Filler" (canon) without hanging or triggering retry failures.
+- Upgraded AniSkip MAL ID resolution to use AniList GraphQL API, restoring instant skip-outro
+  detection without relying on defunct external scraper endpoints.
+- Added automatic background migration to heal and clear previous stalled Jikan backoff entries.
+
 ## [7.5.5] — 2026-10-03
 
 ### Fixed

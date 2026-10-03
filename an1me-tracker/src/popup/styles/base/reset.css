@@ -1,12 +1,19 @@
 /* Reset and document defaults. */
 
+html,
+body {
+  width: var(--w);
+  height: var(--h);
+  min-width: var(--w);
+  min-height: var(--h);
+}
+
 body {
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.5;
   color: var(--t1);
   background: var(--bg-0);
-  width: var(--w);
   max-height: var(--h);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;

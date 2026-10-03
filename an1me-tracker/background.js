@@ -3708,6 +3708,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return handler ? handler(message, sender, sendResponse) === true : false;
 });
 
+async function sanitizeDiscontinuedJikanCaches() {
+  try {
+    const all = await bgStorageGet(null);
+    const updates = {};
+    for (const [key, val] of Object.entries(all || {})) {
+      if (key.startsWith("episodeTypes_") && val?.retryable === true) {
+        const err = String(val.retryError || val.error || "");
+        if (/jikan|504|timeout/i.test(err)) {
+          updates[key] = {
+            notFound: true,
+            negativeCacheVersion: 1,
+            schemaVersion: self.AnimeTrackerCachePolicy?.EPISODE_TYPES_SCHEMA_VERSION || 3,
+            cachedAt: Date.now(),
+          };
+        }
+      }
+    }
+    if (all?.metadataRepairState?.status === "running" || all?.metadataRepairState?.failed > 0) {
+      const logs = all.metadataRepairState.logs || [];
+      const hasJikanFailures = logs.some((l) => /jikan|timeout/i.test(String(l?.detail || "")));
+      if (hasJikanFailures || all.metadataRepairState.status === "running") {
+        updates.metadataRepairState = null;
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      await bgStorageSet(updates);
+    }
+  } catch (e) {
+    console.warn("[BG] Failed to sanitize discontinued Jikan caches:", e);
+  }
+}
+
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
     // Re-registering/restoring an extension can leave existing storage in place.
@@ -3730,6 +3762,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     ].join(";");
     dlog(`%c🎬 Anime Tracker v${chrome.runtime.getManifest().version}`, style);
     migrateFromSyncToLocal();
+    sanitizeDiscontinuedJikanCaches().catch(() => {});
 
     if (details.previousVersion === chrome.runtime.getManifest().version) return;
 
@@ -3784,6 +3817,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(() => {
   dlog("[Anime Tracker] Extension started");
   migrateFromSyncToLocal();
+  sanitizeDiscontinuedJikanCaches().catch(() => {});
   reconcileSmartNotificationAlarm().catch((error) => {
     console.warn("[BG] Smart notification startup reconciliation failed:", error?.message || error);
   });

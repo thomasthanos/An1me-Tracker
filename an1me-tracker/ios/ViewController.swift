@@ -82,7 +82,7 @@ private func openSafariSettings() {
 // MARK: - Native SwiftUI Interface
 struct An1meTrackerAppView: View {
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "7.5.5"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "7.5.6"
     }
 
     @State private var selectedGuideTab: Int = 0 // 0: In Safari (iOS 17+), 1: Settings App

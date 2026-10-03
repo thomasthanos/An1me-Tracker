@@ -76,28 +76,46 @@ async function getMalIdForSlug(slug, title) {
   if (!title) return null;
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
+    const timer = setTimeout(() => ctrl.abort(), isMobile ? 4000 : 6000);
     let res;
     try {
-      res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=5`, { signal: ctrl.signal });
+      res = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+          query: "query ($q: String) { Page(page: 1, perPage: 5) { media(search: $q, type: ANIME) { id idMal title { romaji english native } synonyms } } }",
+          variables: { q: title },
+        }),
+        signal: ctrl.signal,
+      });
     } finally {
       clearTimeout(timer);
     }
     if (!res.ok) {
-      throw new Error(`jikan_search_http_${res.status}`);
+      throw new Error(`mal_search_http_${res.status}`);
     }
     const data = await res.json();
-    if (!Array.isArray(data?.data)) throw new Error("jikan_search_invalid_data");
-    // Scored against every title Jikan returns, with the same matcher the filler lookup uses. Taking
-    // data[0] from a limit=1 search accepted Jikan's top hit as truth - and this id also feeds the
-    // Jikan filler fallback, so a wrong pick broke Skip Outro and filler marks together.
     const candidates = [];
-    for (const item of data?.data || []) {
-      if (!item?.mal_id) continue;
-      const titles = [item.title, item.title_english, item.title_japanese, ...(item.titles || []).map((t) => t?.title)];
-      for (const candidateTitle of titles) {
-        if (candidateTitle) candidates.push({ id: item.mal_id, title: candidateTitle });
+    const anilistMedia = data?.data?.Page?.media || data?.Page?.media;
+    if (Array.isArray(anilistMedia)) {
+      for (const item of anilistMedia) {
+        if (!item?.idMal) continue;
+        const titles = [item.title?.romaji, item.title?.english, item.title?.native, ...(item.synonyms || [])];
+        for (const candidateTitle of titles) {
+          if (candidateTitle) candidates.push({ id: item.idMal, title: candidateTitle });
+        }
       }
+    } else if (Array.isArray(data?.data)) {
+      for (const item of data.data) {
+        if (!item?.mal_id) continue;
+        const titles = [item.title, item.title_english, item.title_japanese, ...(item.titles || []).map((t) => t?.title)];
+        for (const candidateTitle of titles) {
+          if (candidateTitle) candidates.push({ id: item.mal_id, title: candidateTitle });
+        }
+      }
+    } else {
+      throw new Error("mal_search_invalid_data");
     }
     const match = self.AnimeTrackerTitleMatch?.bestMatch([title], candidates, 0.82) || null;
     const malId = match ? Number(match.id) || null : null;

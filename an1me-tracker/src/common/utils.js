@@ -127,6 +127,10 @@
     return typeof value === "boolean" ? value : !isMobileDevice();
   }
 
+  if (typeof document !== "undefined" && document.documentElement?.classList?.add) {
+    document.documentElement.classList.add(isMobileDevice() ? "is-mobile" : "is-desktop");
+  }
+
   root.AnimeTrackerUtils = Object.freeze({
     sleep,
     toMillis,

@@ -40,8 +40,9 @@ test("source describes the built app and its release download", () => {
 
   const versionReleaseNotes =
     "v9.3.1 (Build 77):\n" +
-    "• Automatic queue continuity when Safari background workers sleep during fetch & import.\n" +
-    "• Immediate manual metadata retry, warm cache retention and resilient failure reconciliation.\n" +
+    "• Fixed desktop PC extension popup sizing while preserving responsive mobile sheets.\n" +
+    "• Resolved filler fetch timeouts with automatic circuit breaker for discontinued Jikan API.\n" +
+    "• Upgraded AniSkip outro detection to use AniList GraphQL resolver.\n" +
     "• Dark liquid glass design & complete dark adaptive app icons for iOS 27 and SideStore.";
 
   assert.deepEqual(source.apps[0], {
