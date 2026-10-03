@@ -1,0 +1,112 @@
+# Builds An1me.to Tracker as an iOS app with its Safari extension, unsigned, for SideStore to sign with
+# the user's own Apple ID, and attaches the .ipa to a GitHub release per extension version.
+name: Tracker iOS app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "an1me-tracker/**"
+      - ".github/workflows/tracker-ipa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tracker-ipa
+  cancel-in-progress: true
+
+env:
+  APP_NAME: An1me Tracker
+  BUNDLE_ID: io.github.thomasthanos.an1metracker
+  IOS_DEPLOYMENT_TARGET: "18.0"
+
+jobs:
+  ipa:
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: an1me-tracker
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Test
+        run: for t in test/*.test.js; do node "$t" > /dev/null || { node "$t"; exit 1; }; done
+
+      - name: Package the extension for Safari
+        id: meta
+        run: |
+          node scripts/package.js --target safari
+          echo "version=$(node -p 'require("./manifest.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Generate the Xcode project
+        id: project
+        run: |
+          xcrun safari-web-extension-packager dist/an1me-tracker-safari \
+            --project-location build \
+            --app-name "$APP_NAME" \
+            --bundle-identifier "$BUNDLE_ID" \
+            --swift --ios-only --copy-resources --no-open --no-prompt --force
+          project="$(find build -maxdepth 3 -name '*.xcodeproj' -print -quit)"
+          test -n "$project"
+          echo "path=$project" >> "$GITHUB_OUTPUT"
+          xcodebuild -list -project "$project"
+
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "${{ steps.project.outputs.path }}" \
+            -scheme "$APP_NAME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/DerivedData \
+            IPHONEOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+            MARKETING_VERSION="${{ steps.meta.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tail -n 40
+
+      # An .ipa is the .app inside a Payload folder, zipped. SideStore signs the app and its extension.
+      - name: Package the .ipa
+        id: ipa
+        run: |
+          app="$(find build/DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)"
+          appex="$(find "$app/PlugIns" -maxdepth 1 -name '*.appex' -print -quit)"
+          test -n "$app" && test -n "$appex"
+          manifest="$(find "$appex" -name manifest.json -print -quit)"
+          node -e '
+            const m = require(process.argv[1]);
+            for (const p of ["identity", "notifications", "sidePanel"]) if (m.permissions.includes(p)) throw new Error("Safari manifest still requests " + p);
+            console.log("Extension", m.name, m.version, "permissions:", m.permissions.join(", "));
+          ' "$PWD/$manifest"
+          ipa="An1meTracker-${{ steps.meta.outputs.version }}.ipa"
+          mkdir -p build/ipa/Payload
+          cp -R "$app" build/ipa/Payload/
+          (cd build/ipa && zip -qry "../$ipa" Payload)
+          echo "file=build/$ipa" >> "$GITHUB_OUTPUT"
+          echo "name=$ipa" >> "$GITHUB_OUTPUT"
+          unzip -l "build/$ipa" | grep -E '\.appex/(Info\.plist|.*manifest\.json)$'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ipa.outputs.name }}
+          path: an1me-tracker/${{ steps.ipa.outputs.file }}
+          if-no-files-found: error
+
+      - name: Attach to the release for this version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          tag="tracker-v$VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" "${{ steps.ipa.outputs.file }}" --clobber
+          else
+            gh release create "$tag" "${{ steps.ipa.outputs.file }}" \
+              --target "$GITHUB_SHA" \
+              --title "An1me.to Tracker $VERSION — iPhone (SideStore)" \
+              --notes "Unsigned iOS app with the Safari extension. Install it with SideStore, which signs it with your Apple ID — see [IOS.md](https://github.com/${{ github.repository }}/blob/main/an1me-tracker/IOS.md). Changes: [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/an1me-tracker/CHANGELOG.md)."
+          fi

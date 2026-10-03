@@ -88,6 +88,8 @@ each other. If you don't sign in, it still works — everything just stays local
 
 Optional, but recommended: click the extension → **Sign in** to turn on cloud sync.
 
+**iPhone (Safari):** install the `.ipa` from the [releases](https://github.com/thomasthanos/an1me-extensions/releases) with SideStore — see [IOS.md](IOS.md).
+
 <img src=".github/assets/divider.svg" width="100%" alt="">
 
 ## <img src=".github/assets/icon-key.svg" width="22" align="middle"> Permissions explained
