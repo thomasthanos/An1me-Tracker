@@ -25,8 +25,8 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
     "• Real-time Cloud Sync: Seamlessly syncs your library between iPhone and PC.\n" +
     "• AniList & MyAnimeList Integration: Automatically updates your anime lists upon completion.\n" +
     "• Smart Filler Detection: Highlights and skips filler episodes smoothly.\n" +
-    "• Modern iOS Experience: Native dark design, fluid Safari popup sheets, and iOS 18 adaptive icons.\n\n" +
-    "Requires iOS 18.0 or later.";
+    "• Modern iOS Experience: Native dark design, fluid Safari popup sheets, and iOS 27 Liquid Glass aesthetic.\n\n" +
+    "Optimized for iOS 27 & modern iPhones.";
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +

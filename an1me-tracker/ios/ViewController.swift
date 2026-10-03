@@ -85,25 +85,34 @@ struct An1meTrackerAppView: View {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "7.5.3"
     }
 
+    @State private var selectedGuideTab: Int = 0 // 0: In Safari (iOS 17+), 1: Settings App
+    @State private var step1Done: Bool = false
+    @State private var step2Done: Bool = false
+    @State private var step3Done: Bool = false
+
+    private var completedCount: Int {
+        (step1Done ? 1 : 0) + (step2Done ? 1 : 0) + (step3Done ? 1 : 0)
+    }
+
     var body: some View {
         ZStack {
-            // Background
-            Color(red: 9/255, green: 10/255, blue: 16/255)
+            // Dark liquid canvas background
+            Color(red: 6/255, green: 9/255, blue: 18/255)
                 .ignoresSafeArea()
 
-            // Ambient background glows
+            // Dynamic ambient light blooms
             GeometryReader { proxy in
                 Circle()
-                    .fill(Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.12))
-                    .frame(width: 280, height: 280)
-                    .blur(radius: 60)
-                    .offset(x: -60, y: -60)
+                    .fill(Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.15))
+                    .frame(width: 320, height: 320)
+                    .blur(radius: 80)
+                    .offset(x: -80, y: -60)
 
                 Circle()
-                    .fill(Color(red: 138/255, green: 43/255, blue: 226/255).opacity(0.12))
-                    .frame(width: 280, height: 280)
-                    .blur(radius: 70)
-                    .offset(x: proxy.size.width - 180, y: proxy.size.height / 3)
+                    .fill(Color(red: 164/255, green: 119/255, blue: 255/255).opacity(0.12))
+                    .frame(width: 340, height: 340)
+                    .blur(radius: 90)
+                    .offset(x: proxy.size.width - 200, y: proxy.size.height / 3)
             }
             .ignoresSafeArea()
 
@@ -113,11 +122,11 @@ struct An1meTrackerAppView: View {
                     // Header / Hero Section
                     headerSection
 
-                    // Quick Action: Primary Setup Button
-                    setupActionCard
+                    // Quick Glass Action Buttons
+                    quickActionsGrid
 
-                    // 3-Step Setup Instructions Card
-                    instructionsCard
+                    // Interactive Step Guide (In-Safari vs iOS 18 Settings)
+                    interactiveGuideCard
 
                     // Features Grid
                     featuresCard
@@ -128,8 +137,8 @@ struct An1meTrackerAppView: View {
                     // Footer
                     footerSection
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
+                .padding(.horizontal, 18)
+                .padding(.top, 14)
                 .padding(.bottom, 36)
             }
         }
@@ -148,24 +157,28 @@ struct An1meTrackerAppView: View {
                             .stroke(
                                 LinearGradient(
                                     colors: [
-                                        Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.7),
-                                        Color(red: 138/255, green: 43/255, blue: 226/255).opacity(0.3)
+                                        Color.white.opacity(0.4),
+                                        Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.6),
+                                        Color.white.opacity(0.1)
                                     ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
-                                lineWidth: 1.5
+                                lineWidth: 1.2
                             )
                     )
-                    .shadow(color: Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.35), radius: 20, x: 0, y: 8)
+                    .shadow(color: Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.28), radius: 24, x: 0, y: 8)
 
                 Text("v\(appVersion)")
                     .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color(red: 0/255, green: 229/255, blue: 255/255))
-                    .clipShape(Capsule())
+                    .foregroundColor(Color.black)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
+                    .background(
+                        Capsule()
+                            .fill(Color(red: 84/255, green: 210/255, blue: 255/255))
+                            .shadow(color: Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.4), radius: 6, x: 0, y: 2)
+                    )
                     .offset(x: 4, y: 4)
             }
 
@@ -173,24 +186,24 @@ struct An1meTrackerAppView: View {
                 .font(.system(size: 26, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 Circle()
-                    .fill(Color(red: 52/255, green: 199/255, blue: 89/255))
+                    .fill(Color(red: 52/255, green: 211/255, blue: 153/255))
                     .frame(width: 7, height: 7)
-                Text("SAFARI WEB EXTENSION")
+                    .shadow(color: Color(red: 52/255, green: 211/255, blue: 153/255).opacity(0.7), radius: 4)
+                Text("SAFARI EXTENSION ACTIVE")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(red: 0/255, green: 229/255, blue: 255/255))
+                    .foregroundColor(Color(red: 84/255, green: 210/255, blue: 255/255))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.1))
-            .clipShape(Capsule())
-            .overlay(
+            .background(
                 Capsule()
-                    .stroke(Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.25), lineWidth: 1)
+                    .fill(Color.white.opacity(0.06))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
             )
 
-            Text("Auto-tracking, cloud sync & episode progress for an1me.to")
+            Text("Αυτόματη καταγραφή προόδου, συγχρονισμός cloud & παράκαμψη filler στο an1me.to")
                 .font(.system(size: 13, weight: .regular))
                 .foregroundColor(Color.white.opacity(0.65))
                 .multilineTextAlignment(.center)
@@ -209,181 +222,365 @@ struct An1meTrackerAppView: View {
                     Color.black
                     Image(systemName: "tv.fill")
                         .font(.system(size: 40))
-                        .foregroundColor(Color(red: 0/255, green: 229/255, blue: 255/255))
+                        .foregroundColor(Color(red: 84/255, green: 210/255, blue: 255/255))
                 }
             }
         }
     }
 
-    // MARK: - Setup Action Card
-    private var setupActionCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("QUICK SETUP")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(Color.white.opacity(0.6))
-                    .tracking(1)
-
-                Spacer()
-
-                Text("STEP 1 OF 3")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(Color(red: 0/255, green: 229/255, blue: 255/255))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.12))
-                    .clipShape(Capsule())
+    // MARK: - Quick Glass Actions (Launch an1me.to & Settings)
+    private var quickActionsGrid: some View {
+        HStack(spacing: 12) {
+            Button(action: {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                if let url = URL(string: "https://an1me.to") {
+                    UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                }
+            }) {
+                HStack(spacing: 10) {
+                    Image(systemName: "safari.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color(red: 84/255, green: 210/255, blue: 255/255))
+                    Text("Άνοιγμα an1me.to")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.18),
+                                    Color(red: 164/255, green: 119/255, blue: 255/255).opacity(0.12)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.28), Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.3)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                        )
+                        .shadow(color: Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.2), radius: 10, x: 0, y: 4)
+                )
             }
 
             Button(action: {
                 openSafariSettings()
             }) {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     Image(systemName: "gearshape.fill")
-                        .font(.system(size: 17, weight: .bold))
-                    Text("Open Safari Settings")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                    Spacer()
-                    Image(systemName: "arrow.up.forward.app.fill")
-                        .font(.system(size: 14))
-                        .opacity(0.8)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Color(red: 190/255, green: 155/255, blue: 255/255))
+                    Text("Ρυθμίσεις Safari")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
                 }
-                .foregroundColor(.black)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 15)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
                 .background(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0/255, green: 229/255, blue: 255/255),
-                            Color(red: 20/255, green: 170/255, blue: 255/255)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                .shadow(color: Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.35), radius: 10, x: 0, y: 4)
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(red: 15/255, green: 20/255, blue: 32/255).opacity(0.75))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.25), lineWidth: 1)
-                )
-        )
     }
 
-    // MARK: - Step Instructions
-    private var instructionsCard: some View {
+    // MARK: - Interactive Activation Guide Card
+    private var interactiveGuideCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("HOW TO ENABLE")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundColor(Color.white.opacity(0.6))
-                .tracking(1)
+            // Header with progress pill
+            HStack {
+                Text("ΟΔΗΓΟΣ ΕΝΕΡΓΟΠΟΙΗΣΗΣ")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundColor(Color.white.opacity(0.55))
+                    .tracking(1)
 
-            stepRow(
-                number: "1",
-                title: "Open Safari Settings",
-                detail: "Open iOS Settings → Safari → Extensions"
+                Spacer()
+
+                HStack(spacing: 4) {
+                    if completedCount == 3 {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(red: 52/255, green: 211/255, blue: 153/255))
+                    }
+                    Text("\(completedCount)/3 Ολοκληρώθηκαν")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(completedCount == 3 ? Color(red: 52/255, green: 211/255, blue: 153/255) : Color(red: 84/255, green: 210/255, blue: 255/255))
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3.5)
+                .background(
+                    Capsule()
+                        .fill(completedCount == 3 ? Color(red: 52/255, green: 211/255, blue: 153/255).opacity(0.15) : Color.white.opacity(0.06))
+                        .overlay(Capsule().stroke(completedCount == 3 ? Color(red: 52/255, green: 211/255, blue: 153/255).opacity(0.3) : Color.white.opacity(0.1), lineWidth: 1))
+                )
+            }
+
+            // Segmented Mode Switcher (In-Safari vs iOS 27 Settings)
+            HStack(spacing: 4) {
+                guideTabButton(title: "⚡ Μέσα στο Safari", badge: "iOS 27", index: 0)
+                guideTabButton(title: "⚙️ Ρυθμίσεις iOS 27", badge: nil, index: 1)
+            }
+            .padding(3)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(Color.black.opacity(0.35))
+                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 1))
             )
 
-            stepRow(
-                number: "2",
-                title: "Enable An1me Tracker",
-                detail: "Find An1me Tracker in the list and toggle ON"
-            )
+            // Step Rows
+            if selectedGuideTab == 0 {
+                // Method 1: Inside Safari (Modern & Fast)
+                VStack(spacing: 8) {
+                    interactiveStepRow(
+                        index: 0,
+                        number: "1",
+                        isDone: step1Done,
+                        title: "Άνοιξε το an1me.to στο Safari",
+                        detail: "Πάτα στο κουμπί της επέκτασης (εικονίδιο παζλ 🧩 ή aA) στη γραμμή διευθύνσεων του Safari."
+                    ) {
+                        step1Done.toggle()
+                    }
 
-            stepRow(
-                number: "3",
-                title: "Allow Site Permissions",
-                detail: "Tap Permissions → set to 'Always Allow' for an1me.to"
-            )
+                    interactiveStepRow(
+                        index: 1,
+                        number: "2",
+                        isDone: step2Done,
+                        title: "Διαχείριση Επεκτάσεων",
+                        detail: "Επίλεξε «Διαχείριση επεκτάσεων» (Manage Extensions) και ενεργοποίησε το An1me Tracker σε ON."
+                    ) {
+                        step2Done.toggle()
+                    }
+
+                    interactiveStepRow(
+                        index: 2,
+                        number: "3",
+                        isDone: step3Done,
+                        title: "Δικαιώματα: «Πάντα να επιτρέπεται»",
+                        detail: "Πάτα ξανά στο μπλε εικονίδιο 🧩 στο an1me.to και πάτα «Να επιτρέπεται πάντα σε αυτόν τον ιστότοπο»."
+                    ) {
+                        step3Done.toggle()
+                    }
+                }
+            } else {
+                // Method 2: System Settings App (iOS 27)
+                VStack(spacing: 8) {
+                    interactiveStepRow(
+                        index: 0,
+                        number: "1",
+                        isDone: step1Done,
+                        title: "Ρυθμίσεις iOS 27 → Εφαρμογές (Apps)",
+                        detail: "Στο iOS 27, οι ρυθμίσεις του Safari βρίσκονται στην ενότητα «Εφαρμογές» (Apps) → Safari."
+                    ) {
+                        step1Done.toggle()
+                    }
+
+                    interactiveStepRow(
+                        index: 1,
+                        number: "2",
+                        isDone: step2Done,
+                        title: "Επεκτάσεις → An1me Tracker",
+                        detail: "Πάτα «Επεκτάσεις» (Extensions), βρες το An1me Tracker και γύρισε το διακόπτη σε ON."
+                    ) {
+                        step2Done.toggle()
+                    }
+
+                    interactiveStepRow(
+                        index: 2,
+                        number: "3",
+                        isDone: step3Done,
+                        title: "Δικαιώματα Ιστοσελίδας",
+                        detail: "Στα δικαιώματα για το an1me.to, επίλεξε «Να επιτρέπεται» (Always Allow)."
+                    ) {
+                        step3Done.toggle()
+                    }
+                }
+            }
         }
         .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(white: 1.0, opacity: 0.04))
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(red: 14/255, green: 19/255, blue: 32/255).opacity(0.68))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color(white: 1.0, opacity: 0.08), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.18), Color.white.opacity(0.04)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
                 )
+                .shadow(color: Color.black.opacity(0.35), radius: 18, x: 0, y: 10)
         )
     }
 
-    private func stepRow(number: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(number)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundColor(Color(red: 0/255, green: 229/255, blue: 255/255))
-                .frame(width: 24, height: 24)
-                .background(Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.15))
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color(red: 0/255, green: 229/255, blue: 255/255).opacity(0.3), lineWidth: 1))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-                Text(detail)
-                    .font(.system(size: 11, weight: .regular))
-                    .foregroundColor(Color.white.opacity(0.55))
-                    .fixedSize(horizontal: false, vertical: true)
+    private func guideTabButton(title: String, badge: String?, index: Int) -> some View {
+        Button(action: {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.easeInOut(duration: 0.18)) {
+                selectedGuideTab = index
             }
+        }) {
+            HStack(spacing: 5) {
+                Text(title)
+                    .font(.system(size: 11.5, weight: selectedGuideTab == index ? .bold : .medium))
+                    .foregroundColor(selectedGuideTab == index ? .white : Color.white.opacity(0.5))
+
+                if let badge = badge {
+                    Text(badge)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color(red: 84/255, green: 210/255, blue: 255/255))
+                        .padding(.horizontal, 4.5)
+                        .padding(.vertical, 1)
+                        .background(Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.18))
+                        .clipShape(Capsule())
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(selectedGuideTab == index ? Color.white.opacity(0.12) : Color.clear)
+            )
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(white: 1.0, opacity: 0.02))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func interactiveStepRow(index: Int, number: String, isDone: Bool, title: String, detail: String, toggle: @escaping () -> Void) -> some View {
+        Button(action: {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                toggle()
+            }
+        }) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    if isDone {
+                        Circle()
+                            .fill(Color(red: 52/255, green: 211/255, blue: 153/255))
+                            .frame(width: 24, height: 24)
+                            .shadow(color: Color(red: 52/255, green: 211/255, blue: 153/255).opacity(0.5), radius: 5)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.black)
+                    } else {
+                        Circle()
+                            .fill(Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.12))
+                            .frame(width: 24, height: 24)
+                            .overlay(Circle().stroke(Color(red: 84/255, green: 210/255, blue: 255/255).opacity(0.35), lineWidth: 1))
+                        Text(number)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundColor(Color(red: 84/255, green: 210/255, blue: 255/255))
+                    }
+                }
+                .padding(.top, 1)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(isDone ? Color.white.opacity(0.7) : .white)
+                        .strikethrough(isDone, color: Color.white.opacity(0.4))
+
+                    Text(detail)
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(Color.white.opacity(0.52))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15))
+                    .foregroundColor(isDone ? Color(red: 52/255, green: 211/255, blue: 153/255) : Color.white.opacity(0.2))
+                    .padding(.top, 2)
+            }
+            .padding(11)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isDone ? Color(red: 52/255, green: 211/255, blue: 153/255).opacity(0.04) : Color.white.opacity(0.03))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(isDone ? Color(red: 52/255, green: 211/255, blue: 153/255).opacity(0.2) : Color.white.opacity(0.06), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 
     // MARK: - Features Showcase
     private var featuresCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("EXTENSION FEATURES")
+            Text("ΧΑΡΑΚΤΗΡΙΣΤΙΚΑ EXTENSION")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundColor(Color.white.opacity(0.6))
+                .foregroundColor(Color.white.opacity(0.55))
                 .tracking(1)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 featureItem(
                     icon: "play.circle.fill",
-                    color: Color(red: 0/255, green: 229/255, blue: 255/255),
-                    title: "Auto Tracking",
-                    subtitle: "Auto-detects episode progress"
+                    color: Color(red: 84/255, green: 210/255, blue: 255/255),
+                    title: "Auto Progress",
+                    subtitle: "Καταγραφή ακριβούς δευτερολέπτου & προόδου"
                 )
 
                 featureItem(
                     icon: "icloud.fill",
-                    color: Color(red: 175/255, green: 82/255, blue: 222/255),
+                    color: Color(red: 164/255, green: 119/255, blue: 255/255),
                     title: "Cloud Sync",
-                    subtitle: "Sync with PC & other devices"
+                    subtitle: "Συγχρονισμός πραγματικού χρόνου με PC"
                 )
 
                 featureItem(
                     icon: "checkmark.seal.fill",
-                    color: Color(red: 52/255, green: 199/255, blue: 89/255),
+                    color: Color(red: 52/255, green: 211/255, blue: 153/255),
                     title: "AniList & MAL",
-                    subtitle: "Auto-update list scores"
+                    subtitle: "Αυτόματη βαθμολογία & λίστες επεισοδίων"
                 )
 
                 featureItem(
                     icon: "bolt.fill",
-                    color: Color(red: 255/255, green: 149/255, blue: 0/255),
-                    title: "Speed Controller",
-                    subtitle: "Playback controls & skip"
+                    color: Color(red: 245/255, green: 205/255, blue: 87/255),
+                    title: "Smart Filler Skip",
+                    subtitle: "Εντοπισμός & παράκαμψη filler επεισοδίων"
                 )
             }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(red: 14/255, green: 19/255, blue: 32/255).opacity(0.68))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
     }
 
     private func featureItem(icon: String, color: Color, title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundColor(color)
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(color.opacity(0.12))
+                    .frame(width: 28, height: 28)
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundColor(color)
+            }
 
             Text(title)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -394,13 +591,13 @@ struct An1meTrackerAppView: View {
                 .foregroundColor(Color.white.opacity(0.5))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
+        .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(white: 1.0, opacity: 0.04))
+        .background(Color.white.opacity(0.03))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color(white: 1.0, opacity: 0.06), lineWidth: 1)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
     }
 
@@ -408,10 +605,10 @@ struct An1meTrackerAppView: View {
     private var quickLinksCard: some View {
         VStack(spacing: 8) {
             linkButton(
-                title: "Launch an1me.to in Safari",
-                subtitle: "Open the website directly",
-                icon: "safari.fill",
-                accentColor: Color(red: 0/255, green: 229/255, blue: 255/255)
+                title: "Μετάβαση στο an1me.to",
+                subtitle: "Άνοιγμα ιστοσελίδας στο Safari",
+                icon: "globe",
+                accentColor: Color(red: 84/255, green: 210/255, blue: 255/255)
             ) {
                 if let url = URL(string: "https://an1me.to") {
                     UIApplication.shared.open(url, options: [:], completionHandler: nil)
@@ -420,7 +617,7 @@ struct An1meTrackerAppView: View {
 
             linkButton(
                 title: "GitHub Repository",
-                subtitle: "View source code & releases",
+                subtitle: "Πηγαίος κώδικας, εκδόσεις & updates",
                 icon: "chevron.left.forwardslash.chevron.right",
                 accentColor: Color.white.opacity(0.8)
             ) {
@@ -440,18 +637,18 @@ struct An1meTrackerAppView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(accentColor.opacity(0.12))
-                        .frame(width: 34, height: 34)
+                        .frame(width: 32, height: 32)
                     Image(systemName: icon)
-                        .font(.system(size: 15))
+                        .font(.system(size: 14))
                         .foregroundColor(accentColor)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12.5, weight: .semibold))
                         .foregroundColor(.white)
                     Text(subtitle)
-                        .font(.system(size: 11))
+                        .font(.system(size: 10.5))
                         .foregroundColor(Color.white.opacity(0.5))
                 }
 
@@ -462,11 +659,11 @@ struct An1meTrackerAppView: View {
                     .foregroundColor(Color.white.opacity(0.3))
             }
             .padding(12)
-            .background(Color(white: 1.0, opacity: 0.04))
+            .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color(white: 1.0, opacity: 0.06), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.07), lineWidth: 1)
             )
         }
     }
@@ -478,10 +675,10 @@ struct An1meTrackerAppView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(Color.white.opacity(0.4))
 
-            Text("Built for SideStore & AltStore on iOS 15+")
+            Text("Built for SideStore & AltStore • iOS 27 Glass Edition")
                 .font(.system(size: 10))
                 .foregroundColor(Color.white.opacity(0.25))
         }
-        .padding(.top, 8)
+        .padding(.top, 6)
     }
 }
