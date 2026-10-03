@@ -54,6 +54,9 @@
   let _lastReqAt = 0;
   let _rateLimitedUntil = 0;
   let _paceTail = Promise.resolve();
+  function requireDesktop() {
+    if (globalThis.AnimeTrackerUtils.isMobileDevice()) throw new Error("anilist_disabled_mobile");
+  }
   function paced() {
     const run = _paceTail.then(async () => {
       const now = Date.now();
@@ -66,11 +69,13 @@
   }
 
   async function gql(query, variables, token) {
+    requireDesktop();
     const headers = { "Content-Type": "application/json", Accept: "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
 
     for (let attempt = 0; attempt < 2; attempt++) {
       await paced();
+      requireDesktop();
       let res;
       try {
         const controller = new AbortController();
@@ -528,6 +533,7 @@
   }
 
   async function runPush({ token, maxWork = 1e9, onProgress } = {}) {
+    requireDesktop();
     if (!token) throw new Error("not_connected");
 
     const store = await sget(["animeData", MEDIA_MAP_KEY]);
@@ -730,6 +736,7 @@
   // mediaIds -> Map<mediaId, {mediaStatus, episodes, airingAt, episode}>. Throws only on a hard
   // failure; a page that errors is skipped so one bad batch cannot lose the rest.
   async function fetchAiringSchedule(mediaIds) {
+    if (globalThis.AnimeTrackerUtils.isMobileDevice()) return new Map();
     const ids = [...new Set((mediaIds || []).map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0))];
     const out = new Map();
     if (ids.length === 0) return out;

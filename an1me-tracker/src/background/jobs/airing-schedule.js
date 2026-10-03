@@ -51,6 +51,7 @@ function collectAiringCandidates(animeData, mediaMap, previous) {
 }
 
 async function refreshAiringSchedule(options = {}) {
+  if (AnimeTrackerUtils.isMobileDevice()) return { skipped: true, reason: "mobile_disabled" };
   if (_airingRefreshInFlight) return _airingRefreshInFlight;
 
   _airingRefreshInFlight = (async () => {
@@ -112,6 +113,10 @@ async function refreshAiringSchedule(options = {}) {
 
 async function ensureAiringScheduleAlarm() {
   try {
+    if (AnimeTrackerUtils.isMobileDevice()) {
+      await chrome.alarms.clear(AIRING_SCHEDULE_ALARM);
+      return;
+    }
     const existing = await chrome.alarms.get(AIRING_SCHEDULE_ALARM);
     if (existing && Number(existing.periodInMinutes) === AIRING_SCHEDULE_MINUTES) return;
     await chrome.alarms.create(AIRING_SCHEDULE_ALARM, {

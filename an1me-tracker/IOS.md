@@ -52,7 +52,9 @@ Google and AniList sign-in need Chrome's identity API, which Safari does not hav
 
 - Sign in with **email and password**. If you use Google on desktop, first set a password there:
   extension → **Settings → Set password for mobile**.
-- Connect **AniList on desktop**; the login reaches the phone through cloud sync.
+- **AniList is disabled on mobile to save battery**, including manual sync and import.
+  Connect AniList on desktop: watch progress saved on the phone still syncs to the tracker
+  cloud, and the desktop extension updates AniList. Existing credentials and cached data are kept.
 
 New-episode alerts are not available on iPhone: Safari extensions cannot show notifications.
 

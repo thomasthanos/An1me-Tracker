@@ -44,12 +44,12 @@
   let _pendingRerun = false;
 
   async function runBackgroundPush(reason) {
-    if (isMobile() && reason !== "manual") {
-      // Automatic AniList push is paused on mobile. AniList updates are handled by PC.
+    if (isMobile()) {
+      // All AniList work is desktop-only, including manual and stale-job recovery requests.
       const s = await bgStorageGet([STATUS_KEY]);
       const st = s[STATUS_KEY];
-      if (!st || st.state === "running" || st.state === "retrying") {
-        await writeStatus({ state: "paused", paused: true, finishedAt: Date.now() });
+      if (st?.state !== "disabled" || st.reason !== "mobile") {
+        await writeStatus({ state: "disabled", reason: "mobile", finishedAt: Date.now() });
       }
       return;
     }
@@ -260,6 +260,11 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message && message.type === "ANILIST_SYNC_NOW") {
+      if (isMobile()) {
+        runBackgroundPush("manual").catch(() => {});
+        sendResponse({ received: false, disabled: true, reason: "mobile" });
+        return false;
+      }
       runBackgroundPush("manual").catch(() => {});
       sendResponse({ received: true });
       return true;
@@ -277,8 +282,8 @@
         chrome.alarms.clear(PUSH_ALARM_PERIODIC);
         chrome.alarms.clear(PUSH_ALARM);
       } catch {}
-      if (!st || st.state === "running" || st.state === "retrying") {
-        writeStatus({ state: "paused", paused: true, finishedAt: Date.now() }).catch(() => {});
+      if (st?.state !== "disabled" || st.reason !== "mobile") {
+        writeStatus({ state: "disabled", reason: "mobile", finishedAt: Date.now() }).catch(() => {});
       }
       return;
     }

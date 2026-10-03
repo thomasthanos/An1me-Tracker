@@ -2,7 +2,7 @@
 
 <img src=".github/assets/banner-tracker.svg" alt="An1me.to Tracker">
 
-[![Version 8.0.1](.github/assets/badge-v-tracker.svg)](manifest.json)
+[![Version 8.0.2](.github/assets/badge-v-tracker.svg)](manifest.json)
 [![Manifest V3](.github/assets/badge-manifest.svg)](manifest.json)
 [![Cloud sync optional](.github/assets/badge-cloud-sync.svg)](PRIVACY.md)
 <br>
@@ -61,7 +61,7 @@ each other. If you don't sign in, it still works — everything just stays local
 ### Sync and connections
 
 - **Cloud sync** through Firebase — sign in with Google, or with email and password.
-- **AniList integration** — import your list in, push your progress back out.
+- **AniList integration on desktop** — import your list in, push your progress back out. AniList is disabled on mobile to save battery; mobile watch progress still syncs to the tracker cloud.
 - **Side panel mode** — the whole popup, docked, while you watch.
 
 ### Stats, goals, achievements

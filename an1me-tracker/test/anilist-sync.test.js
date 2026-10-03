@@ -129,7 +129,7 @@ function createSyncEnvironment({ isMobile = false, initialStore = {} } = {}) {
     assert.equal(env.pushCalls.length, 0, "automatic push must not run on mobile");
   });
 
-  await test("on mobile, an automatic background push records paused state without calling runPush", async () => {
+  await test("on mobile, a persisted running push becomes disabled without calling runPush", async () => {
     const env = createSyncEnvironment({
       isMobile: true,
       initialStore: {
@@ -143,11 +143,11 @@ function createSyncEnvironment({ isMobile = false, initialStore = {} } = {}) {
     // Alarm firing should not execute push
     await env.fireAlarm("anilistPush");
     assert.equal(env.pushCalls.length, 0, "runPush must not be called");
-    assert.equal(env.store.anilist_sync_status.state, "paused");
-    assert.equal(env.store.anilist_sync_status.paused, true);
+    assert.equal(env.store.anilist_sync_status.state, "disabled");
+    assert.equal(env.store.anilist_sync_status.reason, "mobile");
   });
 
-  await test("on mobile, manual user sync (Sync now) still executes push", async () => {
+  await test("on mobile, manual sync is rejected and preserves desktop account credentials", async () => {
     const env = createSyncEnvironment({
       isMobile: true,
       initialStore: {
@@ -158,11 +158,14 @@ function createSyncEnvironment({ isMobile = false, initialStore = {} } = {}) {
     await new Promise((r) => setTimeout(r, 20));
 
     const response = env.sendMessage({ type: "ANILIST_SYNC_NOW" });
-    assert.equal(response?.received, true);
+    assert.equal(response?.received, false);
+    assert.equal(response?.disabled, true);
 
     // Wait for async execution
     await new Promise((r) => setTimeout(r, 20));
-    assert.equal(env.pushCalls.length, 1, "manual push must run even on mobile");
+    assert.equal(env.pushCalls.length, 0, "manual push must not run on mobile");
+    assert.equal(env.store.anilist_auth.accessToken, "valid_token");
+    assert.equal(env.store.anilist_sync_status.state, "disabled");
   });
 
   await test("on desktop, automatic periodic alarm is scheduled and storage change arms push", async () => {

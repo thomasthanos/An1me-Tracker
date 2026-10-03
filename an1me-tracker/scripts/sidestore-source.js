@@ -23,17 +23,16 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
     "✨ Key Features:\n" +
     "• Automatic Episode Tracking: Accurately saves your watch progress and playback timestamp.\n" +
     "• Real-time Cloud Sync: Seamlessly syncs your library between iPhone and PC.\n" +
-    "• AniList & MyAnimeList Integration: Automatically updates your anime lists upon completion.\n" +
+    "• Desktop AniList Sync: Mobile progress syncs to the tracker cloud; the desktop extension updates AniList. AniList requests are disabled on mobile to save battery.\n" +
     "• Smart Filler Detection: Highlights and skips filler episodes smoothly.\n" +
     "• Modern iOS Experience: Native dark design, fluid Safari popup sheets, and iOS 27 Liquid Glass aesthetic.\n\n" +
     "Optimized for iOS 27 & modern iPhones.";
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Fixed desktop PC extension popup sizing while preserving responsive mobile sheets.\n" +
-    "• Resolved filler fetch timeouts with automatic circuit breaker for discontinued Jikan API.\n" +
-    "• Upgraded AniSkip outro detection to use AniList GraphQL resolver.\n" +
-    "• Dark liquid glass design & complete dark adaptive app icons for iOS 27 and SideStore.";
+    "• Disabled AniList on mobile, including manual sync, import, retries and API requests, to save battery.\n" +
+    "• Removed mobile AniList sync controls and status timers; desktop AniList stays available.\n" +
+    "• Preserved account credentials, cached metadata and tracker cloud progress sync.";
 
   return {
     name: manifest.name,

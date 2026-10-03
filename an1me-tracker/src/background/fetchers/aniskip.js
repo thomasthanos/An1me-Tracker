@@ -74,6 +74,8 @@ async function getMalIdForSlug(slug, title) {
     if (age < ttl) return cached.malId || null;
   }
   if (!title) return null;
+  // Reuse cached MAL IDs on mobile, but resolving a new ID through AniList is desktop-only.
+  if (AnimeTrackerUtils.isMobileDevice()) return null;
   try {
     const ctrl = new AbortController();
     const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();

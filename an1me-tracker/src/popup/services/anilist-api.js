@@ -26,6 +26,32 @@
   const USERNAME_KEY = "anilist_username";
   const STATUS_KEY = "anilist_sync_status";
 
+  if (window.AnimeTrackerUtils.isMobileDevice()) {
+    // Keep desktop credentials in storage; disabling this device must not disconnect the PC.
+    const mount = document.getElementById("settingsConnectionsMount");
+    if (mount) {
+      const card = document.createElement("div");
+      card.id = "anilistCard";
+      card.className = "anilist-connection-panel";
+      card.innerHTML = `<div id="anilistBody">
+        <div class="anilist-head"><div class="anilist-head-text">
+          <span class="anilist-head-name">AniList</span>
+          <span class="anilist-head-sub">Disabled on mobile to save battery</span>
+        </div></div>
+        <div class="anilist-status" data-kind="paused">Sync and import are available on desktop.</div>
+      </div>`;
+      mount.replaceChildren(card);
+    }
+    document.querySelector("#settingsConnectionsSection .settings-connections-status-pill")?.setAttribute("hidden", "");
+    window.AnimeTracker.AniListIntegration = Object.freeze({
+      isConnected: () => false,
+      connect: async () => { throw new Error("anilist_disabled_mobile"); },
+      disconnect: async () => {},
+      syncAuthToCloud: async () => ({ skipped: true, reason: "mobile_disabled" }),
+    });
+    return;
+  }
+
   const warn = (...a) => {
     try {
       (window.PopupLogger || console).warn?.("AniList", ...a);

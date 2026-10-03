@@ -7,6 +7,20 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [8.0.2] — 2026-10-03
+
+### Fixed
+
+- Disable AniList completely on mobile, including manual sync, interrupted-job recovery,
+  public imports, viewer requests and status timers. The mobile Connections card now
+  shows "Disabled on mobile to save battery" without sync/import/disconnect controls.
+- Block mobile AniList GraphQL requests, clear AniList push and airing-schedule alarms,
+  and reuse cached MAL IDs without starting new AniList lookups for AniSkip.
+- Preserve desktop AniList credentials and existing metadata caches. Mobile viewing
+  progress continues syncing through the tracker cloud; desktop AniList remains available.
+- Add regression coverage for iPhone, iPad desktop user agents, rejected mobile manual
+  requests, stale sync state, cache preservation and desktop sync.
+
 ## [8.0.1] — 2026-10-03
 
 ### Fixed
