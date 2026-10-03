@@ -57,6 +57,9 @@ jobs:
       - name: Configure iOS adaptive icons
         run: node scripts/setup-ios-icons.js build
 
+      - name: Configure iOS app UI
+        run: node scripts/setup-ios-ui.js build
+
       - name: Build (unsigned)
         run: |
           set -o pipefail
