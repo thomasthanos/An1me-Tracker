@@ -124,17 +124,14 @@
   }
 
   function auto4kEnabled(value) {
-    if (isMobileDevice()) return false;
-    return typeof value === "boolean" ? value : true;
+    return typeof value === "boolean" ? value : !isMobileDevice();
   }
 
   function copyGuardEnabled(value) {
-    if (isMobileDevice()) return false;
-    return typeof value === "boolean" ? value : true;
+    return typeof value === "boolean" ? value : !isMobileDevice();
   }
 
   function skiptimeHelperEnabled(value) {
-    if (isMobileDevice()) return false;
     return typeof value === "boolean" ? value : false;
   }
 

@@ -45,15 +45,15 @@ async function test(name, fn) {
     const mobileUtils = mobileCtx.AnimeTrackerUtils;
 
     assert.equal(mobileUtils.isMobileDevice(), true);
-    assert.equal(mobileUtils.auto4kEnabled(true), false, "Auto4K must always be false on mobile");
+    assert.equal(mobileUtils.auto4kEnabled(undefined), false, "Auto4K default must be false on mobile");
     assert.equal(mobileUtils.auto4kEnabled(false), false);
-    assert.equal(mobileUtils.auto4kEnabled(undefined), false);
-    assert.equal(mobileUtils.copyGuardEnabled(true), false, "CopyGuard must always be false on mobile");
+    assert.equal(mobileUtils.auto4kEnabled(true), true);
+    assert.equal(mobileUtils.copyGuardEnabled(undefined), false, "CopyGuard default must be false on mobile");
     assert.equal(mobileUtils.copyGuardEnabled(false), false);
-    assert.equal(mobileUtils.copyGuardEnabled(undefined), false);
-    assert.equal(mobileUtils.skiptimeHelperEnabled(true), false, "SkiptimeHelper must always be false on mobile");
+    assert.equal(mobileUtils.copyGuardEnabled(true), true);
+    assert.equal(mobileUtils.skiptimeHelperEnabled(undefined), false, "SkiptimeHelper default must be false on mobile");
     assert.equal(mobileUtils.skiptimeHelperEnabled(false), false);
-    assert.equal(mobileUtils.skiptimeHelperEnabled(undefined), false);
+    assert.equal(mobileUtils.skiptimeHelperEnabled(true), true);
   });
 
   await test("applyCloudPlaybackSettings preserves desktop settings on mobile without enabling heavy features locally", async () => {
