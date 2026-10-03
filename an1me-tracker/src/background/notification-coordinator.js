@@ -11,6 +11,9 @@
   const MAX_DELIVERED_KEYS = 1200;
   const MAX_FLUSH_PER_RUN = 12;
   const RETRY_DELAYS_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 60 * 60 * 1000, 6 * 60 * 60 * 1000];
+  // Safari has no chrome.notifications. With nothing to deliver to, items are accepted and dropped
+  // so their producers stop retrying them; the popup still shows unlocked badges.
+  const SUPPORTED = typeof chrome.notifications?.create === "function";
 
   let deliveryTail = Promise.resolve();
 
@@ -370,7 +373,9 @@
 
   async function notifyEpisodes(rawItems) {
     const items = normalizeEpisodeItems(rawItems);
-    if (items.length === 0) return { accepted: true, acceptedIds: [], delivered: 0, queued: 0 };
+    if (items.length === 0 || !SUPPORTED) {
+      return { accepted: true, acceptedIds: items.map((item) => ({ slug: item.slug, episode: item.episode })), delivered: 0, queued: 0 };
+    }
     const result = await queueItems(items, "episode");
     return {
       ...result,
@@ -380,7 +385,7 @@
 
   async function notifyBadges(rawItems) {
     const items = normalizeBadgeItems(rawItems);
-    if (items.length === 0) return { accepted: true, acceptedIds: [], delivered: 0, queued: 0 };
+    if (items.length === 0 || !SUPPORTED) return { accepted: true, acceptedIds: items.map((item) => item.id), delivered: 0, queued: 0 };
     const result = await queueItems(items, "badge");
     return { ...result, acceptedIds: items.map((item) => item.id) };
   }
@@ -510,13 +515,15 @@
     await notificationClear(id).catch(() => false);
   }
 
-  chrome.notifications.onClicked.addListener((notificationId) => {
-    handleNotificationAction(notificationId).catch(() => {});
-  });
+  if (SUPPORTED) {
+    chrome.notifications.onClicked.addListener((notificationId) => {
+      handleNotificationAction(notificationId).catch(() => {});
+    });
 
-  chrome.notifications.onButtonClicked.addListener((notificationId) => {
-    handleNotificationAction(notificationId).catch(() => {});
-  });
+    chrome.notifications.onButtonClicked.addListener((notificationId) => {
+      handleNotificationAction(notificationId).catch(() => {});
+    });
+  }
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm?.name !== RETRY_ALARM) return;
@@ -532,6 +539,7 @@
   });
 
   self.AnimeTrackerNotificationCoordinator = Object.freeze({
+    supported: SUPPORTED,
     notifyEpisodes,
     notifyBadges,
     setCategoryEnabled,

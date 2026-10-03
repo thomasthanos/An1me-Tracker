@@ -15,9 +15,10 @@
       "AnimeTrackerNotificationCoordinator",
       "AnimeTrackerAnimeResolver",
     ];
-  } else if (location.protocol === "chrome-extension:") {
-    // popup / side panel. NB: the shared logger.js also creates window.AnimeTrackerContent
-    // here, so detect the context by protocol — not by which namespace object exists.
+  } else if (/^(?:chrome|safari-web)-extension:$/.test(location.protocol)) {
+    // popup / side panel (chrome-extension: in Chrome, safari-web-extension: in Safari). NB: the shared
+    // logger.js also creates window.AnimeTrackerContent here, so detect the context by protocol — not by
+    // which namespace object exists.
     label = "popup";
     ns = window.AnimeTracker || {};
     required = [

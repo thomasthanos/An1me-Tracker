@@ -167,7 +167,9 @@ async function checkNewEpisodesOnce(disableGeneration) {
     SMART_NOTIF_STATE_KEY,
     SMART_NOTIF_LEGACY_STATE_KEY,
   ]);
-  if (settings[SMART_NOTIF_SETTING_KEY] !== true) return { enabled: false, checked: 0, discovered: 0 };
+  if (settings[SMART_NOTIF_SETTING_KEY] !== true || self.AnimeTrackerNotificationCoordinator?.supported === false) {
+    return { enabled: false, checked: 0, discovered: 0 };
+  }
 
   const animeData = settings.animeData || {};
   const state = { ...(settings[SMART_NOTIF_STATE_KEY] || {}) };
@@ -309,10 +311,12 @@ function checkNewEpisodes() {
 }
 
 async function reconcileSmartNotificationAlarmOnce(explicitEnabled) {
+  // Where the browser cannot show notifications (Safari) there is nothing to check for.
   const enabled =
-    typeof explicitEnabled === "boolean"
+    self.AnimeTrackerNotificationCoordinator?.supported !== false &&
+    (typeof explicitEnabled === "boolean"
       ? explicitEnabled
-      : (await bgStorageGet([SMART_NOTIF_SETTING_KEY]))[SMART_NOTIF_SETTING_KEY] === true;
+      : (await bgStorageGet([SMART_NOTIF_SETTING_KEY]))[SMART_NOTIF_SETTING_KEY] === true);
 
   const existingAlarm = await chrome.alarms.get(SMART_NOTIF_ALARM);
   const coordinator = self.AnimeTrackerNotificationCoordinator;
@@ -369,9 +373,11 @@ async function getSmartNotificationStatus(options = {}) {
 
   const alarm = await chrome.alarms.get(SMART_NOTIF_ALARM);
   const delivery = await self.AnimeTrackerNotificationCoordinator?.getStatus?.().catch(() => null);
-  const operational = enabled ? !!alarm && !error : !alarm && !error;
+  const supported = self.AnimeTrackerNotificationCoordinator?.supported !== false;
+  const operational = enabled && supported ? !!alarm && !error : !alarm && !error;
   return {
     success: true,
+    supported,
     enabled,
     operational,
     alarmActive: !!alarm,

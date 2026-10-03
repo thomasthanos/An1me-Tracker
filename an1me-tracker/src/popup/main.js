@@ -596,9 +596,19 @@
 
   const renderCopyGuardSetting = (enabled) => renderToggle("copyGuard", enabled);
   function renderSmartNotifSetting(enabled, status = null) {
-    renderToggle("smartNotif", enabled);
     const btn = document.getElementById(TOGGLE_SETTINGS.smartNotif.btnId);
     const subtitle = document.getElementById(TOGGLE_SETTINGS.smartNotif.subtitleId);
+    // Safari cannot show extension notifications, so the alert has nowhere to go.
+    if (status?.supported === false) {
+      renderToggle("smartNotif", false);
+      if (btn) {
+        btn.disabled = true;
+        btn.dataset.unsupported = "true";
+      }
+      if (subtitle) subtitle.textContent = "Not available on this browser";
+      return;
+    }
+    renderToggle("smartNotif", enabled);
     if (btn) {
       if (status && typeof status.operational === "boolean") btn.dataset.operational = status.operational ? "true" : "false";
       else delete btn.dataset.operational;
@@ -1733,7 +1743,7 @@
         e.stopPropagation();
         if (smartNotifToggleInFlight) return;
         const btn = document.getElementById("settingsSmartNotif");
-        if (!btn) return;
+        if (!btn || btn.dataset.unsupported === "true") return;
         const currentlyEnabled = btn.dataset.enabled === "true";
         const nextEnabled = !currentlyEnabled;
         smartNotifToggleInFlight = true;

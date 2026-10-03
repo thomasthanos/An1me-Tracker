@@ -45,8 +45,10 @@ const AN1ME_DIRECT_FAIL_STREAK = 3;
 const AN1ME_DIRECT_COOLDOWN_MS = 30 * 1000;
 const AN1ME_TAB_OPT_IN_KEY = "an1meGatewayTabEnabled";
 // Creating a hidden background tab is now the default last resort rather than an undiscoverable
-// opt-in nothing ever set. Set the storage key to false to forbid it.
-const AN1ME_TAB_CREATE_DEFAULT = true;
+// opt-in nothing ever set. Set the storage key to false to forbid it. Not on phones: Safari on iOS
+// has no hidden tabs, so the user would watch an1me.to pages open by themselves; there the gateway
+// only borrows a tab the user already has open.
+const AN1ME_TAB_CREATE_DEFAULT = !AnimeTrackerUtils.isMobileDevice();
 const AN1ME_DEFAULT_TIMEOUT_MS = 15000;
 // A slow page is the normal reason a first attempt times out (the episode index for a
 // 1000-episode series is genuinely large), so the retry gets a longer budget, not a shorter one.
