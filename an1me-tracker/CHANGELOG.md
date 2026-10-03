@@ -7,6 +7,16 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [8.0.1] — 2026-10-03
+
+### Fixed
+
+- Settings initializes all render parameters before using them. Opening the popup or
+  switching to Settings no longer throws `ReferenceError: isMobile is not defined`.
+  Initial rendering, signed-in updates and device defaults are covered by regression tests.
+- Settings detects mobile devices when deciding whether to show the password action,
+  including callers that omit the mobile flag. Heavy mobile toggles stay disabled.
+
 ## [8.0.0] — 2026-10-03
 
 ### Fixed

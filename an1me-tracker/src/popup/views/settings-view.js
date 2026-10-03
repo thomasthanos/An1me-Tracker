@@ -325,6 +325,7 @@
     if (!container) return;
     container.removeAttribute("hidden");
 
+    const { user = null, settings = {}, passwordIsSet = false, isMobile = false, needsReauth = false } = params;
     const isMobileEffective = isMobile || !!(globalThis.AnimeTrackerUtils?.isMobileDevice?.());
 
     const state = {
@@ -345,7 +346,7 @@
                     ${renderPreferencesSection(state)}
                     ${renderConnectionsSection()}
                     ${renderDataSection()}
-                    ${renderDangerCard(user, passwordIsSet, isMobile)}
+                    ${renderDangerCard(user, passwordIsSet, isMobileEffective)}
                     ${renderAboutCard()}
                 </div>
             `;
@@ -398,7 +399,7 @@
 
     const setPwCard = container.querySelector("#settingsSetPwCard");
     if (setPwCard) {
-      const showSetPw = !(!user || isMobile);
+      const showSetPw = !(!user || isMobileEffective);
       setPwCard.closest(".settings-danger-row")?.setAttribute("data-has-password", showSetPw ? "true" : "false");
       const existingBtn = setPwCard.querySelector("#settingsSetPassword");
       const expectedState = !showSetPw ? "absent" : passwordIsSet ? "set" : "unset";
