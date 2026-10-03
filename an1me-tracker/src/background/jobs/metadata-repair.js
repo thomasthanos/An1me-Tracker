@@ -55,12 +55,7 @@ function getMetadataRepairRemainingFetches(state) {
 // "status" is kept for a manual run whose panel the user closed; "modal" is the full fetch panel.
 function resolveMetadataRepairUiMode(origin, fetchCount, consideredTotal = 0) {
   if (origin !== "manual") return "silent";
-
-  const fetches = Math.max(0, Number(fetchCount) || 0);
-  if (fetches < METADATA_REPAIR_MODAL_FETCH_THRESHOLD) return "status";
-
-  const considered = Math.max(fetches, Number(consideredTotal) || 0);
-  return fetches >= considered * METADATA_REPAIR_MODAL_FETCH_RATIO ? "modal" : "status";
+  return "modal";
 }
 
 function createMetadataRepairRunId() {

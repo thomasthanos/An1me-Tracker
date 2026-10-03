@@ -7,6 +7,20 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.7] — 2026-10-03
+
+### Fixed
+
+- Prevented premature auto-closing of the "Fetch & Import" progress modal on manual runs:
+  the modal remains fully open upon completion until the user reviews their library
+  verification and explicitly taps "Done" (or taps the backdrop).
+- Added comprehensive library verification reporting: shows exact breakdown of Fetched, Cached,
+  No Filler, and Needs Retry, along with a complete live log of every verified title.
+- Updated completion status label to clearly confirm that all anime in the user's library
+  have been checked and are up to date.
+- Promoted manual repair runs to always open and stay in modal mode, preventing accidental
+  demotion to status badges when all library titles are already cached.
+
 ## [7.5.6] — 2026-10-03
 
 ### Fixed

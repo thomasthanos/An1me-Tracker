@@ -111,10 +111,18 @@
 }
 .ffui-progress-wrap, .ffui-stats { flex-shrink:0; }
 .ffui-close {
-  margin-left:auto; min-width:44px; min-height:44px; padding:6px 12px;
-  color:var(--t1); background:rgba(var(--ink-rgb),0.07);
-  border:1px solid rgba(var(--ink-rgb),0.12); border-radius:10px;
-  font:inherit; cursor:pointer;
+  margin-left:auto; min-width:64px; min-height:36px; padding:6px 14px;
+  color:var(--t1); background:rgba(var(--primary-rgb),0.15);
+  border:1px solid rgba(var(--primary-rgb),0.35); border-radius:10px;
+  font:inherit; font-size:12px; font-weight:600; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center;
+  transition: all .2s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.ffui-close:hover {
+  background:rgba(var(--primary-rgb),0.25);
+  border-color:rgba(var(--primary-rgb),0.55);
 }
 .ffui-close[hidden] { display:none; }
 .ffui-close:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }

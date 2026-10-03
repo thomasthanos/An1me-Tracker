@@ -88,7 +88,11 @@ const FillerFetchUI = {
       if (e.target.id !== this.IDS.overlay) return;
       e.preventDefault();
       e.stopPropagation();
-      this._nudgeModal();
+      if (this.state.fetchDone) {
+        this.close();
+      } else {
+        this._nudgeModal();
+      }
     };
     overlay.addEventListener("mousedown", blockOutsideClick);
     overlay.addEventListener("click", blockOutsideClick);
@@ -264,12 +268,21 @@ const FillerFetchUI = {
     const { processed, total } = progress;
     const pct = state.status === "completed" ? 100 : total > 0 ? Math.min(100, (processed / total) * 100) : 0;
 
+    const verifiedTotal = this.state.fetched + this.state.cached + this.state.skipped;
+    const totalCount = progress.total > 0 ? progress.total : verifiedTotal;
+
     let label = "Ready to fetch and import your data…";
     if (state.status === "running") {
       const currentTitle = state.currentTitle || state.currentSlug || "Working…";
       label = `${processed} / ${total} — ${currentTitle}`;
     } else if (state.status === "completed") {
-      label = state.failed > 0 ? `Import finished — ${state.failed} items need retry` : "Import complete";
+      if (state.failed > 0) {
+        label = `Import finished — ${state.failed} items need retry`;
+      } else if (totalCount > 0) {
+        label = `All ${totalCount} anime verified & up to date!`;
+      } else {
+        label = "Import complete — all anime up to date!";
+      }
     } else if (state.status === "error") {
       label = state.errorMessage ? `Import error — ${state.errorMessage}` : "Import error — see log above";
     }
@@ -277,8 +290,12 @@ const FillerFetchUI = {
     this._setProgress(pct, label);
 
     if (state.status === "completed" && state.followUpPending !== true && !this.state.failed) {
-      this._scheduleAutoClose();
-    } else if (this.state.failed) {
+      if (this.state.autoMode) {
+        this._scheduleAutoClose();
+      } else {
+        this._clearAutoClose();
+      }
+    } else {
       this._clearAutoClose();
     }
   },
