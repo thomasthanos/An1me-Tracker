@@ -71,7 +71,7 @@ New-episode alerts are not available on iPhone: Safari extensions cannot show no
 
 ## Troubleshooting
 
-- **The phone warms up when opening a large library** — update to 7.5.1 or later. Collapsed status
+- **The phone warms up when opening a large library** — update to 7.5.2 or later. Collapsed status
   lists load their cards when opened, and hidden popup updates wait until visible. Automatic 4K
   selection defaults off on mobile; check **Settings → Playback & Tracking** if you enabled it before.
   These changes reduce unnecessary work; temperature still needs checking on the device.

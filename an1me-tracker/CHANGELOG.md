@@ -7,6 +7,16 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.2] — 2026-10-03
+
+### Fixed
+
+- Resolved layout cutoffs and horizontal overflow on iOS Safari when extension popup opens in medium detent sheets by decoupling mobile layout from screen height and adding responsive scaling.
+- Fixed image flickering and card flashing in the Continue Watching section during background library fetches by filtering storage listeners to active slugs and caching render signatures.
+- Handled Jikan 504 Gateway Timeouts and rate limits gracefully during background filler discovery so transient network delays never falsely mark anime imports as failed.
+- Fixed squished anime names in the fetch progress log on mobile screens with proper flex bounds.
+- Added iOS Page Lifecycle `freeze` and `webkitendfullscreen` handlers for reliable video progress persistence when leaving or backgrounding Safari.
+
 ## [7.5.1] — 2026-10-03
 
 ### Changed

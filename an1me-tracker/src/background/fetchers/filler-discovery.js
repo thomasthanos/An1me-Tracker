@@ -413,17 +413,22 @@ async function fetchJikanEpisodes(title, options = {}) {
 
     if (!malId) {
       const searchCtrl = new AbortController();
-      const searchTimer = setTimeout(() => searchCtrl.abort(), 10000);
+      const searchTimer = setTimeout(() => searchCtrl.abort(), 6000);
       let searchRes;
       try {
         searchRes = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=5`, { signal: searchCtrl.signal });
+      } catch (fetchErr) {
+        const isAbort = fetchErr?.name === "AbortError";
+        const err = new Error(isAbort ? "jikan_search_timeout" : (fetchErr?.message || "jikan_fetch_failed"));
+        err.rateLimited = true;
+        throw err;
       } finally {
         clearTimeout(searchTimer);
       }
       if (searchRes.status === 404) return null;
       if (!searchRes.ok) {
         const error = new Error(`jikan_search_http_${searchRes.status}`);
-        error.rateLimited = searchRes.status === 429;
+        error.rateLimited = searchRes.status === 429 || searchRes.status >= 500;
         throw error;
       }
       const searchData = await searchRes.json();

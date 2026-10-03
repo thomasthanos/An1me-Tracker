@@ -106,11 +106,13 @@ const VideoMonitor = {
     document.addEventListener("visibilitychange", eventHandlers.handleVisibilityChange, { passive: true });
     window.addEventListener("beforeunload", eventHandlers.handleBeforeUnload);
     window.addEventListener("pagehide", eventHandlers.handleBeforeUnload, { passive: true });
+    document.addEventListener("freeze", eventHandlers.handleBeforeUnload, { passive: true });
 
     this.addCleanup(() => {
       document.removeEventListener("visibilitychange", eventHandlers.handleVisibilityChange);
       window.removeEventListener("beforeunload", eventHandlers.handleBeforeUnload);
       window.removeEventListener("pagehide", eventHandlers.handleBeforeUnload);
+      document.removeEventListener("freeze", eventHandlers.handleBeforeUnload);
     });
 
     if (animeInfo) {
@@ -300,10 +302,14 @@ const VideoMonitor = {
       if (document.visibilityState === "visible") startSaveInterval();
       else stopSaveInterval();
     };
+    const handleFullscreenExit = () => {
+      if (eventHandlers.handlePause) eventHandlers.handlePause();
+    };
     document.addEventListener("visibilitychange", visibilityHandler);
     video.addEventListener("play", startSaveInterval);
     video.addEventListener("pause", stopSaveInterval);
     video.addEventListener("ended", stopSaveInterval);
+    video.addEventListener("webkitendfullscreen", handleFullscreenExit);
 
     this.addCleanup(() => {
       stopSaveInterval();
@@ -311,6 +317,7 @@ const VideoMonitor = {
       video.removeEventListener("play", startSaveInterval);
       video.removeEventListener("pause", stopSaveInterval);
       video.removeEventListener("ended", stopSaveInterval);
+      video.removeEventListener("webkitendfullscreen", handleFullscreenExit);
     });
 
     Logger.debug("Video monitoring active");

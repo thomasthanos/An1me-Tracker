@@ -150,7 +150,14 @@ function formatMetadataRepairDetail(infoResult, fillerResult) {
   } else if (fillerResult?.status === "movie") {
     parts.push("movie/OVA");
   } else if (fillerResult?.status === "failed") {
-    parts.push(`filler failed: ${fillerResult.error || "error"}`);
+    const rawErr = String(fillerResult.error || "");
+    if (/504|timeout/i.test(rawErr)) {
+      parts.push("filler timed out");
+    } else if (/429|rate_limited|busy/i.test(rawErr)) {
+      parts.push("filler rate limited");
+    } else {
+      parts.push("filler unavailable");
+    }
   }
 
   return parts.join(" • ");
@@ -160,7 +167,8 @@ function buildMetadataRepairLog(slug, title, infoResult, fillerResult) {
   const displayTitle = title || slug;
   const detail = formatMetadataRepairDetail(infoResult, fillerResult);
 
-  if (infoResult?.status === "failed" || fillerResult?.status === "failed") {
+  // If primary anime info failed, mark as error
+  if (infoResult?.status === "failed") {
     return { type: "error", slug, name: displayTitle, detail, at: Date.now() };
   }
 
@@ -523,7 +531,12 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
             schemaVersion: self.AnimeTrackerCachePolicy.EPISODE_TYPES_SCHEMA_VERSION,
           };
     await bgStorageSet({ [key]: backoffEntry });
-    throw error;
+    const isTransient = error?.rateLimited || /504|502|503|429|timeout/i.test(error?.message || "");
+    return {
+      status: "failed",
+      entry: backoffEntry,
+      error: isTransient ? "jikan_timeout_504" : String(error?.message || "error"),
+    };
   }
 
   if (!episodeTypes) {

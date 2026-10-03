@@ -593,6 +593,8 @@
                     text-overflow: ellipsis;
                     min-width: 0;
                 }
+                .at-cw-title-ext { display: none !important; }
+                .at-cw-track { padding: 2px 2px 4px; }
                 .at-cw-card { width: 120px; border-radius: 14px; }
                 .at-cw-thumb { aspect-ratio: 16 / 9; }
                 .at-cw-img { object-position: center 22%; }
@@ -730,7 +732,7 @@
     heading.className = "at-cw-head-title";
     heading.innerHTML =
       '<svg class="at-cw-head-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="8 5 19 12 8 19"/></svg>' +
-      "<span>Continue Watching from an1me-extention</span>";
+      '<span>Continue Watching</span><span class="at-cw-title-ext"> • An1me Tracker</span>';
     const count = document.createElement("span");
     count.className = "at-cw-count";
     count.textContent = String(items.length);
@@ -960,14 +962,28 @@
 
   const canRender = () => !dismissed && document.visibilityState === "visible" && /^\/?$/.test(location.pathname) && isContextValid();
 
+  let lastRenderedSignature = null;
+  let activeWatchedSlugs = new Set();
+
   function unmountShelf() {
     renderGeneration += 1;
     clearTimeout(renderDebounce);
     renderDebounce = null;
+    lastRenderedSignature = null;
     trackResizeObserver?.disconnect();
     trackResizeObserver = null;
     stopShareWatcher();
     document.getElementById(CONTAINER_ID)?.remove();
+  }
+
+  function computeItemsSignature(items) {
+    if (!Array.isArray(items)) return "";
+    return items
+      .map(
+        (it) =>
+          `${it.slug}:${it.episodeNumber}:${it.progressPct}:${it.currentTime}:${it.duration}:${it.coverUrl || ""}:${it.title || ""}`,
+      )
+      .join("|");
   }
 
   function render(items) {
@@ -978,17 +994,22 @@
       return;
     }
 
+    const nextSignature = computeItemsSignature(items);
+    if (existing && lastRenderedSignature === nextSignature) {
+      return;
+    }
+
     injectStyles();
     const section = buildSection(items);
 
     if (existing) {
       existing.replaceWith(section);
-
       suppressShareIfPresent();
     } else {
       mountSection(section);
     }
 
+    lastRenderedSignature = nextSignature;
     startShareWatcher();
   }
 
@@ -998,6 +1019,7 @@
       const parsed = parseProgressKey(key);
       if (parsed && parsed.slug) slugs.add(parsed.slug);
     }
+    activeWatchedSlugs = slugs;
     return [...slugs].map((slug) => `animeinfo_${slug}`);
   }
 
@@ -1060,7 +1082,14 @@
 
   try {
     window.AnimeTrackerContent.PageEvents.onStorage(
-      (key) => key === "videoProgress" || key === "animeData" || key.startsWith("animeinfo_"),
+      (key) => {
+        if (key === "videoProgress" || key === "animeData") return true;
+        if (key.startsWith("animeinfo_")) {
+          const slug = key.slice("animeinfo_".length);
+          return activeWatchedSlugs.has(slug);
+        }
+        return false;
+      },
       scheduleRender,
     );
   } catch {}
