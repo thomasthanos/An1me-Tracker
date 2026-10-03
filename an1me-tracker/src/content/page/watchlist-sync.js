@@ -167,30 +167,34 @@ const WatchlistSync = {
     } catch {}
   },
 
-  async _sendWatchlistRequest(animeId, type, Logger) {
-    const action = type === "remove" ? "remove_from_watchlist" : "add_to_watchlist";
+  // The site's own watchlist buttons post this form; the server rejects it with HTTP 403 unless it
+  // carries the page's watchlist nonce (kiraConfig.nonce.watchlist_actions).
+  async _postWatchlistChange(animeId, type, timeoutMs) {
+    const formData = new FormData();
+    formData.append("action", type === "remove" ? "remove_from_watchlist" : "add_to_watchlist");
+    formData.append("anime_id", animeId.toString());
+    formData.append("type", type);
+    formData.append("nonce", this._readKiraConfig()?.nonce?.watchlist_actions || "");
 
-    Logger.debug(`WatchlistSync: POST ${action} type="${type}" anime #${animeId}`);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      return await fetch(this._AJAX_URL, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
+  async _sendWatchlistRequest(animeId, type, Logger) {
+    Logger.debug(`WatchlistSync: POST ${type === "remove" ? "remove_from_watchlist" : "add_to_watchlist"} type="${type}" anime #${animeId}`);
 
     try {
-      const formData = new FormData();
-      formData.append("action", action);
-      formData.append("anime_id", animeId.toString());
-      formData.append("type", type);
-
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 30000);
-      let res;
-      try {
-        res = await fetch(this._AJAX_URL, {
-          method: "POST",
-          credentials: "include",
-          body: formData,
-          signal: ctrl.signal,
-        });
-      } finally {
-        clearTimeout(timer);
-      }
+      const res = await this._postWatchlistChange(animeId, type, 30000);
 
       if (!res.ok) {
         Logger.warn(`Watchlist: server returned HTTP ${res.status}`);
@@ -351,24 +355,27 @@ const WatchlistSync = {
     }
   },
 
-  _isLoggedIn() {
+  // The theme's inline `var kiraConfig = {...}`: login state, ajax URL and the action nonces.
+  _readKiraConfig() {
     try {
-      const scripts = document.querySelectorAll("script:not([src])");
-      for (const script of scripts) {
-        const text = script.textContent;
+      for (const script of document.querySelectorAll("script:not([src])")) {
+        const match = script.textContent.match(/var\s+kiraConfig\s*=\s*(\{[^;]+\})\s*;/);
+        if (!match) continue;
+        try {
+          return JSON.parse(match[1]);
+        } catch {}
+      }
+    } catch {}
+    return null;
+  },
 
-        const configMatch = text.match(/var\s+kiraConfig\s*=\s*(\{[^;]+\})\s*;/);
-        if (configMatch) {
-          try {
-            const config = JSON.parse(configMatch[1]);
-            if ("logged_in" in config) return !!config.logged_in;
-          } catch {}
-        }
-
-        const loggedMatch = text.match(/(?:logged_in|isloggedIn)\s*[=:]\s*(true|false|1|0)/i);
-        if (loggedMatch) {
-          return loggedMatch[1] === "true" || loggedMatch[1] === "1";
-        }
+  _isLoggedIn() {
+    const config = this._readKiraConfig();
+    if (config && "logged_in" in config) return !!config.logged_in;
+    try {
+      for (const script of document.querySelectorAll("script:not([src])")) {
+        const loggedMatch = script.textContent.match(/(?:logged_in|isloggedIn)\s*[=:]\s*(true|false|1|0)/i);
+        if (loggedMatch) return loggedMatch[1] === "true" || loggedMatch[1] === "1";
       }
     } catch {}
     return false;
@@ -408,22 +415,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   const action = watchlistType === "remove" ? "remove_from_watchlist" : "add_to_watchlist";
-  const formData = new FormData();
-  formData.append("action", action);
-  formData.append("anime_id", animeId.toString());
-  formData.append("type", watchlistType);
-
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
-  fetch("https://an1me.to/wp-admin/admin-ajax.php", {
-    method: "POST",
-    credentials: "include",
-    body: formData,
-    signal: ctrl.signal,
-  })
+  WatchlistSync._postWatchlistChange(animeId, watchlistType, 15000)
     .then((res) => {
       return res.text().then((text) => {
-        clearTimeout(timer);
         const trimmed = (text || "").trim();
         if (trimmed === "0" || trimmed === "-1") {
           const reason = trimmed === "0" ? "auth_failed" : "bad_request";
@@ -436,7 +430,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       });
     })
     .catch((e) => {
-      clearTimeout(timer);
       (window.AnimeTrackerContent?.Logger || console).warn?.(`[WatchlistSync] via tab error: ${e.message}`);
       sendResponse({ success: false, error: e.message });
     });
