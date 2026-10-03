@@ -3762,7 +3762,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     ].join(";");
     dlog(`%c🎬 Anime Tracker v${chrome.runtime.getManifest().version}`, style);
     migrateFromSyncToLocal();
-    sanitizeDiscontinuedJikanCaches().catch(() => {});
+    if (typeof sanitizeDiscontinuedJikanCaches === "function") sanitizeDiscontinuedJikanCaches().catch(() => {});
 
     if (details.previousVersion === chrome.runtime.getManifest().version) return;
 
@@ -3817,7 +3817,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(() => {
   dlog("[Anime Tracker] Extension started");
   migrateFromSyncToLocal();
-  sanitizeDiscontinuedJikanCaches().catch(() => {});
+  if (typeof sanitizeDiscontinuedJikanCaches === "function") sanitizeDiscontinuedJikanCaches().catch(() => {});
   reconcileSmartNotificationAlarm().catch((error) => {
     console.warn("[BG] Smart notification startup reconciliation failed:", error?.message || error);
   });
