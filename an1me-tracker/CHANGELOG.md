@@ -7,6 +7,60 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.0] — 2026-10-03
+
+A cleanup release from a full codebase audit: duplicated helpers merged, dead code removed, the
+stylesheet split up, and the watch-page scripts rebuilt around one shared runtime. It also fixes the
+an1me.to watchlist sync, which that work brought to light.
+
+### Fixed
+
+- **Status changes never reached your an1me.to watchlist.** The site accepts a watchlist change only
+  with the nonce its own buttons send and answers HTTP 403 without it. The extension never sent it, so
+  every Watching / Completed / On hold / Dropped update from the watch page, the catalog-page
+  reconcile and the popup was refused, silently, and the reconcile retried the same failures on every
+  page load. Requests now carry the page's nonce.
+- **The skip-time helper lost the video after a server switch.** Switching server replaces the video
+  element; the helper kept listening to the old one and never filled *Outro End* for the new one.
+- **The playing episode was not read from the episode list's `current-episode` item**, the class
+  an1me.to actually uses, when the URL carries no episode number.
+- **The popup's "current watch info" request answered nothing** until the watch page had finished
+  initializing.
+
+### Changed
+
+- **No requests to Google Fonts.** Inter and Bebas Neue now ship with the extension (SIL OFL, licenses
+  in `src/fonts`), for the popup and for the toasts on an1me.to.
+- **Sign-in options follow what the browser can do, not its user agent.** Google and AniList login are
+  offered exactly when the browser's identity API can complete them. Browsers without it, such as
+  Safari, sign in with email and password and receive the AniList login through cloud sync. The
+  Orion-specific checks are gone.
+- **Lighter watch pages.** The content scripts share one storage listener and one DOM observer (up to
+  six and nine before), and the video gets one listener per event instead of two.
+- The extension icon is no longer readable by web pages; it only let a page detect the extension.
+
+### Removed
+
+- Code nothing called: unused popup helpers, the sign-up flow the popup never showed, settings drawer
+  toggles for elements that no longer exist, test hooks, an always-hidden play button on the Continue
+  Watching shelf, and two feature flags that were never set.
+
+### Internal
+
+- `popup.css` is 22 sheets under `src/popup/styles`, linked in the old cascade order; the AniList card
+  and filler overlay styles moved out of JavaScript. Checked with Chrome's CSS parser: same rules, same
+  order, apart from removed duplicates and dead rules.
+- `src/common/utils.js` and `src/common/data/library-keys.js` replace about forty copies of the same
+  helpers and key lists across the worker, popup and content scripts.
+- Watch pages run on `PageEvents` (shared listener and observer), `PlayerDom` (player lookups across
+  iframes) and `PlayerObserver` (the one owner of the video's events).
+- `node scripts/package.js [--zip]` builds `dist/an1me-tracker` from the runtime files only (2.2 MB
+  instead of the 14 MB repository folder) and fails on a missing referenced file.
+- New tests: shared helpers, script load order per context, the event bus, the player observer and the
+  watchlist request.
+
+---
+
 ## [7.4.4] — 2026-09-17
 
 Covers everything since 7.4.0. 7.4.1 to 7.4.3 went out as in-between builds without entries of their own.
