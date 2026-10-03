@@ -296,8 +296,10 @@
       return syncMetadataRepairStateFromStorage({ ensureOpen: true });
     }
 
+    let startingState = null;
     metadataRepairPromise = (async () => {
       const persistedState = await syncMetadataRepairStateFromStorage({ ensureOpen: true });
+      startingState = persistedState;
       if (persistedState?.status === "running") {
         const response = await sendRuntimeMessage(
           {
@@ -335,9 +337,28 @@
 
       return applyMetadataRepairState(response.state || null, { ensureOpen: true });
     })()
-      .catch((error) => {
+      .catch(async (error) => {
+        // A lost response does not mean the worker failed to start. Reconcile its job
+        // before changing the local modal; never persist a transport error over that job.
+        try {
+          const stored = await AT.Storage.get(["metadataRepairState"]);
+          const state = stored.metadataRepairState;
+          const newRun = state?.runId && state.runId !== startingState?.runId;
+          const resumedRun = startingState?.status === "running" && state?.runId === startingState.runId;
+          if (state?.status === "running" || ((newRun || resumedRun) && ["completed", "error"].includes(state?.status))) {
+            return applyMetadataRepairState(state, { ensureOpen: true });
+          }
+        } catch {}
         PopupLogger.error("RepairAll", "Error:", error);
-        setMetadataRepairStatus("Import Error", false, { error: true, title: error?.message || "Metadata import failed" });
+        await applyMetadataRepairState({
+          status: "error",
+          origin: "manual",
+          uiMode: "modal",
+          errorMessage: error?.message || "Unable to start import. Please retry.",
+          total: 0,
+          processed: 0,
+          logs: [],
+        }, { ensureOpen: true });
         throw error;
       })
       .finally(() => {

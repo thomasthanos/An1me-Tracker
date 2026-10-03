@@ -3288,6 +3288,45 @@ async function persistBeforeUnloadTrack(animeInfo, duration) {
   });
 }
 
+async function persistBeforeUnloadProgress(message) {
+  const { uniqueId, context = {} } = message;
+  const match = typeof uniqueId === "string" && uniqueId.match(/^(.+)__episode-(\d+)$/);
+  const currentTime = Math.floor(Number(message.currentTime));
+  const duration = Math.floor(Number(message.duration));
+  if (!match || !Number.isFinite(currentTime) || !Number.isFinite(duration) || currentTime < 5 || duration <= 0 || duration > 100000) {
+    throw new Error("Invalid progress sample");
+  }
+  return runBgLibraryTransaction(["animeData", "videoProgress"], result => {
+    const anime = result.animeData?.[match[1]];
+    const inactive = anime?.onHoldAt || anime?.droppedAt || ["on_hold", "dropped"].includes(String(anime?.listState || "").toLowerCase());
+    const tracked = !inactive && Array.isArray(anime?.episodes) && anime.episodes.some(ep => Number(ep?.number) === Number(match[2]) && ep.durationSource !== "anilist");
+    if (tracked) return { result: { saved: false, tracked: true } };
+    const progress = result.videoProgress && typeof result.videoProgress === "object" && !Array.isArray(result.videoProgress) ? result.videoProgress : {};
+    const existing = progress[uniqueId];
+    if (context.sampleSession && existing?.sampleSession === context.sampleSession && existing.sampleSequence > context.sampleSequence) {
+      return { result: { saved: false } };
+    }
+    if (existing && !context.allowRewind &&
+      (existing.currentTime > currentTime || (existing.duration === duration && currentTime - existing.currentTime < 3))) {
+      return { result: { saved: false } };
+    }
+    const now = new Date().toISOString().split(".")[0] + "Z";
+    progress[uniqueId] = {
+      currentTime, duration, percentage: Math.min(100, Math.floor(currentTime / duration * 100)),
+      savedAt: now, watchedAt: existing?.watchedAt || now,
+      coverImage: existing?.coverImage || context.coverImage || anime?.coverImage || undefined,
+      pagePath: context.pagePath !== undefined ? context.pagePath || undefined : existing?.pagePath,
+      sampleSession: context.sampleSession,
+      sampleSequence: context.sampleSequence,
+      rewoundAt: context.rewoundAt || existing?.rewoundAt || undefined,
+    };
+    // Keep the same bounded progress history as the content writer.
+    const entries = Object.entries(progress).filter(([id]) => id !== uniqueId)
+      .sort((a, b) => (Date.parse(b[1]?.savedAt) || 0) - (Date.parse(a[1]?.savedAt) || 0)).slice(0, 199);
+    return { data: { videoProgress: { [uniqueId]: progress[uniqueId], ...Object.fromEntries(entries) } }, result: { saved: true } };
+  });
+}
+
 const messageHandlers = {
   LIBRARY_ENSURE_LEGACY_MIGRATION(_message, _sender, sendResponse) {
     ensureBgLegacySyncMigration()
@@ -3626,9 +3665,26 @@ const messageHandlers = {
     return true;
   },
 
-  TRACK_BEFORE_UNLOAD(message, _sender, sendResponse) {
+  SAVE_PROGRESS_BEFORE_UNLOAD(message, sender, sendResponse) {
+    persistBeforeUnloadProgress(message)
+      .then(result => {
+        // Sync reads the committed sample, including pauses that previously synced
+        // before their throttled local write. Reuse the existing cloud rate limit.
+        if (!result?.tracked && message.sync !== false) {
+          messageHandlers.SYNC_PROGRESS_ONLY({ force: message.forceSync === true }, sender, () => {});
+        }
+        sendResponse({ success: true, saved: result?.saved === true });
+      })
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  },
+
+  TRACK_BEFORE_UNLOAD(message, sender, sendResponse) {
     persistBeforeUnloadTrack(message.animeInfo, message.duration)
-      .then(() => sendResponse({ success: true }))
+      .then(() => {
+        if (message.sync === true) messageHandlers.SYNC_TO_FIREBASE_IMMEDIATE({ reason: "completion:unload" }, sender, () => {});
+        sendResponse({ success: true });
+      })
       .catch((error) => sendResponse({ success: false, error: error.message }));
     return true;
   },

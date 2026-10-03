@@ -11,6 +11,8 @@
   const TrackingState = { IDLE: "idle", TRACKING: "tracking", COMPLETED: "completed" };
   let trackingState = TrackingState.IDLE;
   let animeInfo = null;
+  // Progress samples capture this parsed watch-page identity before asynchronous work.
+  AT.getWatchProgressContext = () => animeInfo;
   // Bumped by every init(). Async work started on one episode checks it before touching shared state.
   let navigationGeneration = 0;
   let navigationDebounceTimeout = null;
@@ -442,7 +444,7 @@
 
   async function persistDepartedCompletion(info, duration) {
     try {
-      const result = await chrome.runtime.sendMessage({ type: "TRACK_BEFORE_UNLOAD", animeInfo: info, duration });
+      const result = await chrome.runtime.sendMessage({ type: "TRACK_BEFORE_UNLOAD", animeInfo: info, duration, sync: true });
       if (result?.success === false) throw new Error(result.error || "Background completion failed");
     } catch (error) {
       AT.Logger.warn("Previous episode completion failed:", error);
@@ -614,20 +616,11 @@
     handleTimeUpdateSettled();
   };
 
-  const requestProgressSync = (force = false) => {
-    try {
-      chrome.runtime.sendMessage({ type: "SYNC_PROGRESS_ONLY", force }, () => {
-        void chrome.runtime.lastError;
-      });
-    } catch {}
-  };
-
   const handlePause = () => {
     const { ProgressTracker, VideoMonitor } = AT;
     const videoElement = VideoMonitor.getVideoElement();
     if (animeInfo && trackingState !== TrackingState.COMPLETED && videoElement && videoElement.currentTime > 0) {
-      ProgressTracker.saveVideoProgress(animeInfo.uniqueId, videoElement.currentTime, videoElement.duration, true, false);
-      requestProgressSync();
+      ProgressTracker.saveVideoProgress(animeInfo.uniqueId, videoElement.currentTime, videoElement.duration, true, true);
     }
   };
 
@@ -710,7 +703,6 @@
             `Visibility change: only ${Math.round(accumulatedPlaybackSeconds)}s of real playback (need ${minWatch}s), saving progress instead`,
           );
           ProgressTracker.saveVideoProgress(animeInfo.uniqueId, currentTime, duration, true, true);
-          requestProgressSync();
           return;
         }
         trackingState = TrackingState.TRACKING;
@@ -739,7 +731,6 @@
         }
       } else {
         ProgressTracker.saveVideoProgress(animeInfo.uniqueId, currentTime, duration, true, true);
-        requestProgressSync();
       }
     }
   };
@@ -774,6 +765,7 @@
         chrome.runtime.sendMessage(
           {
             type: "TRACK_BEFORE_UNLOAD",
+            sync: true,
             animeInfo: {
               animeSlug: animeInfo.animeSlug,
               animeTitle: animeInfo.animeTitle,
@@ -794,15 +786,8 @@
           },
         );
       } catch {}
-
-      try {
-        chrome.runtime.sendMessage({ type: "SYNC_TO_FIREBASE_IMMEDIATE" }, () => {
-          void chrome.runtime.lastError;
-        });
-      } catch {}
     } else {
-      ProgressTracker.saveVideoProgress(animeInfo.uniqueId, currentTime, duration, true, true);
-      requestProgressSync(true);
+      ProgressTracker.saveVideoProgress(animeInfo.uniqueId, currentTime, duration, true, true, { forceSync: true });
     }
   };
 
@@ -1365,7 +1350,7 @@
       lastUrl = location.href;
 
       if (_isWatchPath(previousUrl)) {
-        trackImmediately();
+        handleBeforeUnload();
       }
       teardownWatchPage();
       if (!_isWatchPath(location.href)) return;

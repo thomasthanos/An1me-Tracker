@@ -32,7 +32,7 @@ function setupIcons(buildDir = path.join(ROOT, "build")) {
 
   const requiredFiles = ["AppIcon-light.png", "AppIcon-dark.png", "AppIcon-tinted.png", "Contents.json"];
   for (const iconSet of iconSets) {
-    console.log(`[setup-ios-icons] Configuring iOS 18 adaptive icons in: ${iconSet}`);
+    console.log(`[setup-ios-icons] Configuring iOS adaptive icons in: ${iconSet}`);
     for (const file of requiredFiles) {
       const src = path.join(ICONS_SRC, file);
       const dest = path.join(iconSet, file);
@@ -40,6 +40,28 @@ function setupIcons(buildDir = path.join(ROOT, "build")) {
         fs.copyFileSync(src, dest);
       } else {
         console.warn(`[setup-ios-icons] Warning: ${src} not found.`);
+      }
+    }
+
+    // Also populate standard legacy icon filenames in the target Resources/ directory
+    // so SideStore and iOS file-based icon loaders find the dark icon immediately.
+    const parentDir = path.dirname(iconSet); // Assets.xcassets
+    const targetDir = path.dirname(parentDir); // target folder
+    const fallbackDirs = [targetDir, path.join(targetDir, "Resources")].filter(d => fs.existsSync(d));
+    const fallbackNames = [
+      "AppIcon.png",
+      "AppIcon60x60.png",
+      "AppIcon60x60@2x.png",
+      "AppIcon60x60@3x.png",
+      "AppIcon76x76@2x~ipad.png",
+      "Icon.png",
+    ];
+    const darkSrc = path.join(ICONS_SRC, "AppIcon-dark.png");
+    if (fs.existsSync(darkSrc)) {
+      for (const dir of fallbackDirs) {
+        for (const name of fallbackNames) {
+          fs.copyFileSync(darkSrc, path.join(dir, name));
+        }
       }
     }
   }

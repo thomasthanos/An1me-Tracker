@@ -385,6 +385,9 @@
       if (!!ap?.deleted !== !!bp?.deleted) return false;
       if (getSafeString(ap?.savedAt) !== getSafeString(bp?.savedAt)) return false;
       if (getSafeString(ap?.deletedAt) !== getSafeString(bp?.deletedAt)) return false;
+      if (getSafeString(ap?.rewoundAt) !== getSafeString(bp?.rewoundAt)) return false;
+      if (getSafeString(ap?.sampleSession) !== getSafeString(bp?.sampleSession)) return false;
+      if (getSafeNumber(Number(ap?.sampleSequence)) !== getSafeNumber(Number(bp?.sampleSequence))) return false;
     }
 
     return true;
@@ -501,15 +504,37 @@
       return pickDeterministicValue(a, b);
     }
 
+    // Samples from one player have an explicit order, including a deliberate Start over.
+    // Across players, that restart supersedes progress saved before it; ordinary lower
+    // progress still cannot rewind another device's newer position.
+    const aRewindAt = toMillis(a.rewoundAt);
+    const bRewindAt = toMillis(b.rewoundAt);
+    const retainRestart = chosen => {
+      // A later sample on another device may win. Carry the restart boundary so
+      // a subsequent merge cannot revive progress from before that restart.
+      const newestRewindAt = Math.max(aRewindAt, bRewindAt);
+      if (newestRewindAt > toMillis(chosen.rewoundAt)) {
+        return { ...chosen, rewoundAt: aRewindAt > bRewindAt ? a.rewoundAt : b.rewoundAt };
+      }
+      return chosen;
+    };
+    if (a.sampleSession && a.sampleSession === b.sampleSession) {
+      const aSequence = getSafeNumber(Number(a.sampleSequence));
+      const bSequence = getSafeNumber(Number(b.sampleSequence));
+      if (aSequence !== bSequence) return retainRestart(aSequence > bSequence ? a : b);
+    }
+    if (aRewindAt > bRewindAt && aRewindAt > getActiveProgressTimestamp(b)) return a;
+    if (bRewindAt > aRewindAt && bRewindAt > getActiveProgressTimestamp(a)) return b;
+
     const aCurrentTime = getSafeNumber(Number(a.currentTime));
     const bCurrentTime = getSafeNumber(Number(b.currentTime));
-    if (aCurrentTime !== bCurrentTime) return aCurrentTime > bCurrentTime ? a : b;
+    if (aCurrentTime !== bCurrentTime) return retainRestart(aCurrentTime > bCurrentTime ? a : b);
 
     const aSavedAt = getActiveProgressTimestamp(a);
     const bSavedAt = getActiveProgressTimestamp(b);
-    if (aSavedAt !== bSavedAt) return aSavedAt > bSavedAt ? a : b;
+    if (aSavedAt !== bSavedAt) return retainRestart(aSavedAt > bSavedAt ? a : b);
 
-    return pickDeterministicValue(a, b);
+    return retainRestart(pickDeterministicValue(a, b));
   }
 
   function removeDeletedProgress(videoProgress, deletedAnime) {
@@ -1114,7 +1139,7 @@
     applyDeletedAnime,
     removeDeletedProgress,
     // The one rule for choosing between two progress entries for the same key (tombstones first, then
-    // position, then time). Exported so migrations stop reimplementing it without tombstone handling.
+    // explicit restarts/sample order, then position and time). Exported so migrations share it.
     selectProgressEntry,
     cleanTrackedProgress,
     mergeGroupCoverImages,

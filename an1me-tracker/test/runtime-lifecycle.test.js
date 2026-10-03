@@ -25,7 +25,7 @@ function page(url = "https://an1me.to/watch/naruto-episode-1") {
       getVideoElement: () => null, startWatching: (_, handlers) => { starts++; AT.lastHandlers = handlers; } },
     PlayerObserver: { stop: () => playerStops++, start: empty, getVideo: () => null, on: () => empty },
     PlayerDom: { documents: () => [doc], findVideo: () => null, findAnyVideo: () => null },
-    ProgressTracker: { reset: empty, isEpisodeTracked: async () => false }, Notifications: { cleanup: empty },
+    ProgressTracker: { reset: empty, saveVideoProgress: empty, isEpisodeTracked: async () => false }, Notifications: { cleanup: empty },
     PageEvents: { onStorage: () => empty, observe() { const token = {}; observers.add(token); return () => observers.delete(token); } },
     SkiptimeHelper: { unmount: empty, mount: empty },
   };
@@ -42,6 +42,30 @@ function page(url = "https://an1me.to/watch/naruto-episode-1") {
     navigate(path) { location.href = "https://an1me.to" + path; win.dispatchEvent(new Event("at:locationchange")); } };
 }
 (async () => {
+  await test("SPA navigation hands off partial progress with the departed episode identity before teardown", async () => {
+    const h = page(), saved = [];
+    const original = { animeSlug: "naruto", episodeNumber: 1, uniqueId: "naruto__episode-1", url: h.location.href, coverImage: "naruto.jpg" };
+    h.AT.AnimeParser.extractAnimeInfo = () => original;
+    h.AT.Storage = { mutate: async () => ({}) };
+    h.AT.ProgressTracker.shouldMarkComplete = () => false;
+    h.AT.ProgressTracker.saveVideoProgress = (...args) => saved.push({ args, context: h.AT.getWatchProgressContext() });
+    h.load("src/content/main.js"); await h.init();
+    h.AT.VideoMonitor.getVideoElement = () => ({ currentTime: 200, duration: 1200 });
+    h.navigate("/watch/bleach-episode-5");
+    assert.equal(saved.length, 1); assert.equal(saved[0].args[0], "naruto__episode-1");
+    assert.equal(saved[0].args[1], 200); assert.equal(saved[0].args[4], true);
+    assert.equal(saved[0].context.url, "https://an1me.to/watch/naruto-episode-1");
+    assert.equal(h.AT.getWatchProgressContext(), null);
+  });
+  await test("pause hands off its latest sample without requesting cloud sync before persistence", async () => {
+    const h = page(), saved = [];
+    h.AT.ProgressTracker.saveVideoProgress = (...args) => saved.push(args);
+    h.load("src/content/main.js"); await h.init();
+    h.AT.VideoMonitor.getVideoElement = () => ({ currentTime: 110, duration: 1200 });
+    h.AT.lastHandlers.handlePause();
+    assert.equal(saved.length, 1); assert.equal(saved[0][1], 110); assert.equal(saved[0][4], true);
+    assert.equal(h.messages.filter(m => m.type === "SYNC_PROGRESS_ONLY").length, 0);
+  });
   await test("leaving a watch route immediately releases player, page timers and observers", async () => {
     const h = page(); h.load("src/content/main.js"); await h.init(); assert.equal(h.starts(), 1);
     const before = h.stops(); h.navigate("/anime/naruto/");

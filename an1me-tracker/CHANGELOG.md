@@ -7,6 +7,25 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.4] — 2026-10-03
+
+### Fixed
+
+- Progress captures the episode URL, cover and site ID before deferred or queued writes. Old
+  saves cannot pick up the next episode's identity or suppress its watchlist sync. Valid watch
+  pages also repair resume links corrupted by earlier versions.
+- Pause, navigation and Safari unload hand the latest progress to a background transaction
+  before page cleanup. An older in-flight save, including Start over, cannot replace a newer
+  sample. Completed episodes stay protected against late resume-point writes.
+- Start over survives synchronization with older cloud progress. An explicit restart and
+  sample order take precedence over stale positions, while ordinary progress stays forward-only.
+- Pause and unload cloud sync starts after persistence, including unchanged samples. Unload
+  completion requests full sync after its transaction instead of racing the completion write.
+- Failed import startup leaves a closable error report. Lost responses reconcile the real
+  running, completed or failed job without overwriting its persisted state.
+- Repeating Fetch during service backoff retains Needs retry counts and original failure
+  details. Prior usable metadata remains available, and backoff still prevents request storms.
+
 ## [7.5.3] — 2026-10-03
 
 ### Fixed

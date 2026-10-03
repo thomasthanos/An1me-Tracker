@@ -199,6 +199,10 @@ function countMetadataRepairOutcome(logEntry) {
   return base;
 }
 
+function metadataBackoffResult(entry, fallbackError) {
+  return { status: "failed", entry, error: entry.retryError || entry.error || fallbackError };
+}
+
 async function buildLibraryRepairPlan(animeData, options = {}) {
   const forceInfoRefresh = options.forceInfoRefresh === true;
   const forceFillerRefresh = options.forceFillerRefresh === true;
@@ -221,6 +225,7 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
   let processed = 0;
   let cached = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const [slug, anime] of entries) {
     if (isMobile) {
@@ -253,9 +258,13 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
     const needsFiller = !movieLike && !hasFreshFiller;
 
     if (!needsInfo && !needsFiller) {
-      const infoResult = infoEntry?.notFound ? { status: "unavailable", entry: infoEntry } : { status: "cached", entry: infoEntry };
+      const infoResult = infoEntry?.retryable
+        ? metadataBackoffResult(infoEntry, "Metadata refresh waiting to retry")
+        : infoEntry?.notFound ? { status: "unavailable", entry: infoEntry } : { status: "cached", entry: infoEntry };
       const fillerResult = movieLike
         ? { status: "movie" }
+        : fillerEntry?.retryable
+          ? metadataBackoffResult(fillerEntry, "Filler refresh waiting to retry")
         : fillerEntry?.notFound
           ? { status: "nofill", entry: fillerEntry }
           : {
@@ -266,12 +275,12 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
             };
 
       processed++;
-      if (movieLike || fillerEntry?.notFound) {
-        skipped++;
-      } else {
-        cached++;
-      }
-      logs = appendMetadataRepairLog(logs, buildMetadataRepairLog(slug, anime?.title || slug, infoResult, fillerResult));
+      const log = buildMetadataRepairLog(slug, anime?.title || slug, infoResult, fillerResult);
+      const outcome = countMetadataRepairOutcome(log);
+      cached += outcome.cached;
+      skipped += outcome.skipped;
+      failed += outcome.failed;
+      logs = appendMetadataRepairLog(logs, log);
       continue;
     }
 
@@ -289,6 +298,7 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
     processed,
     cached,
     skipped,
+    failed,
     logs,
     items,
     queueIndex: 0,
@@ -306,6 +316,7 @@ async function repairAnimeInfoCacheUncoalesced(slug, forceRefresh = true) {
   const cached = stored[key];
 
   if (!forceRefresh && isAnimeInfoCacheFresh(cached)) {
+    if (cached?.retryable) return metadataBackoffResult(cached, "Metadata refresh waiting to retry");
     return cached?.notFound ? { status: "unavailable", entry: cached } : { status: "cached", entry: cached };
   }
 
@@ -360,7 +371,7 @@ async function repairAnimeInfoCacheUncoalesced(slug, forceRefresh = true) {
     // Transient failure (timeout/5xx): cache a short retryable backoff so a giant page (e.g. One Piece) isn't re-scraped every sweep. Keep prior data if any.
     const backoffEntry =
       cached && typeof cached === "object"
-        ? { ...cached, retryable: true, retryAt: Date.now() }
+        ? { ...cached, retryable: true, retryAt: Date.now(), retryError: String(error?.message || "") }
         : { error: message, retryable: true, retryAt: Date.now(), cachedAt: Date.now() };
     await bgStorageSet({ [key]: backoffEntry });
     throw error;
@@ -439,6 +450,7 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
   }
 
   if (!forceRefresh && isEpisodeTypesCacheFresh(cached, info)) {
+    if (cached?.retryable) return metadataBackoffResult(cached, "Filler refresh waiting to retry");
     return cached?.notFound
       ? { status: "nofill", entry: cached }
       : {
@@ -520,7 +532,7 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
     // and stays usable/displayable during the backoff window.
     const backoffEntry =
       cached && typeof cached === "object"
-        ? { ...cached, retryable: true, retryAt: Date.now() }
+        ? { ...cached, retryable: true, retryAt: Date.now(), retryError: String(error?.message || "") }
         : {
             error: String(error?.message || ""),
             retryable: true,
@@ -540,7 +552,7 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
     if (aflParseEmpty) {
       const backoffEntry =
         cached && typeof cached === "object"
-          ? { ...cached, retryable: true, retryAt: Date.now() }
+          ? { ...cached, retryable: true, retryAt: Date.now(), retryError: "animefillerlist_parse_empty" }
           : {
               error: "animefillerlist_parse_empty",
               retryable: true,
@@ -864,7 +876,7 @@ async function startLibraryRepair(options = {}) {
     fetched: 0,
     cached: plan.cached,
     skipped: plan.skipped,
-    failed: 0,
+    failed: plan.failed,
     currentSlug: plan.items[0]?.slug || null,
     currentTitle: plan.items[0]?.title || null,
     items: plan.items,
@@ -1055,7 +1067,7 @@ async function ensureLibraryFresh(prioritySlugs = []) {
     fetched: 0,
     cached: plan.cached,
     skipped: plan.skipped,
-    failed: 0,
+    failed: plan.failed,
     currentSlug: plan.items[0]?.slug || null,
     currentTitle: plan.items[0]?.title || null,
     items: plan.items,

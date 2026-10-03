@@ -9,6 +9,9 @@ const ProgressTracker = {
   pendingSeekSave: null,
   seekSaveTimeout: null,
   seekSaveDueAt: 0,
+  _generation: 0,
+  _sampleSequence: 0,
+  _sampleSession: null,
   MAX_REASONABLE_DURATION_SECONDS: 6 * 60 * 60,
 
   _vpCache: null,
@@ -207,7 +210,7 @@ const ProgressTracker = {
       saveTask.retryCount = saveTask.retryCount || 0;
 
       try {
-        await this.performSaveProgress(saveTask.uniqueId, saveTask.currentTime, saveTask.duration);
+        await this.performSaveProgress(saveTask.uniqueId, saveTask.currentTime, saveTask.duration, saveTask.context);
         consecutiveFailures = 0;
       } catch (e) {
         Logger.error("Failed to save progress from queue:", e);
@@ -231,7 +234,54 @@ const ProgressTracker = {
     this.isProcessingQueue = false;
   },
 
-  async performSaveProgress(uniqueId, currentTime, duration) {
+  captureProgressContext(uniqueId) {
+    const AT = window.AnimeTrackerContent;
+    const info = AT.getWatchProgressContext?.();
+    const matchingInfo = info?.uniqueId === uniqueId ? info : null;
+    const id = uniqueId?.match(/^(.+)__episode-(\d+)$/);
+    const expectedPage = id ? `${id[1]}-episode-${id[2]}` : "";
+    let path = "";
+    try {
+      const pathname = matchingInfo?.url ? new URL(matchingInfo.url).pathname : window.location?.pathname || "";
+      path = pathname.match(/\/watch\/([^/?#]+)/)?.[1] || "";
+    } catch {}
+    const samePage = !!matchingInfo || path === expectedPage;
+    const canReadPage = samePage && (!matchingInfo?.url || matchingInfo.url === window.location?.href);
+    this._sampleSession ||= `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    return {
+      generation: this._generation,
+      sampleSession: this._sampleSession,
+      sampleSequence: ++this._sampleSequence,
+      coverImage: matchingInfo?.coverImage || (canReadPage ? AT.AnimeParser?.extractCoverImage?.() : null),
+      siteAnimeId: matchingInfo?.siteAnimeId || (canReadPage ? AT.AnimeParser?.extractSiteAnimeId?.() : null),
+      // null means a known canonical URL; undefined means page identity is unavailable.
+      pagePath: samePage && path ? (path !== expectedPage ? path : null) : undefined,
+      allowRewind: this._rewindAllowedFor === uniqueId,
+      rewoundAt: this._rewindAllowedFor === uniqueId ? new Date(Date.now()).toISOString() : null,
+    };
+  },
+
+  async syncProgressWatchlist(uniqueId, currentTime, context) {
+    if (context.generation !== this._generation || this._watchlistSynced || currentTime < 120) return;
+    const { Storage, Logger, WatchlistSync } = window.AnimeTrackerContent;
+    if (!WatchlistSync) return;
+    try {
+      const slug = uniqueId.match(/^(.+)__episode-\d+$/)?.[1];
+      if (!slug) return;
+      const result = await Storage.get(["animeData"]);
+      if (context.generation !== this._generation || Storage.isAbortResult(result)) return;
+      const entry = result.animeData?.[slug] || null;
+      const siteId = entry?.siteAnimeId || context.siteAnimeId;
+      if (siteId) {
+        WatchlistSync.syncFromStorage(siteId, slug, { fallbackType: WatchlistSync.getProgressFallbackType(entry, slug) });
+        this._watchlistSynced = true;
+      }
+    } catch (error) {
+      Logger.warn("Watchlist sync failed, will retry on next save:", error);
+    }
+  },
+
+  async performSaveProgress(uniqueId, currentTime, duration, context = this.captureProgressContext(uniqueId)) {
     const { CONFIG, Storage, Logger } = window.AnimeTrackerContent;
 
     if (!Storage.isContextValid()) {
@@ -242,7 +292,7 @@ const ProgressTracker = {
       if (this.saveQueue.length >= CONFIG.MAX_SAVE_QUEUE_SIZE) {
         this.saveQueue.shift();
       }
-      this.saveQueue.push({ uniqueId, currentTime, duration, retryCount: 0 });
+      this.saveQueue.push({ uniqueId, currentTime, duration, context, retryCount: 0 });
       return;
     }
 
@@ -286,7 +336,7 @@ const ProgressTracker = {
         }
         videoProgress = vpCacheHit ? this._vpCache : result.videoProgress || {};
         animeData = adCacheHit ? this._adCache : result.animeData || {};
-        if (!adCacheHit) {
+        if (!adCacheHit && context.generation === this._generation) {
           this._adCache = animeData;
           this._adCacheTime = now;
         }
@@ -309,7 +359,7 @@ const ProgressTracker = {
       const newDuration = Math.floor(duration);
       const newPercentage = Math.floor((currentTime / duration) * 100);
 
-      const rewinding = this._rewindAllowedFor === uniqueId;
+      const rewinding = context.allowRewind === true;
 
       if (existingProgress && !rewinding && existingProgress.currentTime > newCurrentTime) {
         return;
@@ -325,18 +375,8 @@ const ProgressTracker = {
         return;
       }
 
-      const detectedCoverImage = !existingProgress?.coverImage ? window.AnimeTrackerContent.AnimeParser.extractCoverImage() : existingProgress.coverImage;
-
-      let pagePath = existingProgress?.pagePath;
-      try {
-        const pathMatch = (window.location?.pathname || "").match(/\/watch\/([^/?#]+)/);
-        const currentPathSlug = pathMatch ? pathMatch[1] : "";
-        const idMatch = uniqueId.match(/^(.+)__episode-(\d+)$/);
-        if (currentPathSlug && idMatch) {
-          const defaultPathSlug = `${idMatch[1]}-episode-${idMatch[2]}`;
-          pagePath = currentPathSlug === defaultPathSlug ? undefined : currentPathSlug;
-        }
-      } catch {}
+      const detectedCoverImage = context.coverImage;
+      const pagePath = context.pagePath;
 
       let progressSaved = false;
       const applyProgressUpdate = (data, pruneForQuota = false) => {
@@ -350,6 +390,9 @@ const ProgressTracker = {
         latestProgress = this.cleanVideoProgress(latestProgress, uniqueId);
 
         const latestExisting = latestProgress[uniqueId];
+        // Both the worker handoff and this writer preserve sample order. In particular,
+        // an older start-over write must not rewind a newer pause/unload sample again.
+        if (latestExisting?.sampleSession === context.sampleSession && latestExisting.sampleSequence > context.sampleSequence) return false;
         if (latestExisting && !rewinding && latestExisting.currentTime > newCurrentTime) {
           videoProgress = latestProgress;
           data.videoProgress = latestProgress;
@@ -374,7 +417,10 @@ const ProgressTracker = {
           percentage: newPercentage,
           watchedAt: latestExisting?.watchedAt || nowIso,
           coverImage: latestExisting?.coverImage || detectedCoverImage || undefined,
-          pagePath: pagePath || latestExisting?.pagePath || undefined,
+          pagePath: pagePath !== undefined ? pagePath || undefined : latestExisting?.pagePath,
+          sampleSession: context.sampleSession,
+          sampleSequence: context.sampleSequence,
+          rewoundAt: context.rewoundAt || latestExisting?.rewoundAt || undefined,
         };
         if (pruneForQuota) latestProgress = this._emergencyPruneProgress(latestProgress, uniqueId);
         data.videoProgress = latestProgress;
@@ -401,35 +447,14 @@ const ProgressTracker = {
       }
       if (!progressSaved) return;
       // The one deliberate rewind has been saved; normal forward-only saving resumes.
-      if (rewinding) this._rewindAllowedFor = null;
-      this._vpCache = videoProgress;
-      this._vpCacheTime = Date.now();
+      if (context.generation === this._generation) {
+        if (rewinding) this._rewindAllowedFor = null;
+        this._vpCache = videoProgress;
+        this._vpCacheTime = Date.now();
+      }
       Logger.debug(`Progress saved: ${uniqueId} → ${videoProgress[uniqueId].percentage}% (${newCurrentTime}s/${Math.floor(duration)}s)`);
 
-      if (!this._watchlistSynced && newCurrentTime >= 120) {
-        try {
-          const { WatchlistSync } = window.AnimeTrackerContent;
-          if (WatchlistSync) {
-            const slugMatch = uniqueId.match(/^(.+)__episode-\d+$/);
-            const slug = slugMatch ? slugMatch[1] : null;
-            if (slug) {
-              const adResult = await Storage.get(["animeData"]);
-              const ad = adResult.animeData || {};
-              const entry = ad[slug] || null;
-              const siteId = ad[slug]?.siteAnimeId;
-              const pageId = siteId || window.AnimeTrackerContent.AnimeParser?.extractSiteAnimeId?.();
-              if (pageId) {
-                WatchlistSync.syncFromStorage(pageId, slug, {
-                  fallbackType: WatchlistSync.getProgressFallbackType(entry, slug),
-                });
-              }
-            }
-          }
-          this._watchlistSynced = true;
-        } catch (err) {
-          Logger.warn("Watchlist sync failed, will retry on next save:", err);
-        }
-      }
+      await this.syncProgressWatchlist(uniqueId, newCurrentTime, context);
     } catch (e) {
       if (e?.message?.includes("Extension context invalidated")) {
         Logger.debug("Save aborted: extension context invalidated");
@@ -447,7 +472,7 @@ const ProgressTracker = {
     }
   },
 
-  saveVideoProgress(uniqueId, currentTime, duration, force = false, urgent = false) {
+  saveVideoProgress(uniqueId, currentTime, duration, force = false, urgent = false, options = {}) {
     const { CONFIG, Logger } = window.AnimeTrackerContent;
 
     if (currentTime < CONFIG.MIN_PROGRESS_TO_SAVE) return;
@@ -458,6 +483,7 @@ const ProgressTracker = {
 
     const outroStartSec = window.AnimeTrackerContent?.getCachedOutroStartSec?.() || null;
     if (!force && this.shouldMarkComplete(currentTime, duration, outroStartSec)) return;
+    const context = this.captureProgressContext(uniqueId);
 
     const now = Date.now();
     const regularThrottleMs = Math.max(5000, Number(CONFIG.PROGRESS_WRITE_THROTTLE_MS) || 45000);
@@ -465,7 +491,7 @@ const ProgressTracker = {
     const throttleMs = !force ? regularThrottleMs : pauseThrottleMs;
 
     if (!urgent && now - this.lastSaveTime < throttleMs) {
-      this.pendingSeekSave = { uniqueId, currentTime, duration, urgent };
+      this.pendingSeekSave = { uniqueId, currentTime, duration, context };
       const dueAt = this.lastSaveTime + throttleMs;
       // Replace the sample, not its deadline. Playback ticks used to restart a full 45-second
       // delay every five seconds, indefinitely postponing the write while playback continued.
@@ -478,7 +504,7 @@ const ProgressTracker = {
         this.seekSaveTimeout = null;
         this.seekSaveDueAt = 0;
         if (!this.pendingSeekSave) return;
-        const { uniqueId: id, currentTime: time, duration: dur } = this.pendingSeekSave;
+        const { uniqueId: id, currentTime: time, duration: dur, context: savedContext } = this.pendingSeekSave;
         this.pendingSeekSave = null;
         // Re-run the guards instead of recursing with force=true, which would also skip
         // the visibility and completion checks and could write progress for an episode
@@ -489,7 +515,7 @@ const ProgressTracker = {
         this.lastSavedProgress.set(id, time);
         this.lastSaveTime = Date.now();
         this.cleanLastSavedProgress();
-        this.performSaveProgress(id, time, dur).catch((e) => {
+        this.performSaveProgress(id, time, dur, savedContext).catch((e) => {
           Logger.error("Save failed", e);
         });
       }, Math.max(0, dueAt - now));
@@ -510,7 +536,26 @@ const ProgressTracker = {
     const pct = Math.floor((currentTime / duration) * 100);
     Logger.progress(uniqueId, pct, Math.floor(currentTime));
 
-    this.performSaveProgress(uniqueId, currentTime, duration).catch((e) => {
+    if (urgent && typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+      // Send before any await or content save queue. The worker owns this accepted
+      // sample even when Safari freezes the page or navigation immediately resets us.
+      try {
+        chrome.runtime.sendMessage({ type: "SAVE_PROGRESS_BEFORE_UNLOAD", uniqueId, currentTime, duration,
+          context, sync: options.sync !== false, forceSync: options.forceSync === true }, response => {
+          const error = chrome.runtime.lastError;
+          if (error || !response?.success) {
+            this.performSaveProgress(uniqueId, currentTime, duration, context).catch(e => Logger.error("Urgent save failed", e));
+          } else if (response.saved) {
+            void this.syncProgressWatchlist(uniqueId, currentTime, context);
+          }
+        });
+        this._vpCache = null;
+        this._vpCacheTime = 0;
+        if (context.allowRewind) this._rewindAllowedFor = null;
+        return;
+      } catch {}
+    }
+    this.performSaveProgress(uniqueId, currentTime, duration, context).catch((e) => {
       Logger.error("Save failed", e);
     });
   },
@@ -774,6 +819,7 @@ const ProgressTracker = {
   },
 
   reset() {
+    this._generation++;
     if (this.seekSaveTimeout) {
       clearTimeout(this.seekSaveTimeout);
       this.seekSaveTimeout = null;
@@ -781,8 +827,8 @@ const ProgressTracker = {
     this.pendingSeekSave = null;
     this.seekSaveDueAt = 0;
     this.saveQueue = [];
-    this.isProcessingQueue = false;
-    this.saveInProgress = false;
+    // An accepted write may still be running. Keep its lock until its finally block
+    // releases it, so the next page cannot start a competing local writer.
     this.lastSavedProgress.clear();
     this.lastSaveTime = 0;
     this._vpCache = null;
@@ -790,6 +836,7 @@ const ProgressTracker = {
     this._adCache = null;
     this._adCacheTime = 0;
     this._watchlistSynced = false;
+    this._rewindAllowedFor = null;
   },
 };
 

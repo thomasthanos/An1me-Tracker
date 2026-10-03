@@ -40,11 +40,10 @@ test("source describes the built app and its release download", () => {
 
   const versionReleaseNotes =
     "v9.3.1 (Build 77):\n" +
+    "• Complete dark aesthetic: All app icons, fallback bundles and SideStore screens now use the dark liquid glass logo.\n" +
     "• Resolved iOS Safari popup sheet detent layout and overflow issues.\n" +
     "• Fixed image flickering and DOM reloading in Continue Watching during library fetches.\n" +
-    "• Graceful handling of Jikan 504 gateway timeouts and rate limits (no false errors).\n" +
-    "• Enhanced mobile video progress persistence with iOS Page Lifecycle freeze and fullscreen exit handlers.\n" +
-    "• Dark premium icon and improved SideStore description.";
+    "• Enhanced mobile video progress persistence with iOS Page Lifecycle freeze and fullscreen exit handlers.";
 
   assert.deepEqual(source.apps[0], {
     name: "Example Tracker",

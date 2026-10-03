@@ -92,6 +92,9 @@ jobs:
           ipa="An1meTracker-${{ steps.meta.outputs.version }}.ipa"
           mkdir -p build/ipa/Payload
           cp -R "$app" build/ipa/Payload/
+          for icon_name in AppIcon.png AppIcon60x60.png AppIcon60x60@2x.png AppIcon60x60@3x.png AppIcon76x76@2x~ipad.png Icon.png; do
+            cp "src/icons/ios/AppIcon-dark.png" "build/ipa/Payload/${app##*/}/$icon_name"
+          done
           (cd build/ipa && zip -qry "../$ipa" Payload)
           echo "file=build/$ipa" >> "$GITHUB_OUTPUT"
           echo "name=$ipa" >> "$GITHUB_OUTPUT"

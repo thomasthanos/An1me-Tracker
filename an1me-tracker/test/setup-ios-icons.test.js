@@ -22,7 +22,7 @@ test("setupIcons copies iOS adaptive icons and Contents.json into AppIcon.appico
 
     const contents = JSON.parse(fs.readFileSync(path.join(mockAppIconSet, "Contents.json"), "utf8"));
     assert.equal(contents.images.length, 3);
-    assert.equal(contents.images[0].filename, "AppIcon-light.png");
+    assert.equal(contents.images[0].filename, "AppIcon-dark.png");
     assert.equal(contents.images[1].filename, "AppIcon-dark.png");
     assert.equal(contents.images[2].filename, "AppIcon-tinted.png");
   } finally {
