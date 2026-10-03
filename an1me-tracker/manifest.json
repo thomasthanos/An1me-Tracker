@@ -87,6 +87,7 @@
         "https://*.an1me.to/*"
       ],
       "js": [
+        "src/common/utils.js",
         "src/content/lib/page-events.js",
         "src/content/page/copy-guard.js"
       ],
