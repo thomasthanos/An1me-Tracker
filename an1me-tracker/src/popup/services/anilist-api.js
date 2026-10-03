@@ -526,12 +526,17 @@
       const avatar = _auth?.viewer?.avatar || "";
       const avatarImg = avatar ? `<img id="anilistAvatar" src="${escapeHtml(avatar)}" alt="">` : "";
 
+      const isMobile = typeof window.AnimeTrackerUtils !== "undefined" && typeof window.AnimeTrackerUtils.isMobileDevice === "function"
+        ? window.AnimeTrackerUtils.isMobileDevice()
+        : !canLoginHere();
+      const subText = isMobile ? "Auto-sync paused (mobile)" : "Auto-sync enabled";
+
       return `
                 <div class="anilist-head">
                     <div class="anilist-avatar"><span>${initial}</span>${avatarImg}</div>
                     <div class="anilist-head-text">
                         <span class="anilist-head-name">${name}</span>
-                        <span class="anilist-head-sub">Auto-sync enabled</span>
+                        <span class="anilist-head-sub">${subText}</span>
                     </div>
                     <div class="anilist-status anilist-status--inline" id="anilistStatus"></div>
                 </div>
@@ -694,11 +699,29 @@
       return;
     }
 
+    const isMobile = typeof window.AnimeTrackerUtils !== "undefined" && typeof window.AnimeTrackerUtils.isMobileDevice === "function"
+      ? window.AnimeTrackerUtils.isMobileDevice()
+      : !canLoginHere();
+
+    if (st && (st.state === "paused" || st.paused === true)) {
+      setStatus("Auto-sync paused on mobile · PC updates AniList", "paused");
+      return;
+    }
+
     if (st && st.state === "idle") {
       const when = st.finishedAt ? window.AnimeTracker.UIHelpers.formatTimeAgo(st.finishedAt) : "";
       const updated = Number.isFinite(Number(st.ok)) ? Number(st.ok) : 0;
       const bits = [when, `${updated} updated`].filter(Boolean);
-      setStatus(`Last sync · ${bits.join(" · ")}`, "ok");
+      if (isMobile) {
+        setStatus(bits.length ? `Last manual sync · ${bits.join(" · ")}` : "Auto-sync paused on mobile · PC updates AniList", bits.length ? "ok" : "paused");
+      } else {
+        setStatus(`Last sync · ${bits.join(" · ")}`, "ok");
+      }
+      return;
+    }
+
+    if (isMobile) {
+      setStatus("Auto-sync paused on mobile · PC updates AniList", "paused");
       return;
     }
 

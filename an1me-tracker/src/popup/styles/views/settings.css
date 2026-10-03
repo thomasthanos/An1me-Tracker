@@ -898,6 +898,18 @@
 
 #settingsView #anilistCard .anilist-status[data-kind="warn"]::before{ background: #ffc157; box-shadow: 0 0 0 3px rgba(255, 193, 87, 0.15); }
 
+#settingsView #anilistCard .anilist-status[data-kind="paused"] {
+  padding: 5px 10px 5px 24px;
+  border: 1px solid rgba(147, 166, 192, 0.28);
+  background: linear-gradient(135deg, rgba(147, 166, 192, 0.10), rgba(20, 30, 48, 0.20));
+  color: #c4d3eb;
+}
+
+#settingsView #anilistCard .anilist-status[data-kind="paused"]::before {
+  background: #9db0cc;
+  box-shadow: 0 0 0 3px rgba(147, 166, 192, 0.18);
+}
+
 #settingsView #anilistCard .anilist-actions-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;

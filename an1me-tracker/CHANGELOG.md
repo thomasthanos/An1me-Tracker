@@ -7,6 +7,18 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.8] — 2026-10-03
+
+### Changed
+
+- Centralized AniList automatic updates on PC / desktop: automatic background sync and push
+  alarms are paused on mobile devices, preventing unnecessary mobile network calls and battery drain.
+- Watch progress saved on mobile syncs to Firebase Cloud, and PC automatically pushes the updates
+  to AniList when active.
+- Mobile Settings card clearly reflects the paused status ("Auto-sync paused (mobile) · PC updates AniList"),
+  while keeping manual "Sync now" available for explicit on-demand pushes.
+- Preserved all settings preferences and toggles completely intact.
+
 ## [7.5.7] — 2026-10-03
 
 ### Fixed

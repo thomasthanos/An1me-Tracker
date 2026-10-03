@@ -242,6 +242,12 @@
   color:#ffd093;
   white-space:normal;
 }
+#anilistCard .anilist-status[data-kind="paused"] {
+  border-color:rgba(147,166,192,0.25);
+  background:rgba(147,166,192,0.07);
+  color:#c4d3eb;
+  white-space:normal;
+}
 
 #anilistCard .anilist-actions-row {
   display:flex; gap:8px; align-items:center;

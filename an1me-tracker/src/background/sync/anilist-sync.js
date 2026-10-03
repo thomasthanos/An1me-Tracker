@@ -17,7 +17,14 @@
 
   function writeStatus(obj) { return bgStorageSet({ [STATUS_KEY]: { ...obj, updatedAt: Date.now() } }); }
 
+  function isMobile() {
+    return typeof self.AnimeTrackerUtils !== "undefined" &&
+      typeof self.AnimeTrackerUtils.isMobileDevice === "function" &&
+      self.AnimeTrackerUtils.isMobileDevice();
+  }
+
   function armPushAlarm(delayMinutes) {
+    if (isMobile()) return;
     try {
       chrome.alarms.create(PUSH_ALARM, { delayInMinutes: Math.max(1, delayMinutes || 1) });
     } catch (e) {
@@ -37,6 +44,16 @@
   let _pendingRerun = false;
 
   async function runBackgroundPush(reason) {
+    if (isMobile() && reason !== "manual") {
+      // Automatic AniList push is paused on mobile. AniList updates are handled by PC.
+      const s = await bgStorageGet([STATUS_KEY]);
+      const st = s[STATUS_KEY];
+      if (!st || st.state === "running" || st.state === "retrying") {
+        await writeStatus({ state: "paused", paused: true, finishedAt: Date.now() });
+      }
+      return;
+    }
+
     if (_running) {
       _pendingRerun = true;
       return;
@@ -210,6 +227,7 @@
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name !== PUSH_ALARM && alarm.name !== PUSH_ALARM_PERIODIC) return;
+    if (isMobile()) return;
     runBackgroundPush(alarm.name === PUSH_ALARM_PERIODIC ? "periodic" : "alarm").catch(() => {});
   });
 
@@ -219,18 +237,20 @@
     if (changes[Core.AUTH_KEY]) {
       const newAuth = changes[Core.AUTH_KEY].newValue;
       const connected = !!(newAuth && newAuth.accessToken && (!newAuth.expiresAt || newAuth.expiresAt > Date.now()));
-      if (connected) {
+      if (connected && !isMobile()) {
         try {
           chrome.alarms.create(PUSH_ALARM_PERIODIC, { delayInMinutes: 5, periodInMinutes: 30 });
         } catch {}
       } else {
         try {
           chrome.alarms.clear(PUSH_ALARM_PERIODIC);
+          chrome.alarms.clear(PUSH_ALARM);
         } catch {}
       }
     }
 
     if (!changes.animeData) return;
+    if (isMobile()) return;
     getToken()
       .then((token) => {
         if (token) armPushAlarm(1);
@@ -251,6 +271,17 @@
     const st = s[STATUS_KEY];
     const auth = s[Core.AUTH_KEY];
     const connected = !!(auth && auth.accessToken && (!auth.expiresAt || auth.expiresAt > Date.now()));
+
+    if (isMobile()) {
+      try {
+        chrome.alarms.clear(PUSH_ALARM_PERIODIC);
+        chrome.alarms.clear(PUSH_ALARM);
+      } catch {}
+      if (!st || st.state === "running" || st.state === "retrying") {
+        writeStatus({ state: "paused", paused: true, finishedAt: Date.now() }).catch(() => {});
+      }
+      return;
+    }
 
     if (connected) {
       // Only arm it if it is not already armed with this period. This block runs on EVERY worker
