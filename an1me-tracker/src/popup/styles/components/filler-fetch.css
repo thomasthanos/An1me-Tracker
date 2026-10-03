@@ -10,6 +10,8 @@
   z-index:100000;
   display:flex; align-items:center; justify-content:center;
   padding:20px;
+  box-sizing:border-box;
+  overflow:hidden;
   pointer-events:auto;
   animation:ffui-fade .2s ease;
 }
@@ -31,6 +33,8 @@
   backdrop-filter: blur(24px) saturate(1.35);
   -webkit-backdrop-filter: blur(24px) saturate(1.35);
   width:100%; max-width:400px;
+  max-height:100%;
+  min-height:0;
   display:flex; flex-direction:column;
   overflow:hidden;
   animation:ffui-up .28s cubic-bezier(.4,0,.2,1);
@@ -67,6 +71,7 @@
 }
 
 .ffui-header {
+  flex-shrink:0;
   position:relative;
   z-index:3;
   padding: 16px 18px 14px;
@@ -99,7 +104,20 @@
   z-index:3;
   padding:16px 18px 18px;
   display:flex; flex-direction:column; gap:14px;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
 }
+.ffui-progress-wrap, .ffui-stats { flex-shrink:0; }
+.ffui-close {
+  margin-left:auto; min-width:44px; min-height:44px; padding:6px 12px;
+  color:var(--t1); background:rgba(var(--ink-rgb),0.07);
+  border:1px solid rgba(var(--ink-rgb),0.12); border-radius:10px;
+  font:inherit; cursor:pointer;
+}
+.ffui-close[hidden] { display:none; }
+.ffui-close:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
 
 .ffui-progress-wrap {
   padding: 11px 12px 12px;
@@ -191,6 +209,7 @@
 }
 
 .ffui-log {
+  min-height:44px;
   background:
     linear-gradient(180deg, rgba(var(--ink-rgb),0.045), rgba(var(--ink-rgb),0.012)),
     rgba(5, 10, 18, 0.50);
@@ -243,6 +262,7 @@
 .ffui-log-row.is-nofill  .ffui-log-detail { background:rgba(var(--ink-rgb),0.030); color:rgba(145, 157, 184, 0.80); }
 .ffui-log-row.is-movie   .ffui-log-detail { background:rgba(var(--purple-rgb),0.10); color:rgba(178, 142, 255, 0.88); }
 .ffui-log-row.is-error   .ffui-log-detail { background:rgba(var(--danger-rgb),0.10); color:rgba(236, 112, 124, 0.92); }
+.ffui-log-row.is-retry .ffui-log-detail { background:rgba(236,184,90,0.10); color:rgb(236,184,90); }
 .ffui-log-row.is-summary {
   margin-top:5px; padding-top:6px;
   border-top:1px solid rgba(var(--ink-rgb),0.08);
@@ -251,6 +271,7 @@
 .ffui-log-row.is-summary .ffui-log-name { color:var(--t1); }
 
 @media (max-width: 600px) {
+  .ffui-overlay { padding:12px; }
   .ffui-log-row {
     font-size: 10.5px;
     gap: 5px;
@@ -264,4 +285,13 @@
     font-size: 9.5px;
     padding: 1px 6px;
   }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .ffui-overlay, .ffui-box, .ffui-log, .ffui-log-detail {
+    backdrop-filter:none;
+    -webkit-backdrop-filter:none;
+  }
+  .ffui-box { background:rgb(10,16,28); }
+  .ffui-title-dot, .ffui-log-row { animation:none; }
 }

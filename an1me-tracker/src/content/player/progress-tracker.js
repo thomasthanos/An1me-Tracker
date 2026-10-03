@@ -8,6 +8,7 @@ const ProgressTracker = {
   isProcessingQueue: false,
   pendingSeekSave: null,
   seekSaveTimeout: null,
+  seekSaveDueAt: 0,
   MAX_REASONABLE_DURATION_SECONDS: 6 * 60 * 60,
 
   _vpCache: null,
@@ -340,6 +341,10 @@ const ProgressTracker = {
       let progressSaved = false;
       const applyProgressUpdate = (data, pruneForQuota = false) => {
         progressSaved = false;
+        // Completion can commit while this save waits for storage. Check the same revision
+        // that will receive the resume point, so a late save cannot resurrect it.
+        if (this._isEpisodeAlreadyTrackedSync(uniqueId, data.animeData)) return false;
+        delete data.animeData; // Read for validation; only videoProgress needs writing.
         let latestProgress = data.videoProgress;
         if (!latestProgress || typeof latestProgress !== "object" || Array.isArray(latestProgress)) latestProgress = {};
         latestProgress = this.cleanVideoProgress(latestProgress, uniqueId);
@@ -378,13 +383,13 @@ const ProgressTracker = {
       };
 
       try {
-        const mutationResult = await Storage.mutate(["videoProgress"], (data) => applyProgressUpdate(data, false));
+        const mutationResult = await Storage.mutate(["videoProgress", "animeData"], (data) => applyProgressUpdate(data, false));
         if (Storage.isAbortResult(mutationResult)) return;
       } catch (err) {
         if (this._isQuotaError(err)) {
           Logger.warn("Storage quota hit — pruning videoProgress and retrying");
           try {
-            const retryResult = await Storage.mutate(["videoProgress"], (data) => applyProgressUpdate(data, true));
+            const retryResult = await Storage.mutate(["videoProgress", "animeData"], (data) => applyProgressUpdate(data, true));
             if (Storage.isAbortResult(retryResult)) return;
           } catch (err2) {
             Logger.error("Retry after prune failed:", err2);
@@ -461,13 +466,17 @@ const ProgressTracker = {
 
     if (!urgent && now - this.lastSaveTime < throttleMs) {
       this.pendingSeekSave = { uniqueId, currentTime, duration, urgent };
-
+      const dueAt = this.lastSaveTime + throttleMs;
+      // Replace the sample, not its deadline. Playback ticks used to restart a full 45-second
+      // delay every five seconds, indefinitely postponing the write while playback continued.
+      if (this.seekSaveTimeout && this.seekSaveDueAt <= dueAt) return;
       if (this.seekSaveTimeout) {
         clearTimeout(this.seekSaveTimeout);
       }
-
+      this.seekSaveDueAt = dueAt;
       this.seekSaveTimeout = setTimeout(() => {
         this.seekSaveTimeout = null;
+        this.seekSaveDueAt = 0;
         if (!this.pendingSeekSave) return;
         const { uniqueId: id, currentTime: time, duration: dur } = this.pendingSeekSave;
         this.pendingSeekSave = null;
@@ -483,7 +492,7 @@ const ProgressTracker = {
         this.performSaveProgress(id, time, dur).catch((e) => {
           Logger.error("Save failed", e);
         });
-      }, throttleMs);
+      }, Math.max(0, dueAt - now));
       return;
     }
 
@@ -492,6 +501,7 @@ const ProgressTracker = {
       this.seekSaveTimeout = null;
     }
     this.pendingSeekSave = null;
+    this.seekSaveDueAt = 0;
 
     this.lastSavedProgress.set(uniqueId, currentTime);
     this.lastSaveTime = now;
@@ -528,6 +538,7 @@ const ProgressTracker = {
       this.seekSaveTimeout = null;
     }
     this.pendingSeekSave = null;
+    this.seekSaveDueAt = 0;
 
     try {
       let videoProgress = null;
@@ -768,6 +779,7 @@ const ProgressTracker = {
       this.seekSaveTimeout = null;
     }
     this.pendingSeekSave = null;
+    this.seekSaveDueAt = 0;
     this.saveQueue = [];
     this.isProcessingQueue = false;
     this.saveInProgress = false;

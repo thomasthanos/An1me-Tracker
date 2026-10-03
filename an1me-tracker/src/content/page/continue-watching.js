@@ -647,6 +647,8 @@
   function buildCard(item) {
     const card = document.createElement("div");
     card.className = "at-cw-card";
+    card.dataset.cwSlug = item.slug;
+    card.dataset.cwCover = item.cover || "";
     card.classList.add(item.isStart ? "at-cw-card-start" : "at-cw-card-resume");
 
     const resume = document.createElement("a");
@@ -718,6 +720,48 @@
     card.appendChild(actions);
 
     return card;
+  }
+
+  function updateCard(card, item) {
+    card.classList.toggle("at-cw-card-start", !!item.isStart);
+    card.classList.toggle("at-cw-card-resume", !item.isStart);
+    card.classList.toggle("at-cw-card-new", !!item.isNewEpisode);
+    const resume = card.querySelector(".at-cw-resume");
+    resume.href = item.url;
+    resume.title = item.isStart ? `Start — ${item.title} · Ep ${item.episode}` : `Resume — ${item.title} · ${item.subline}`;
+    card.querySelector(".at-cw-title").textContent = item.title;
+    card.querySelector(".at-cw-sub").textContent = item.subline;
+    card.querySelector(".at-cw-initial").textContent = (item.title[0] || "?").toUpperCase();
+    card.querySelector(".at-cw-bar-fill").style.width = `${item.percentage}%`;
+    const button = card.querySelector(".at-cw-btn-resume");
+    button.href = item.url;
+    button.title = item.isStart ? `Start episode ${item.episode}` : `Resume episode ${item.episode}`;
+    button.lastElementChild.textContent = item.isStart ? "Start" : "Resume";
+    const thumb = card.querySelector(".at-cw-thumb");
+    // Keep the decoded image in place when only progress or metadata changes. A failed image
+    // also stays failed until its URL changes, rather than being downloaded on every refresh.
+    if (card.dataset.cwCover !== (item.cover || "")) {
+      card.querySelector(".at-cw-img")?.remove();
+      card.dataset.cwCover = item.cover || "";
+      if (item.cover) {
+        const img = document.createElement("img");
+        img.className = "at-cw-img";
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.alt = "";
+        img.addEventListener("error", () => img.remove(), { once: true });
+        img.src = item.cover;
+        thumb.insertBefore(img, thumb.querySelector(".at-cw-bar"));
+      }
+    }
+    const badge = card.querySelector(".at-cw-new-badge");
+    if (!item.isNewEpisode) badge?.remove();
+    else if (!badge) {
+      const nextBadge = document.createElement("span");
+      nextBadge.className = "at-cw-new-badge";
+      nextBadge.textContent = "NEW";
+      thumb.appendChild(nextBadge);
+    }
   }
 
   function buildSection(items) {
@@ -834,6 +878,7 @@
     }
 
     setTimeout(updateNavState, 0);
+    section._atCwUpdateNav = updateNavState;
 
     viewport.appendChild(track);
     section.append(head, viewport);
@@ -978,12 +1023,7 @@
 
   function computeItemsSignature(items) {
     if (!Array.isArray(items)) return "";
-    return items
-      .map(
-        (it) =>
-          `${it.slug}:${it.episodeNumber}:${it.progressPct}:${it.currentTime}:${it.duration}:${it.coverUrl || ""}:${it.title || ""}`,
-      )
-      .join("|");
+    return JSON.stringify(items.map(it => [it.slug, it.episode, it.percentage, it.subline, it.cover, it.title, it.url, !!it.isStart, !!it.isNewEpisode]));
   }
 
   function render(items) {
@@ -1000,13 +1040,24 @@
     }
 
     injectStyles();
-    const section = buildSection(items);
-
     if (existing) {
-      existing.replaceWith(section);
+      const track = existing.querySelector(".at-cw-track");
+      const scrollLeft = track.scrollLeft;
+      const cards = new Map([...track.children].map(card => [card.dataset.cwSlug, card]));
+      const wanted = new Set(items.map(item => item.slug));
+      for (const [slug, card] of cards) if (!wanted.has(slug)) card.remove();
+      items.forEach((item, index) => {
+        let card = cards.get(item.slug);
+        if (card) updateCard(card, item);
+        else card = buildCard(item);
+        if (track.children[index] !== card) track.insertBefore(card, track.children[index] || null);
+      });
+      track.scrollLeft = scrollLeft;
+      existing.querySelector(".at-cw-count").textContent = String(items.length);
+      existing._atCwUpdateNav?.();
       suppressShareIfPresent();
     } else {
-      mountSection(section);
+      mountSection(buildSection(items));
     }
 
     lastRenderedSignature = nextSignature;

@@ -28,17 +28,38 @@ test("source describes the built app and its release download", () => {
   const source = JSON.parse(JSON.stringify(createSource(fixture())));
   assert.equal(source.sourceURL, "https://github.com/example/tracker/releases/download/tracker-source/source.json");
   assert.equal(source.apps.length, 1);
+  const appDescription =
+    "The official companion Safari extension & tracker for an1me.to on iOS.\n\n" +
+    "✨ Key Features:\n" +
+    "• Automatic Episode Tracking: Accurately saves your watch progress and playback timestamp.\n" +
+    "• Real-time Cloud Sync: Seamlessly syncs your library between iPhone and PC.\n" +
+    "• AniList & MyAnimeList Integration: Automatically updates your anime lists upon completion.\n" +
+    "• Smart Filler Detection: Highlights and skips filler episodes smoothly.\n" +
+    "• Modern iOS Experience: Native dark design, fluid Safari popup sheets, and iOS 18 adaptive icons.\n\n" +
+    "Requires iOS 18.0 or later.";
+
+  const versionReleaseNotes =
+    "v9.3.1 (Build 77):\n" +
+    "• Resolved iOS Safari popup sheet detent layout and overflow issues.\n" +
+    "• Fixed image flickering and DOM reloading in Continue Watching during library fetches.\n" +
+    "• Graceful handling of Jikan 504 gateway timeouts and rate limits (no false errors).\n" +
+    "• Enhanced mobile video progress persistence with iOS Page Lifecycle freeze and fullscreen exit handlers.\n" +
+    "• Dark premium icon and improved SideStore description.";
+
   assert.deepEqual(source.apps[0], {
     name: "Example Tracker",
     bundleIdentifier: "com.example.Tracker",
     developerName: "Example",
-    localizedDescription: "Track your an1me.to episodes in Safari and sync your library with the desktop extension. Install with SideStore; requires iOS 18 or later.",
-    iconURL: "https://raw.githubusercontent.com/example/tracker/main/an1me-tracker/src/icons/icon128.png",
+    subtitle: "Safari Extension & Tracker for an1me.to",
+    localizedDescription: appDescription,
+    iconURL: "https://raw.githubusercontent.com/example/tracker/main/an1me-tracker/src/icons/ios/AppIcon-dark.png",
+    tintColor: "54d2ff",
     versions: [{
       version: "9.3.1",
       buildVersion: "77",
       date: "2026-10-03",
       downloadURL: "https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1.ipa",
+      localizedDescription: versionReleaseNotes,
       size: 123456,
       sha256: "a".repeat(64),
       minOSVersion: "18.0",

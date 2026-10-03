@@ -16,8 +16,26 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error("Repository must be owner/repo");
 
   const baseURL = `https://github.com/${repository}/releases/download`;
-  const iconURL = `https://raw.githubusercontent.com/${repository}/main/an1me-tracker/${manifest.icons[128]}`;
+  const iconURL = `https://raw.githubusercontent.com/${repository}/main/an1me-tracker/src/icons/ios/AppIcon-dark.png`;
   const privacy = Object.fromEntries(Object.entries(appInfo).filter(([key]) => key.endsWith("UsageDescription")));
+  const appDescription =
+    "The official companion Safari extension & tracker for an1me.to on iOS.\n\n" +
+    "✨ Key Features:\n" +
+    "• Automatic Episode Tracking: Accurately saves your watch progress and playback timestamp.\n" +
+    "• Real-time Cloud Sync: Seamlessly syncs your library between iPhone and PC.\n" +
+    "• AniList & MyAnimeList Integration: Automatically updates your anime lists upon completion.\n" +
+    "• Smart Filler Detection: Highlights and skips filler episodes smoothly.\n" +
+    "• Modern iOS Experience: Native dark design, fluid Safari popup sheets, and iOS 18 adaptive icons.\n\n" +
+    "Requires iOS 18.0 or later.";
+
+  const versionReleaseNotes =
+    `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
+    "• Resolved iOS Safari popup sheet detent layout and overflow issues.\n" +
+    "• Fixed image flickering and DOM reloading in Continue Watching during library fetches.\n" +
+    "• Graceful handling of Jikan 504 gateway timeouts and rate limits (no false errors).\n" +
+    "• Enhanced mobile video progress persistence with iOS Page Lifecycle freeze and fullscreen exit handlers.\n" +
+    "• Dark premium icon and improved SideStore description.";
+
   return {
     name: manifest.name,
     identifier: "io.github.thomasthanos.an1metracker.source",
@@ -27,13 +45,16 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
       name: manifest.name,
       bundleIdentifier: appInfo.CFBundleIdentifier,
       developerName: manifest.author,
-      localizedDescription: "Track your an1me.to episodes in Safari and sync your library with the desktop extension. Install with SideStore; requires iOS 18 or later.",
+      subtitle: "Safari Extension & Tracker for an1me.to",
+      localizedDescription: appDescription,
       iconURL,
+      tintColor: "54d2ff",
       versions: [{
         version,
         buildVersion: appInfo.CFBundleVersion,
         date,
         downloadURL: `${baseURL}/tracker-v${version}/${ipaName}`,
+        localizedDescription: versionReleaseNotes,
         size: ipaSize,
         sha256: ipaSha256,
         minOSVersion: appInfo.MinimumOSVersion,

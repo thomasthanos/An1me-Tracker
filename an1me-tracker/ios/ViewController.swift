@@ -82,7 +82,7 @@ private func openSafariSettings() {
 // MARK: - Native SwiftUI Interface
 struct An1meTrackerAppView: View {
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "7.5.2"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "7.5.3"
     }
 
     var body: some View {

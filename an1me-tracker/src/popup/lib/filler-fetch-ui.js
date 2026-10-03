@@ -37,6 +37,7 @@ const FillerFetchUI = {
 
             <div class="ffui-header">
               <span class="ffui-title" id="ffui-title"><span class="ffui-title-dot"></span>Fetch & Import</span>
+              <button type="button" class="ffui-close" hidden>Done</button>
             </div>
 
             <div class="ffui-body">
@@ -66,7 +67,7 @@ const FillerFetchUI = {
                 </div>
                 <div class="ffui-stat">
                   <span class="ffui-stat-val ffui-stat-err" data-stat="failed">0</span>
-                  <span class="ffui-stat-lbl">Failed</span>
+                  <span class="ffui-stat-lbl">Needs retry</span>
                 </div>
               </div>
 
@@ -82,6 +83,7 @@ const FillerFetchUI = {
 
   attachEventListeners() {
     const overlay = document.getElementById(this.IDS.overlay);
+    overlay.querySelector(".ffui-close")?.addEventListener("click", () => this.close());
     const blockOutsideClick = (e) => {
       if (e.target.id !== this.IDS.overlay) return;
       e.preventDefault();
@@ -158,6 +160,8 @@ const FillerFetchUI = {
     if (!keepAutoMode) this.state.autoMode = false;
 
     this._setProgress(0, "Ready to fetch and import your data…");
+    const close = document.querySelector(".ffui-close");
+    if (close) close.hidden = true;
     ["fetched", "cached", "skipped", "failed"].forEach((k) => this._setStat(k, 0));
 
     const log = document.getElementById(this.IDS.logFeed);
@@ -182,17 +186,30 @@ const FillerFetchUI = {
 
   _renderLogs(entries) {
     const log = document.getElementById(this.IDS.logFeed);
-    log.innerHTML = "";
-
     if (!entries || entries.length === 0) {
+      log.innerHTML = "";
       log.style.display = "none";
       return;
     }
-
+    const followLatest = log.children.length === 0 || log.scrollHeight - log.clientHeight - log.scrollTop < 24;
+    const rows = new Map();
+    for (const row of [...log.children]) {
+      const key = row.dataset.ffuiLogKey;
+      if (!rows.has(key)) rows.set(key, []);
+      rows.get(key).push(row);
+    }
     log.style.display = "flex";
-    entries.forEach((entry) => {
-      this._log(entry.type || "cached", entry.name || entry.slug || "Import item", entry.detail || "");
+    entries.forEach((entry, index) => {
+      const key = JSON.stringify([entry.at, entry.type, entry.slug, entry.name, entry.detail]);
+      let row = rows.get(key)?.shift();
+      if (!row) {
+        row = this._log(entry.type || "cached", entry.name || entry.slug || "Import item", entry.detail || "");
+        row.dataset.ffuiLogKey = key;
+      }
+      if (log.children[index] !== row) log.insertBefore(row, log.children[index] || null);
     });
+    for (const remaining of rows.values()) remaining.forEach(row => row.remove());
+    if (followLatest) log.scrollTop = log.scrollHeight;
   },
 
   showPendingStart(label = "Starting import…") {
@@ -235,6 +252,8 @@ const FillerFetchUI = {
     this.state.failed = Number(state.failed) || 0;
     this.state.isRunning = state.status === "running";
     this.state.fetchDone = state.status === "completed" || state.status === "error";
+    const close = document.querySelector(".ffui-close");
+    if (close) close.hidden = !this.state.fetchDone;
 
     this._setStat("fetched", this.state.fetched);
     this._setStat("cached", this.state.cached);
@@ -250,15 +269,17 @@ const FillerFetchUI = {
       const currentTitle = state.currentTitle || state.currentSlug || "Working…";
       label = `${processed} / ${total} — ${currentTitle}`;
     } else if (state.status === "completed") {
-      label = state.failed > 0 ? `Import complete — ${state.failed} failed, see log above` : "Import complete — see log above";
+      label = state.failed > 0 ? `Import finished — ${state.failed} items need retry` : "Import complete";
     } else if (state.status === "error") {
       label = state.errorMessage ? `Import error — ${state.errorMessage}` : "Import error — see log above";
     }
 
     this._setProgress(pct, label);
 
-    if (state.status === "completed" && state.followUpPending !== true) {
+    if (state.status === "completed" && state.followUpPending !== true && !this.state.failed) {
       this._scheduleAutoClose();
+    } else if (this.state.failed) {
+      this._clearAutoClose();
     }
   },
 
@@ -280,13 +301,14 @@ const FillerFetchUI = {
     const log = document.getElementById(this.IDS.logFeed);
     if (log.style.display === "none") log.style.display = "flex";
 
-    const icons = { fetch: "*", cached: "o", skip: "-", nofill: "-", error: "x", movie: ">" };
+    const icons = { fetch: "*", cached: "o", skip: "-", nofill: "-", error: "x", retry: "!", movie: ">" };
     const classes = {
       fetch: "is-fetch",
       cached: "is-cached",
       skip: "is-nofill",
       nofill: "is-nofill",
       error: "is-error",
+      retry: "is-retry",
       movie: "is-movie",
     };
 
@@ -312,7 +334,7 @@ const FillerFetchUI = {
     }
 
     log.appendChild(row);
-    log.scrollTop = log.scrollHeight;
+    return row;
   },
 };
 

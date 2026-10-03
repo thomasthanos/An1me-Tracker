@@ -7,6 +7,23 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [7.5.3] — 2026-10-03
+
+### Fixed
+
+- Continue Watching updates episode links, progress and metadata in place, retaining unchanged
+  cover images, cards and horizontal scroll position during fetches. Its display signature now
+  uses the fields actually returned by the shelf builder.
+- Continuous playback saves the latest position at the throttle deadline. New samples no longer
+  postpone the write indefinitely, and a pause can bring the pending deadline forward.
+- Progress mutations recheck completion at the same storage revision, preventing a late save
+  from recreating the resume point of an episode that was just completed.
+- Fetch & Import fits short Safari sheets and landscape viewports with a scrollable body.
+  Existing log rows stay in place instead of replaying their animations on every progress update.
+- Filler service failures retain their original status and reach the resolver's bounded retry.
+  Partial failures appear as "Needs retry" instead of success, and the report stays open with
+  a Done button. Mobile fetch overlays also avoid stacked blur filters and permanent animations.
+
 ## [7.5.2] — 2026-10-03
 
 ### Fixed

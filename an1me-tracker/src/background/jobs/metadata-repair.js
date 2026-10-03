@@ -72,10 +72,7 @@ function isRetryableMetadataRepairError(error) {
   const message = String(error?.message || "").toLowerCase();
   if (!message) return true;
 
-  if (message.includes("http 404")) return false;
-  if (message.includes("http 400")) return false;
-  if (message.includes("http 401")) return false;
-  if (message.includes("http 403")) return false;
+  if (/http[ _](?:400|401|403|404)\b/.test(message)) return false;
 
   return true;
 }
@@ -171,6 +168,9 @@ function buildMetadataRepairLog(slug, title, infoResult, fillerResult) {
   if (infoResult?.status === "failed") {
     return { type: "error", slug, name: displayTitle, detail, at: Date.now() };
   }
+  if (fillerResult?.status === "failed") {
+    return { type: "retry", slug, name: displayTitle, detail, at: Date.now() };
+  }
 
   if (fillerResult?.status === "movie") {
     return { type: "movie", slug, name: displayTitle, detail, at: Date.now() };
@@ -194,7 +194,7 @@ function countMetadataRepairOutcome(logEntry) {
   if (logEntry.type === "fetch") base.fetched = 1;
   else if (logEntry.type === "cached") base.cached = 1;
   else if (logEntry.type === "movie" || logEntry.type === "nofill") base.skipped = 1;
-  else if (logEntry.type === "error") base.failed = 1;
+  else if (logEntry.type === "error" || logEntry.type === "retry") base.failed = 1;
 
   return base;
 }
@@ -531,12 +531,9 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
             schemaVersion: self.AnimeTrackerCachePolicy.EPISODE_TYPES_SCHEMA_VERSION,
           };
     await bgStorageSet({ [key]: backoffEntry });
-    const isTransient = error?.rateLimited || /504|502|503|429|timeout/i.test(error?.message || "");
-    return {
-      status: "failed",
-      entry: backoffEntry,
-      error: isTransient ? "jikan_timeout_504" : String(error?.message || "error"),
-    };
+    // Let the resolver perform its bounded retry and retain usable data on final failure.
+    // Returning a failed result here bypassed retries and discarded the original HTTP status.
+    throw error;
   }
 
   if (!episodeTypes) {
