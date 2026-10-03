@@ -16,8 +16,6 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error("Repository must be owner/repo");
 
   const baseURL = `https://github.com/${repository}/releases/download`;
-  // Keep cached sources valid across rebuilds and reruns, including those with the same build number.
-  const downloadName = `An1meTracker-${version}-${appInfo.CFBundleVersion}-${ipaSha256}.ipa`;
   const iconURL = `https://raw.githubusercontent.com/${repository}/main/an1me-tracker/${manifest.icons[128]}`;
   const privacy = Object.fromEntries(Object.entries(appInfo).filter(([key]) => key.endsWith("UsageDescription")));
   return {
@@ -35,7 +33,7 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
         version,
         buildVersion: appInfo.CFBundleVersion,
         date,
-        downloadURL: `${baseURL}/tracker-v${version}/${downloadName}`,
+        downloadURL: `${baseURL}/tracker-v${version}/${ipaName}`,
         size: ipaSize,
         sha256: ipaSha256,
         minOSVersion: appInfo.MinimumOSVersion,
