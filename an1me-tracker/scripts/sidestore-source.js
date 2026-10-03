@@ -12,9 +12,12 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
   if (version !== manifest.version) throw new Error("Built app version must match the extension manifest version");
   if (ipaName !== `An1meTracker-${version}.ipa`) throw new Error("IPA filename does not match the built app version");
   if (!Number.isSafeInteger(ipaSize) || ipaSize <= 0) throw new Error("IPA size must be a positive integer");
+  if (!/^[a-f0-9]{64}$/.test(ipaSha256)) throw new Error("IPA SHA256 must be a 64-character lowercase hash");
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error("Repository must be owner/repo");
 
   const baseURL = `https://github.com/${repository}/releases/download`;
+  // Keep cached sources valid across rebuilds and reruns, including those with the same build number.
+  const downloadName = `An1meTracker-${version}-${appInfo.CFBundleVersion}-${ipaSha256}.ipa`;
   const iconURL = `https://raw.githubusercontent.com/${repository}/main/an1me-tracker/${manifest.icons[128]}`;
   const privacy = Object.fromEntries(Object.entries(appInfo).filter(([key]) => key.endsWith("UsageDescription")));
   return {
@@ -32,7 +35,7 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
         version,
         buildVersion: appInfo.CFBundleVersion,
         date,
-        downloadURL: `${baseURL}/tracker-v${version}/${ipaName}`,
+        downloadURL: `${baseURL}/tracker-v${version}/${downloadName}`,
         size: ipaSize,
         sha256: ipaSha256,
         minOSVersion: appInfo.MinimumOSVersion,

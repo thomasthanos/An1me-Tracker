@@ -116,10 +116,16 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           tag="tracker-v$VERSION"
+          source_ipa="$(node -p 'new URL(require("./build/source.json").apps[0].versions[0].downloadURL).pathname.split("/").pop()')"
+          cp "${{ steps.ipa.outputs.file }}" "build/$source_ipa"
           if gh release view "$tag" > /dev/null 2>&1; then
+            assets="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+            if ! grep -Fxq "$source_ipa" <<< "$assets"; then
+              gh release upload "$tag" "build/$source_ipa"
+            fi
             gh release upload "$tag" "${{ steps.ipa.outputs.file }}" --clobber
           else
-            gh release create "$tag" "${{ steps.ipa.outputs.file }}" \
+            gh release create "$tag" "build/$source_ipa" "${{ steps.ipa.outputs.file }}" \
               --target "$GITHUB_SHA" \
               --title "An1me.to Tracker $VERSION — iPhone (SideStore)" \
               --notes "Unsigned iOS app with the Safari extension. Install it with SideStore, which signs it with your Apple ID — see [IOS.md](https://github.com/${{ github.repository }}/blob/main/an1me-tracker/IOS.md). Changes: [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/an1me-tracker/CHANGELOG.md)."

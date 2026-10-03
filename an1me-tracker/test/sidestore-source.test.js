@@ -23,7 +23,7 @@ function fixture() {
   };
 }
 
-test("source describes the built app and its exact release download", () => {
+test("source describes the built app and its immutable release download", () => {
   const { createSource } = require("../scripts/sidestore-source.js");
   const source = JSON.parse(JSON.stringify(createSource(fixture())));
   assert.equal(source.sourceURL, "https://github.com/example/tracker/releases/download/tracker-source/source.json");
@@ -38,7 +38,7 @@ test("source describes the built app and its exact release download", () => {
       version: "9.3.1",
       buildVersion: "77",
       date: "2026-10-03",
-      downloadURL: "https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1.ipa",
+      downloadURL: `https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1-77-${"a".repeat(64)}.ipa`,
       size: 123456,
       sha256: "a".repeat(64),
       minOSVersion: "18.0",
@@ -46,6 +46,26 @@ test("source describes the built app and its exact release download", () => {
     appPermissions: { entitlements: [], privacy: {} },
   });
   assert.equal("marketplaceID" in source.apps[0], false);
+});
+
+test("same-version rebuilds and reruns cannot replace the bytes referenced by older source metadata", () => {
+  const { createSource } = require("../scripts/sidestore-source.js");
+  const first = fixture();
+  const rebuild = fixture();
+  rebuild.appInfo.CFBundleVersion = "78";
+  rebuild.ipaSha256 = "b".repeat(64);
+  const rerun = fixture();
+  rerun.ipaSha256 = "c".repeat(64);
+  const url = (input) => createSource(input).apps[0].versions[0].downloadURL;
+  assert.equal(url(first), `https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1-77-${"a".repeat(64)}.ipa`);
+  assert.equal(url(rebuild), `https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1-78-${"b".repeat(64)}.ipa`);
+  assert.equal(url(rerun), `https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1-77-${"c".repeat(64)}.ipa`);
+});
+
+test("missing or malformed content hashes cannot create download URLs", () => {
+  const { createSource } = require("../scripts/sidestore-source.js");
+  assert.throws(() => createSource({ ...fixture(), ipaSha256: "wrong" }), /SHA256/i);
+  assert.throws(() => createSource({ ...fixture(), ipaSha256: undefined }), /SHA256/i);
 });
 
 test("mismatched manifest and built app versions cannot publish a wrong release URL", () => {
