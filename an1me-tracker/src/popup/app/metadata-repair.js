@@ -215,7 +215,7 @@
       }
       const isNewRun = previousStatus !== "completed" || previousState?.runId !== state.runId;
       if (!isSilent) {
-        const label = state.failed > 0 ? `Import Complete (${state.failed} failed)` : "Import Complete";
+        const label = state.failed > 0 ? `Import Complete (${state.failed} need retry)` : "Import Complete";
         setMetadataRepairStatus(label, true);
       }
       if (isNewRun) {
