@@ -129,8 +129,13 @@ function repair(initial) {
       [id]: { currentTime: 500, duration: 1200, savedAt: new Date(Date.now() - 60000).toISOString() },
     }));
     assert.equal(h.store.videoProgress[id].currentTime, 60, 'stale cloud progress must not undo Start over');
+    h.store.videoProgress = structuredClone(w.c.AnimeTrackerMergeUtils.mergeVideoProgress(h.store.videoProgress, {
+      [id]: { currentTime: 100, duration: 1200, sampleSession: 'another-device', sampleSequence: 7,
+        savedAt: new Date(Date.now() + 10000).toISOString() },
+    }));
+    assert.equal(h.store.videoProgress[id].currentTime, 100);
     h.setGet(async () => structuredClone(h.store)); release(structuredClone(h.store)); await old;
-    assert.equal(h.store.videoProgress[id].currentTime, 60);
+    assert.equal(h.store.videoProgress[id].currentTime, 100, 'a different-session winner must still block the old rewind');
   });
   await test('cloud merge honors an explicit rewind while keeping forward progress and deletion rules', () => {
     const c = vm.createContext({}); vm.runInContext(read('src/common/utils.js'), c); vm.runInContext(read('src/common/data/merge-utils.js'), c);

@@ -12,6 +12,7 @@ const ProgressTracker = {
   _generation: 0,
   _sampleSequence: 0,
   _sampleSession: null,
+  _sampleTime: 0,
   MAX_REASONABLE_DURATION_SECONDS: 6 * 60 * 60,
 
   _vpCache: null,
@@ -248,16 +249,20 @@ const ProgressTracker = {
     const samePage = !!matchingInfo || path === expectedPage;
     const canReadPage = samePage && (!matchingInfo?.url || matchingInfo.url === window.location?.href);
     this._sampleSession ||= `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    // Distinct accepted samples retain their order even within one clock millisecond.
+    this._sampleTime = Math.max(Date.now(), this._sampleTime + 1);
+    const sampledAt = new Date(this._sampleTime).toISOString();
     return {
       generation: this._generation,
       sampleSession: this._sampleSession,
       sampleSequence: ++this._sampleSequence,
+      sampledAt,
       coverImage: matchingInfo?.coverImage || (canReadPage ? AT.AnimeParser?.extractCoverImage?.() : null),
       siteAnimeId: matchingInfo?.siteAnimeId || (canReadPage ? AT.AnimeParser?.extractSiteAnimeId?.() : null),
       // null means a known canonical URL; undefined means page identity is unavailable.
       pagePath: samePage && path ? (path !== expectedPage ? path : null) : undefined,
       allowRewind: this._rewindAllowedFor === uniqueId,
-      rewoundAt: this._rewindAllowedFor === uniqueId ? new Date(Date.now()).toISOString() : null,
+      rewoundAt: this._rewindAllowedFor === uniqueId ? sampledAt : null,
     };
   },
 
@@ -393,6 +398,10 @@ const ProgressTracker = {
         // Both the worker handoff and this writer preserve sample order. In particular,
         // an older start-over write must not rewind a newer pause/unload sample again.
         if (latestExisting?.sampleSession === context.sampleSession && latestExisting.sampleSequence > context.sampleSequence) return false;
+        const latestRestart = Date.parse(latestExisting?.rewoundAt) || 0;
+        const sampleAt = Date.parse(context.sampledAt || context.rewoundAt) || 0;
+        if (sampleAt && latestRestart > sampleAt) return false;
+        if (rewinding && latestExisting?.sampleSession !== context.sampleSession && latestRestart >= sampleAt && latestRestart > 0) return false;
         if (latestExisting && !rewinding && latestExisting.currentTime > newCurrentTime) {
           videoProgress = latestProgress;
           data.videoProgress = latestProgress;
@@ -420,7 +429,7 @@ const ProgressTracker = {
           pagePath: pagePath !== undefined ? pagePath || undefined : latestExisting?.pagePath,
           sampleSession: context.sampleSession,
           sampleSequence: context.sampleSequence,
-          rewoundAt: context.rewoundAt || latestExisting?.rewoundAt || undefined,
+          rewoundAt: latestRestart > (Date.parse(context.rewoundAt) || 0) ? latestExisting.rewoundAt : context.rewoundAt || undefined,
         };
         if (pruneForQuota) latestProgress = this._emergencyPruneProgress(latestProgress, uniqueId);
         data.videoProgress = latestProgress;

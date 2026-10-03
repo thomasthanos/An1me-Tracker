@@ -3306,6 +3306,12 @@ async function persistBeforeUnloadProgress(message) {
     if (context.sampleSession && existing?.sampleSession === context.sampleSession && existing.sampleSequence > context.sampleSequence) {
       return { result: { saved: false } };
     }
+    const latestRestart = Date.parse(existing?.rewoundAt) || 0;
+    const sampleAt = Date.parse(context.sampledAt || context.rewoundAt) || 0;
+    if ((sampleAt && latestRestart > sampleAt) ||
+      (context.allowRewind && existing?.sampleSession !== context.sampleSession && latestRestart >= sampleAt && latestRestart > 0)) {
+      return { result: { saved: false } };
+    }
     if (existing && !context.allowRewind &&
       (existing.currentTime > currentTime || (existing.duration === duration && currentTime - existing.currentTime < 3))) {
       return { result: { saved: false } };
@@ -3318,7 +3324,7 @@ async function persistBeforeUnloadProgress(message) {
       pagePath: context.pagePath !== undefined ? context.pagePath || undefined : existing?.pagePath,
       sampleSession: context.sampleSession,
       sampleSequence: context.sampleSequence,
-      rewoundAt: context.rewoundAt || existing?.rewoundAt || undefined,
+      rewoundAt: latestRestart > (Date.parse(context.rewoundAt) || 0) ? existing.rewoundAt : context.rewoundAt || undefined,
     };
     // Keep the same bounded progress history as the content writer.
     const entries = Object.entries(progress).filter(([id]) => id !== uniqueId)
