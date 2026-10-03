@@ -20,7 +20,11 @@ const SHARED = {
   "AT.SETTING_KEYS": "src/popup/lib/config.js",
   PageEvents: "src/content/lib/page-events.js",
   PlayerDom: "src/content/lib/player-dom.js",
+  PlayerObserver: "src/content/player/player-observer.js",
 };
+
+// boot-check.js names modules as strings to verify them at runtime; it never reads them while loading.
+const NAMES_ONLY = new Set(["src/common/boot-check.js"]);
 
 function contexts() {
   const manifest = JSON.parse(read("manifest.json"));
@@ -40,6 +44,7 @@ function contexts() {
 let failures = 0;
 for (const { name, files } of contexts()) {
   files.forEach((file, index) => {
+    if (NAMES_ONLY.has(file)) return;
     const source = read(file);
     for (const [symbol, definer] of Object.entries(SHARED)) {
       if (file === definer || !source.includes(symbol)) continue;

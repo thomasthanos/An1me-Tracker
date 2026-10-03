@@ -149,6 +149,7 @@
         "src/content/player/episode-writer.js",
         "src/content/player/progress-tracker.js",
         "src/content/page/watchlist-sync.js",
+        "src/content/player/player-observer.js",
         "src/content/player/video-monitor.js",
         "src/content/player/skiptime.js",
         "src/content/player/episode-highlight.js",

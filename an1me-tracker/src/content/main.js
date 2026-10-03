@@ -504,7 +504,7 @@
     }
   };
 
-  const handleTimeUpdate = debounce(async function () {
+  const handleTimeUpdateSettled = debounce(async function () {
     const { CONFIG, Logger, ProgressTracker, VideoMonitor } = AT;
     const videoElement = VideoMonitor.getVideoElement();
 
@@ -575,6 +575,13 @@
       }
     }
   }, AT.CONFIG.DEBOUNCE_DELAY);
+
+  // One timeupdate subscription: the raw pass (playback accounting, immediate completion) runs on
+  // every tick, the settled pass (progress save, completion with storage checks) once ticks pause.
+  const handleTimeUpdate = () => {
+    handleTimeUpdateRaw();
+    handleTimeUpdateSettled();
+  };
 
   const requestProgressSync = (force = false) => {
     try {
@@ -762,7 +769,6 @@
 
   const eventHandlers = {
     handleTimeUpdate,
-    handleTimeUpdateRaw,
     handleVideoMetadata,
     handlePause,
     handleSeeked,
@@ -1153,7 +1159,7 @@
 
       setTimeout(() => {
         try {
-          VideoMonitor.rebindAfterServerSwitch(animeInfo, eventHandlers);
+          VideoMonitor.rebindAfterServerSwitch();
         } catch (err) {
           Logger.warn("rebindAfterServerSwitch failed:", err);
         }

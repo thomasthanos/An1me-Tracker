@@ -719,7 +719,7 @@
   }
 
   function getVideoElement() {
-    return PlayerDom.findVideo() || PlayerDom.findAnyVideo();
+    return window.AnimeTrackerContent.PlayerObserver.getVideo() || PlayerDom.findVideo() || PlayerDom.findAnyVideo();
   }
 
   function findTimeControlText() {
@@ -789,13 +789,7 @@
   }
 
   async function captureTimestamp(targetKey) {
-    if (!isVideoConnected(video)) {
-      video = getVideoElement();
-      if (video) {
-        Logger.debug("Skiptime: video resolved lazily, attaching metadata hooks");
-        attachVideoMetadataHooks();
-      }
-    }
+    if (!isVideoConnected(video)) video = getVideoElement();
     if (!video) {
       showToast("Δεν βρέθηκε video — ξεκίνα την αναπαραγωγή πρώτα", "error", 2600);
       return;
@@ -968,35 +962,36 @@
     return true;
   }
 
-  let _metadataHookedVideo = null;
-  let _metadataHookedHandler = null;
-  function attachVideoMetadataHooks() {
-    if (!video) return;
-    if (_metadataHookedVideo === video) return;
-    if (_metadataHookedVideo && _metadataHookedHandler) {
-      try {
-        _metadataHookedVideo.removeEventListener("durationchange", _metadataHookedHandler);
-        _metadataHookedVideo.removeEventListener("loadedmetadata", _metadataHookedHandler);
-      } catch {}
-    }
-    const primeOutroEnd = async () => {
-      const cache = await loadCache();
-      if (cache.outroEnd) {
-        await refreshPanelState();
-        return;
-      }
-      const dur = getDurationSeconds();
-      if (dur > 0) {
-        cache.outroEnd = formatTime(dur);
-        await saveCache(cache);
-      }
+  // Outro End defaults to the video's length once it is known.
+  async function primeOutroEnd() {
+    const cache = await loadCache();
+    if (cache.outroEnd) {
       await refreshPanelState();
-    };
-    if (video.readyState >= 1) primeOutroEnd();
-    video.addEventListener("loadedmetadata", primeOutroEnd, { once: true });
-    video.addEventListener("durationchange", primeOutroEnd);
-    _metadataHookedVideo = video;
-    _metadataHookedHandler = primeOutroEnd;
+      return;
+    }
+    const dur = getDurationSeconds();
+    if (dur > 0) {
+      cache.outroEnd = formatTime(dur);
+      await saveCache(cache);
+    }
+    await refreshPanelState();
+  }
+
+  // Follows PlayerObserver's video, including the new element after a server switch.
+  function watchVideo() {
+    if (stopVideoWatch) return;
+    const { PlayerObserver } = window.AnimeTrackerContent;
+    const stops = [
+      PlayerObserver.on("video", (next) => {
+        video = next;
+        primeOutroEnd();
+      }),
+      PlayerObserver.on("metadata", (target) => {
+        if (target === video) primeOutroEnd();
+      }),
+    ];
+    stopVideoWatch = () => stops.forEach((stop) => stop());
+    PlayerObserver.start();
   }
 
   function getControlsHost() {
@@ -1219,8 +1214,6 @@
         });
       }
 
-      if (video) attachVideoMetadataHooks();
-
       panelDoc.addEventListener("keydown", onKeyDown, true);
       panelDoc.addEventListener("pointerdown", onDocumentPointerDown, true);
       if (panelDoc !== document) {
@@ -1281,14 +1274,6 @@
       clearInterval(episodeWatchTimer);
       episodeWatchTimer = null;
     }
-    if (_metadataHookedVideo && _metadataHookedHandler) {
-      try {
-        _metadataHookedVideo.removeEventListener("durationchange", _metadataHookedHandler);
-        _metadataHookedVideo.removeEventListener("loadedmetadata", _metadataHookedHandler);
-      } catch {}
-      _metadataHookedVideo = null;
-      _metadataHookedHandler = null;
-    }
     if (panelEl) {
       try {
         panelEl.remove();
@@ -1338,24 +1323,7 @@
     ensureControlsObserver();
     ensureEpisodeWatcher();
     mountPanel();
-
-    if (!video) {
-      stopVideoWatch?.();
-      stopVideoWatch = PageEvents.observe(
-        document.documentElement,
-        { childList: true, subtree: true },
-        () => {
-          const v = getVideoElement();
-          if (!v || video) return;
-          video = v;
-          stopVideoWatch?.();
-          stopVideoWatch = null;
-          Logger.debug("Skiptime: video element appeared, attaching metadata hook");
-          attachVideoMetadataHooks();
-        },
-        { timeoutMs: 15000 },
-      );
-    }
+    watchVideo();
   }
 
   async function applyEnabledState(enabled) {

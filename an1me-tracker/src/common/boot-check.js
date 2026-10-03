@@ -40,7 +40,7 @@
   } else {
     label = "content";
     ns = window.AnimeTrackerContent || {};
-    required = ["CONFIG", "Storage", "Logger", "AnimeParser", "ProgressTracker", "VideoMonitor"];
+    required = ["CONFIG", "PageEvents", "PlayerDom", "Storage", "Logger", "AnimeParser", "ProgressTracker", "PlayerObserver", "VideoMonitor"];
   }
   const missing = required.filter((key) => ns == null || ns[key] == null);
   if (missing.length) console.error(`[boot-check] ${label}: missing modules → ${missing.join(", ")}`);

@@ -1,10 +1,9 @@
-// video-monitor.js — watches the video (play/pause/server switch) and arms the progress-save timers.
+// video-monitor.js — per-video progress work: the resume prompt, auto and silent resume, the periodic
+// save and the unload hooks. PlayerObserver finds the video and delivers its events.
 const VideoMonitor = {
   videoElement: null,
-  checkInterval: null,
   progressSaveInterval: null,
   cleanupFunctions: [],
-  retryCount: 0,
   silentResumeFor: null,
   silentResumeTime: 0,
 
@@ -13,11 +12,12 @@ const VideoMonitor = {
     this.silentResumeTime = Number.isFinite(resumeTime) && resumeTime > 0 ? resumeTime : 0;
   },
 
-  rebindAfterServerSwitch(animeInfo, eventHandlers) {
-    const { Logger } = window.AnimeTrackerContent;
+  // A server switch replaces the <video>: drop this one's state and let PlayerObserver find the next.
+  rebindAfterServerSwitch() {
+    const { Logger, PlayerObserver } = window.AnimeTrackerContent;
     Logger.debug("VideoMonitor: rebinding after server switch");
     this.cleanup();
-    this.startWatching(animeInfo, eventHandlers);
+    PlayerObserver.rescan();
   },
 
   // Per-video cleanups: released by cleanup(), which runs on every video (re)bind.
@@ -60,139 +60,37 @@ const VideoMonitor = {
     });
     this.cleanupFunctions = [];
 
-    if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-      this.checkInterval = null;
-    }
-
     if (this.progressSaveInterval) {
       clearInterval(this.progressSaveInterval);
       this.progressSaveInterval = null;
     }
 
-    if (this.videoElement) {
-      this.videoElement = null;
-    }
-
-    this.retryCount = 0;
+    this.videoElement = null;
   },
 
-  isVideoActive(video) {
-    const { Logger } = window.AnimeTrackerContent;
-
-    if (!video) return false;
-
-    try {
-      return (
-        video.readyState > 0 &&
-        video.duration > 0 &&
-        video.duration < 100000 &&
-        (video.offsetParent !== null || video.getBoundingClientRect().width > 50 || video.style.display !== "none")
-      );
-    } catch (e) {
-      Logger.error("Error checking video activity:", e);
-      return false;
-    }
-  },
-
-  findVideo() {
-    const { Logger, CONFIG } = window.AnimeTrackerContent;
-
-    const artVideo = document.querySelector(CONFIG.SELECTORS.VIDEO);
-    if (this.isVideoActive(artVideo)) {
-      Logger.debug("Found: art-video (main page)");
-      return artVideo;
-    }
-
-    const videos = document.querySelectorAll(CONFIG.SELECTORS.VIDEO_FALLBACK);
-    for (const video of videos) {
-      if (this.isVideoActive(video)) return video;
-    }
-
-    const iframes = document.querySelectorAll("iframe");
-    for (const iframe of iframes) {
-      try {
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (!iframeDoc) continue;
-
-        const plyrWrapper = iframeDoc.querySelector(CONFIG.SELECTORS.PLYR_WRAP);
-        if (plyrWrapper) {
-          const video = plyrWrapper.querySelector(CONFIG.SELECTORS.VIDEO_FALLBACK);
-          if (this.isVideoActive(video)) {
-            Logger.debug("Found: Plyr iframe");
-            return video;
-          }
-        }
-
-        const iframeArtVideo = iframeDoc.querySelector(CONFIG.SELECTORS.VIDEO);
-        if (this.isVideoActive(iframeArtVideo)) {
-          Logger.debug("Found: art-video iframe");
-          return iframeArtVideo;
-        }
-
-        const iframeVideos = iframeDoc.querySelectorAll("video");
-        for (const video of iframeVideos) {
-          if (this.isVideoActive(video)) {
-            Logger.debug("Found: iframe video");
-            return video;
-          }
-        }
-      } catch {
-        Logger.debug("Cross-origin iframe, skipping");
-      }
-    }
-
-    return null;
-  },
-
+  // Called by PlayerObserver for each newly bound video. Its media events reach eventHandlers through
+  // the subscriptions made in startWatching; this sets up everything else tied to one element.
   async setupVideoMonitoring(video, animeInfo, eventHandlers) {
-    const { CONFIG, Logger, ProgressTracker, Notifications } = window.AnimeTrackerContent;
+    const { CONFIG, Logger, ProgressTracker, Notifications, PlayerDom } = window.AnimeTrackerContent;
 
-    if (this.videoElement === video && this.isVideoActive(video)) return;
+    if (this.videoElement === video && PlayerDom.isVideoActive(video)) return;
 
     this.cleanup();
 
-    if (!this.isVideoActive(video)) {
+    if (!PlayerDom.isVideoActive(video)) {
       Logger.debug("Video not ready");
       return;
     }
 
     this.videoElement = video;
 
-    video.addEventListener("timeupdate", eventHandlers.handleTimeUpdate, { passive: true });
-
-    if (eventHandlers.handleTimeUpdateRaw) {
-      video.addEventListener("timeupdate", eventHandlers.handleTimeUpdateRaw, { passive: true });
-    }
     if (eventHandlers.handleVideoMetadata) {
-      video.addEventListener("loadedmetadata", eventHandlers.handleVideoMetadata, { passive: true });
-      video.addEventListener("durationchange", eventHandlers.handleVideoMetadata, { passive: true });
-      video.addEventListener("loadeddata", eventHandlers.handleVideoMetadata, { passive: true });
       Promise.resolve().then(() => eventHandlers.handleVideoMetadata());
     }
-
-    video.addEventListener("pause", eventHandlers.handlePause, { passive: true });
-    video.addEventListener("seeked", eventHandlers.handleSeeked, { passive: true });
-    video.addEventListener("ended", eventHandlers.handleEnded, { passive: true });
 
     document.addEventListener("visibilitychange", eventHandlers.handleVisibilityChange, { passive: true });
     window.addEventListener("beforeunload", eventHandlers.handleBeforeUnload);
     window.addEventListener("pagehide", eventHandlers.handleBeforeUnload, { passive: true });
-
-    this.addCleanup(() => {
-      video.removeEventListener("timeupdate", eventHandlers.handleTimeUpdate);
-      if (eventHandlers.handleTimeUpdateRaw) {
-        video.removeEventListener("timeupdate", eventHandlers.handleTimeUpdateRaw);
-      }
-      if (eventHandlers.handleVideoMetadata) {
-        video.removeEventListener("loadedmetadata", eventHandlers.handleVideoMetadata);
-        video.removeEventListener("durationchange", eventHandlers.handleVideoMetadata);
-        video.removeEventListener("loadeddata", eventHandlers.handleVideoMetadata);
-      }
-      video.removeEventListener("pause", eventHandlers.handlePause);
-      video.removeEventListener("seeked", eventHandlers.handleSeeked);
-      video.removeEventListener("ended", eventHandlers.handleEnded);
-    });
 
     this.addCleanup(() => {
       document.removeEventListener("visibilitychange", eventHandlers.handleVisibilityChange);
@@ -325,20 +223,16 @@ const VideoMonitor = {
         if (initialProgress && initialProgress.currentTime > CONFIG.MIN_PROGRESS_TO_SAVE) {
           showPromptOnce(initialProgress);
         } else {
-          let resumeWaitTimer = null;
-          const mountAt = Date.now();
+          // Cloud sync can deliver this episode's saved position shortly after the page opens.
           const RESUME_LISTEN_WINDOW_MS = 15000;
           const SAME_POSITION_TOLERANCE = 5;
 
-          const onProgressArrive = (changes, namespace) => {
-            if (namespace !== "local" || !changes.videoProgress) return;
-
-            if (Date.now() - mountAt > RESUME_LISTEN_WINDOW_MS) {
-              chrome.storage.onChanged.removeListener(onProgressArrive);
-              return;
-            }
-            const newVP = changes.videoProgress.newValue || {};
-            const entry = newVP[animeInfo.uniqueId];
+          const stopListening = () => {
+            unsubscribe();
+            clearTimeout(resumeWaitTimer);
+          };
+          const unsubscribe = window.AnimeTrackerContent.PageEvents.onStorage("videoProgress", (changes) => {
+            const entry = (changes.videoProgress.newValue || {})[animeInfo.uniqueId];
             if (!entry || entry.deleted) return;
             if (!(entry.currentTime > CONFIG.MIN_PROGRESS_TO_SAVE)) return;
 
@@ -347,31 +241,11 @@ const VideoMonitor = {
               return;
             }
 
-            chrome.storage.onChanged.removeListener(onProgressArrive);
-            if (resumeWaitTimer) {
-              clearTimeout(resumeWaitTimer);
-              resumeWaitTimer = null;
-            }
+            stopListening();
             showPromptOnce(entry);
-          };
-          chrome.storage.onChanged.addListener(onProgressArrive);
-
-          resumeWaitTimer = setTimeout(() => {
-            resumeWaitTimer = null;
-            try {
-              chrome.storage.onChanged.removeListener(onProgressArrive);
-            } catch {}
-          }, RESUME_LISTEN_WINDOW_MS);
-
-          this.addCleanup(() => {
-            try {
-              chrome.storage.onChanged.removeListener(onProgressArrive);
-            } catch {}
-            if (resumeWaitTimer) {
-              clearTimeout(resumeWaitTimer);
-              resumeWaitTimer = null;
-            }
           });
+          const resumeWaitTimer = setTimeout(stopListening, RESUME_LISTEN_WINDOW_MS);
+          this.addCleanup(stopListening);
         }
       }
     }
@@ -417,82 +291,22 @@ const VideoMonitor = {
     Logger.debug("Video monitoring active");
   },
 
-  findAndMonitorVideo(animeInfo, eventHandlers) {
-    const video = this.findVideo();
-    if (video) {
-      this.setupVideoMonitoring(video, animeInfo, eventHandlers);
-      return true;
-    }
-    return false;
-  },
-
+  // Routes the page's handlers to PlayerObserver for this page and (re)starts the video search. Every
+  // subscription is page-lifetime: a server switch rebinds the video but keeps the subscriptions.
   startWatching(animeInfo, eventHandlers) {
-    const { CONFIG, Logger } = window.AnimeTrackerContent;
-
+    const { PlayerObserver, Logger } = window.AnimeTrackerContent;
     Logger.debug("Looking for video...");
-    const videoFound = this.findAndMonitorVideo(animeInfo, eventHandlers);
-
-    if (!videoFound) {
-      Logger.debug("Video not found, waiting...");
-
-      this.checkInterval = setInterval(() => {
-        if (this.retryCount >= CONFIG.MAX_RETRIES) {
-          clearInterval(this.checkInterval);
-          Logger.info("Video not found after max retries");
-          return;
-        }
-
-        if (this.findAndMonitorVideo(animeInfo, eventHandlers)) {
-          clearInterval(this.checkInterval);
-          Logger.debug(`Video found after ${this.retryCount} retries`);
-        }
-
-        this.retryCount++;
-      }, CONFIG.VIDEO_CHECK_INTERVAL);
-
-      this.addCleanup(() => {
-        if (this.checkInterval) {
-          clearInterval(this.checkInterval);
-          this.checkInterval = null;
-        }
-      });
-
-      let observerTimeout;
-      let observerWatchdog;
-      const observer = new MutationObserver(() => {
-        clearTimeout(observerTimeout);
-        observerTimeout = setTimeout(() => {
-          if (this.findAndMonitorVideo(animeInfo, eventHandlers)) {
-            observer.disconnect();
-            if (this.checkInterval) clearInterval(this.checkInterval);
-
-            if (observerWatchdog) {
-              clearTimeout(observerWatchdog);
-              observerWatchdog = null;
-            }
-            Logger.debug("Video found via observer");
-          }
-        }, 100);
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
-
-      const observerBudgetMs = CONFIG.VIDEO_CHECK_INTERVAL * CONFIG.MAX_RETRIES;
-      observerWatchdog = setTimeout(() => {
-        observer.disconnect();
-        clearTimeout(observerTimeout);
-        Logger.debug("Video observer watchdog — disconnected after budget elapsed");
-      }, observerBudgetMs);
-
-      this.addCleanup(() => {
-        observer.disconnect();
-        clearTimeout(observerTimeout);
-        clearTimeout(observerWatchdog);
-      });
-    }
+    PlayerObserver.stop();
+    const subscriptions = [
+      PlayerObserver.on("timeupdate", eventHandlers.handleTimeUpdate),
+      PlayerObserver.on("metadata", eventHandlers.handleVideoMetadata),
+      PlayerObserver.on("pause", eventHandlers.handlePause),
+      PlayerObserver.on("seeked", eventHandlers.handleSeeked),
+      PlayerObserver.on("ended", eventHandlers.handleEnded),
+      PlayerObserver.on("video", (video) => this.setupVideoMonitoring(video, animeInfo, eventHandlers)),
+    ];
+    this.addPageCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()));
+    PlayerObserver.start();
   },
 
   getVideoElement() {
