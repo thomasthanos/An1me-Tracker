@@ -7,7 +7,7 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
-## [7.5.9] — 2026-10-03
+## [8.0.0] — 2026-10-03
 
 ### Fixed
 
