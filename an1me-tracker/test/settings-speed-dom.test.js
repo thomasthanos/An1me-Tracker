@@ -10,6 +10,11 @@ catch (error) {
   process.exit(0);
 }
 const root = path.resolve(__dirname, "..");
+const main = fs.readFileSync(path.join(root, 'src/popup/main.js'), 'utf8');
+const keyStart = main.indexOf('  document.addEventListener("keydown", (e) => {');
+const keyEnd = main.indexOf('\n  window.addEventListener("beforeunload"', keyStart);
+assert.ok(keyStart >= 0 && keyEnd > keyStart, 'production popup keyboard handler is available');
+const mainKeyboardListener = main.slice(keyStart, keyEnd);
 const candidates = [process.env.AT_TEST_BROWSER,
   ...[process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean)
     .flatMap(dir => [path.join(dir, "Microsoft/Edge/Application/msedge.exe"), path.join(dir, "Google/Chrome/Application/chrome.exe")]),
@@ -19,6 +24,8 @@ const executablePath = candidates.find(file => fs.existsSync(file));
 const scripts = ["src/common/utils.js", "src/common/data/speed-preferences.js", "src/popup/lib/runtime-request.js",
   "src/popup/lib/ui-helpers.js", "src/popup/views/settings-view.js"];
 function setup() {
+  window.elements = {}; window.currentViewMode = 'settings';
+  window.setViewMode = mode => { window.currentViewMode = mode; };
   window.AnimeTracker = {}; window.PopupLogger = { warn() {} };
   window.testMessages = []; window.testStorageListeners = new Set();
   window.testStore = { speedControlPreferences: { enabled: true, normalRate: 1.25, boostRate: 3, defaultVolume: .6, defaultMuted: false },
@@ -76,9 +83,44 @@ async function runInBrowser(mobile) {
   await AT.SettingsView.initializeSpeedControl?.();
   await AT.SettingsView.initializeSpeedControl?.();
   AT.SettingsView.render(document.getElementById("settingsView"));
+  await test("custom dropdown uses a bounded touch menu, selected SVG and keyboard navigation", async () => {
+    const trigger = required("settingsNormalSpeed");
+    equal(trigger.tagName, "BUTTON", "custom trigger replaces native select");
+    equal(trigger.getAttribute("role"), "combobox", "accessible select-only combobox");
+    trigger.click();
+    const menu = required("settingsNormalSpeedMenu");
+    equal(menu.hidden, false, "custom list opens");
+    equal(menu.parentElement, document.body, "menu avoids card clipping");
+    equal(menu.querySelector('[aria-selected="true"]').dataset.speedChoice, "1.25", "stored choice selected");
+    equal(!!menu.querySelector('[aria-selected="true"] svg'), true, "selected checkmark is vector");
+    const rect = menu.getBoundingClientRect();
+    equal(rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth, true, "menu stays in popup viewport");
+    equal(menu.querySelector('[role="option"]').getBoundingClientRect().height >= 44, true, "touch option target");
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    equal(menu.hidden, true, "Escape closes"); equal(document.activeElement, trigger, "focus restored");
+    equal(window.currentViewMode, 'settings', 'Escape keeps Settings view open with production global shortcuts');
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+    const before = window.testMessages.length;
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); await settle();
+    equal(window.testMessages.length, before + 1, "keyboard commits once");
+    equal(trigger.value, "2", "End selected last normal rate"); equal(menu.hidden, true, "selection closes");
+    trigger.click(); document.body.click(); equal(menu.hidden, true, "outside click closes");
+    trigger.click(); trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })); equal(menu.hidden, true, "Tab dismisses without trapping focus");
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    equal(window.currentViewMode, null, "closed menu keeps the global Escape shortcut available"); window.currentViewMode = 'settings';
+    trigger.click(); document.dispatchEvent(new Event("scroll")); equal(menu.hidden, true, "page scrolling drops the anchored menu");
+    if (!mobile) {
+      trigger.click(); required("settingsBoostSpeed").click();
+      equal(menu.hidden, true, "only one menu open");
+      required("settingsBoostSpeedMenu").querySelector('[data-speed-choice="4"]').click(); await settle();
+      equal(required("settingsBoostSpeed").value, "4", "touch boost selection");
+    }
+    window.testStorageChange({ enabled:true, normalRate:1.25, boostRate:3, defaultVolume:.6, defaultMuted:false });
+  });
   if (mobile) {
     await test("exact four rates, fixed 2x hold hint and native fullscreen hint", async () => {
-      const options = [...required("settingsNormalSpeed").options].map(option => option.value);
+      const options = [...required("settingsNormalSpeedMenu").querySelectorAll('[role="option"]')].map(option => option.dataset.speedChoice);
       equal(JSON.stringify(options), '["","1","1.25","1.5","2"]', "mobile choices");
       equal(document.getElementById("settingsBoostSpeed"), null, "no configurable mobile boost");
       equal(document.getElementById("settingsSpeedAudioReset"), null, "no mobile audio override");
@@ -161,7 +203,7 @@ async function runInBrowser(mobile) {
 const styles = fs.readFileSync(path.join(root, "popup.html"), "utf8").match(/<head>([\s\S]*?)<\/head>/)[1];
 function html(mobile) {
   return `<html><head>${styles}</head><body><div class="app settings-mode"><main class="main-content"><div id="settingsView" class="settings-view"></div></main></div>
-    <pre id="results" hidden>pending</pre><script>(${setup.toString()})();</script>
+    <pre id="results" hidden>pending</pre><script>(${setup.toString()})();${mainKeyboardListener}</script>
     ${scripts.map(file => `<script>${fs.readFileSync(path.join(root, file), "utf8").replace(/<\/script/gi, "<\\/script")}</script>`).join("")}
     <script>(${runInBrowser.toString()})(${mobile});</script></body></html>`;
 }
@@ -189,9 +231,21 @@ function html(mobile) {
       for (const outcome of outcomes) console.log(`${outcome.passed ? "PASS" : "FAIL"} ${outcome.name}${outcome.error ? "\n" + outcome.error : ""}`);
       assert.equal(errors.length, 0, errors.join("; "));
       passed = passed && outcomes.every(outcome => outcome.passed);
+      await page.evaluate(() => { window.testStorageChange({enabled:true,normalRate:1.5,boostRate:4,defaultVolume:.6,defaultMuted:false}); });
+      await page.locator("#settingsNormalSpeed").focus();
+      const messageCount = await page.evaluate(() => window.testMessages.length);
+      await page.keyboard.press("ArrowDown"); await page.keyboard.press("Escape");
+      assert.equal(await page.evaluate(() => window.currentViewMode), 'settings', 'real Escape keeps Settings open');
+      await page.keyboard.press("ArrowDown"); await page.keyboard.press("End"); await page.keyboard.press("Enter");
+      await page.waitForFunction(() => document.getElementById("settingsNormalSpeed").value === "2" && !document.getElementById("settingsNormalSpeed").disabled);
+      assert.equal(await page.evaluate(() => window.testMessages.length), messageCount + 1, "real key presses commit once");
+      assert.equal(await page.locator("#settingsNormalSpeed").getAttribute("aria-expanded"), "false", "Enter does not reopen through a native click");
+      console.log(`PASS ${mobile ? "mobile" : "desktop"}: real keyboard activation does not duplicate or reopen`);
       if (process.env.AT_SPEED_SCREENSHOT_DIR && passed) {
         await page.evaluate(() => { window.testStorageChange({enabled:true,normalRate:1.5,boostRate:4,defaultVolume:.6,defaultMuted:false}); });
         await page.locator("#settingsSpeedSection").screenshot({ path: path.join(process.env.AT_SPEED_SCREENSHOT_DIR, `speed-settings-${mobile ? "mobile" : "desktop"}.png`) });
+        await page.locator("#settingsNormalSpeed").click();
+        await page.screenshot({ path: path.join(process.env.AT_SPEED_SCREENSHOT_DIR, `speed-dropdown-${mobile ? "mobile" : "desktop"}.png`) });
       }
       await context.close();
     }

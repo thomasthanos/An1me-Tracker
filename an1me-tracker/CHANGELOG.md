@@ -22,6 +22,9 @@ The version in `manifest.json` is the single source of truth.
   echoing programmatic changes or changing library/cloud data. Unsupported rates show feedback and
   the actual rate. Disable removes player UI, listeners and observation; navigation/server changes
   restore temporary boosts and clean the old player. No new permanent polling or network requests.
+- Use custom speed dropdowns with selected SVG checkmarks, 44px options and keyboard navigation.
+  Menus stay within the popup viewport, close on Escape/outside interaction and page scrolling,
+  and remove their temporary listeners when closed. Native OS dropdowns are replaced on PC/iPhone.
 - Add normal/boost, pointer cancellation, storage race, audio, server rebind and cleanup tests, plus
   regression coverage at 1.25×/1.5×/2× for Resume, completion and phone-to-PC sync. Preserve actual
   media timestamps, existing watch history, metadata caches and native icon appearances.

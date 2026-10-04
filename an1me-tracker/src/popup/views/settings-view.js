@@ -229,6 +229,133 @@
   let speedInitialized = false;
   let speedRevision = 0;
   const speedIsMobile = () => !!globalThis.AnimeTrackerUtils?.isMobileDevice?.();
+  let speedMenu = null;
+
+  function renderSpeedSelect(id, title, choices) {
+    return `<div class="settings-speed-field"><span id="${id}Label">${title}</span>
+      <div class="settings-speed-select">
+        <button id="${id}" class="settings-speed-trigger" type="button" role="combobox"
+          aria-labelledby="${id}Label ${id}Value" aria-describedby="settingsSpeedHint"
+          aria-haspopup="listbox" aria-controls="${id}Menu" aria-expanded="false">
+          <span id="${id}Value"></span>${svg("chevron", "settings-speed-chevron")}
+        </button>
+        <div id="${id}Menu" class="settings-speed-menu" role="listbox" aria-labelledby="${id}Label" hidden>
+          ${choices.map(({ value, text }, index) => `<button type="button" role="option" tabindex="-1"
+            id="${id}Option${index}" data-speed-control="${id}" data-speed-choice="${value}" aria-selected="false">
+            <span>${text}</span>${svg("check")}</button>`).join("")}
+        </div>
+      </div></div>`;
+  }
+
+  function closeSpeedMenu(restoreFocus = false) {
+    if (!speedMenu) return;
+    const { trigger, menu, parent, cleanups } = speedMenu;
+    speedMenu = null;
+    for (const cleanup of cleanups) cleanup();
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false"); trigger.removeAttribute("aria-activedescendant");
+    if (parent.isConnected) parent.append(menu); else menu.remove();
+    if (restoreFocus && !trigger.disabled && trigger.isConnected) trigger.focus({ preventScroll: true });
+  }
+
+  function activateSpeedOption(index) {
+    if (!speedMenu) return;
+    const { trigger, menu } = speedMenu, options = [...menu.querySelectorAll('[role="option"]')];
+    speedMenu.index = (index + options.length) % options.length;
+    options.forEach((option, position) => option.classList.toggle("is-active", position === speedMenu.index));
+    const active = options[speedMenu.index];
+    trigger.setAttribute("aria-activedescendant", active.id);
+    active.scrollIntoView({ block: "nearest" });
+  }
+
+  function positionSpeedMenu() {
+    if (!speedMenu) return;
+    const { trigger, menu } = speedMenu;
+    if (!trigger.getClientRects().length) { closeSpeedMenu(); return; }
+    const rect = trigger.getBoundingClientRect(), view = window.visualViewport;
+    const leftEdge = (view?.offsetLeft || 0) + 8, topEdge = (view?.offsetTop || 0) + 8;
+    const rightEdge = leftEdge + (view?.width || innerWidth) - 16;
+    const bottomEdge = topEdge + (view?.height || innerHeight) - 16;
+    const width = Math.min(Math.max(180, rect.width), rightEdge - leftEdge);
+    const below = bottomEdge - rect.bottom - 6, above = rect.top - topEdge - 6;
+    const down = below >= Math.min(360, menu.scrollHeight) || below >= above;
+    menu.style.width = `${width}px`;
+    menu.style.maxHeight = `${Math.max(24, Math.min(360, down ? below : above))}px`;
+    menu.style.left = `${Math.max(leftEdge, Math.min(rect.left, rightEdge - width))}px`;
+    menu.style.top = `${Math.max(topEdge, Math.min(down ? rect.bottom + 6 : rect.top - 6 - menu.offsetHeight, bottomEdge - menu.offsetHeight))}px`;
+  }
+
+  function openSpeedMenu(trigger) {
+    if (trigger.disabled || speedBusy) return;
+    if (speedMenu?.trigger === trigger) { closeSpeedMenu(); return; }
+    closeSpeedMenu();
+    const menu = document.getElementById(`${trigger.id}Menu`);
+    speedMenu = { trigger, menu, parent: menu.parentElement, cleanups: [], index: 0, typed: "", typedAt: 0 };
+    const listen = (target, type, handler, options) => {
+      target?.addEventListener(type, handler, options);
+      speedMenu.cleanups.push(() => target?.removeEventListener(type, handler, options));
+    };
+    document.body.append(menu); menu.hidden = false;
+    trigger.setAttribute("aria-expanded", "true"); trigger.focus({ preventScroll: true });
+    positionSpeedMenu();
+    if (!speedMenu) return;
+    const options = [...menu.querySelectorAll('[role="option"]')];
+    activateSpeedOption(Math.max(0, options.findIndex(option => option.dataset.speedChoice === trigger.value)));
+    const outside = event => { if (!menu.contains(event.target) && !trigger.contains(event.target)) closeSpeedMenu(); };
+    listen(document, "pointerdown", outside);
+    listen(document, "focusin", outside);
+    listen(document, "scroll", event => { if (!menu.contains(event.target)) closeSpeedMenu(); }, { capture: true, passive: true });
+    listen(document, "visibilitychange", () => { if (document.hidden) closeSpeedMenu(); });
+    listen(window, "blur", () => closeSpeedMenu());
+    listen(window, "resize", positionSpeedMenu, { passive: true });
+    listen(window.visualViewport, "resize", positionSpeedMenu, { passive: true });
+  }
+
+  function chooseSpeedOption(option) {
+    const trigger = document.getElementById(option.dataset.speedControl);
+    if (!trigger || trigger.disabled || speedBusy) return;
+    trigger.value = option.dataset.speedChoice;
+    closeSpeedMenu(true);
+    trigger.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function speedMenuKey(event) {
+    const trigger = event.target.closest?.(".settings-speed-trigger") ||
+      (speedMenu?.menu.contains(event.target) ? speedMenu.trigger : null);
+    if (!trigger || trigger.disabled || speedBusy || event.ctrlKey || event.metaKey || event.altKey) return;
+    const key = event.key;
+    if (key === "Escape") {
+      if (speedMenu) { event.preventDefault(); event.stopPropagation(); closeSpeedMenu(true); }
+      return;
+    }
+    if (key === "Tab") { closeSpeedMenu(); return; }
+    if (!["ArrowDown", "ArrowUp", "Home", "End", "Enter", " "].includes(key) && !/^[0-9.p]$/i.test(key)) return;
+    event.preventDefault();
+    const wasOpen = speedMenu?.trigger === trigger;
+    if (!wasOpen) openSpeedMenu(trigger);
+    if (!speedMenu) return;
+    const options = [...speedMenu.menu.querySelectorAll('[role="option"]')];
+    if (key === "Enter" || key === " ") { if (wasOpen) chooseSpeedOption(options[speedMenu.index]); }
+    else if (key === "Home") activateSpeedOption(0);
+    else if (key === "End") activateSpeedOption(options.length - 1);
+    else if (key === "ArrowDown" || key === "ArrowUp") { if (wasOpen) activateSpeedOption(speedMenu.index + (key === "ArrowDown" ? 1 : -1)); }
+    else {
+      const now = Date.now(); speedMenu.typed = (now - speedMenu.typedAt < 650 ? speedMenu.typed : "") + key.toLowerCase(); speedMenu.typedAt = now;
+      const found = options.findIndex(option => option.textContent.trim().toLowerCase().startsWith(speedMenu.typed));
+      if (found >= 0) activateSpeedOption(found);
+    }
+  }
+
+  function updateSpeedSelect(id, value, disabled) {
+    const trigger = document.getElementById(id), menu = document.getElementById(`${id}Menu`);
+    if (!trigger || !menu) return;
+    trigger.value = value; trigger.disabled = disabled;
+    const options = [...menu.querySelectorAll('[role="option"]')];
+    for (const option of options) option.setAttribute("aria-selected", String(option.dataset.speedChoice === value));
+    const selected = options.find(option => option.dataset.speedChoice === value);
+    document.getElementById(`${id}Value`).textContent = selected?.querySelector("span").textContent || "Player default";
+    if (disabled && speedMenu?.trigger === trigger) closeSpeedMenu();
+  }
 
   function speedAudioText(preferences) {
     const parts = [];
@@ -242,19 +369,16 @@
     if (!model) return "";
     const mobile = speedIsMobile();
     const preferences = model.normalize(speedPreferences, mobile);
-    const normalOptions = (mobile ? model.MOBILE_RATES : model.NORMAL_RATES)
-      .map(rate => `<option value="${rate}">${rate}×</option>`).join("");
-    const boostOptions = model.BOOST_RATES.map(rate => `<option value="${rate}">${rate}×</option>`).join("");
+    const normalOptions = [{ value: "", text: "Player default" }, ...(mobile ? model.MOBILE_RATES : model.NORMAL_RATES)
+      .map(rate => ({ value: String(rate), text: `${rate}×` }))];
+    const boostOptions = model.BOOST_RATES.map(rate => ({ value: String(rate), text: `${rate}×` }));
     return `<section class="settings-card settings-speed-card" id="settingsSpeedSection">
       ${sectionHead("speed", "Speed Control")}
       ${renderToggleItem({ id: "settingsSpeedControl", subtitleId: "settingsSpeedControlSubtitle", iconKey: "speed",
         title: "Speed control", subtitle: toggleSubtitle("settingsSpeedControl", preferences.enabled), enabled: preferences.enabled })}
       <div class="settings-speed-fields">
-        <label class="settings-speed-field" for="settingsNormalSpeed"><span>Normal speed</span>
-          <select id="settingsNormalSpeed" aria-describedby="settingsSpeedHint"><option value="">Player default</option>${normalOptions}</select>
-        </label>
-        ${mobile ? "" : `<label class="settings-speed-field" for="settingsBoostSpeed"><span>Hold boost</span>
-          <select id="settingsBoostSpeed" aria-describedby="settingsSpeedHint">${boostOptions}</select></label>`}
+        ${renderSpeedSelect("settingsNormalSpeed", "Normal speed", normalOptions)}
+        ${mobile ? "" : renderSpeedSelect("settingsBoostSpeed", "Hold boost", boostOptions)}
       </div>
       <p class="settings-speed-hint" id="settingsSpeedHint">${mobile
         ? "Press and hold the speed control for 2×; release to return. In native fullscreen, use the player’s own controls."
@@ -273,10 +397,8 @@
     updateToggle("settingsSpeedControl", preferences.enabled, toggleSubtitle("settingsSpeedControl", preferences.enabled));
     const toggle = document.getElementById("settingsSpeedControl");
     if (toggle) toggle.disabled = speedBusy;
-    const normal = document.getElementById("settingsNormalSpeed");
-    if (normal) { normal.value = preferences.normalRate === null ? "" : String(preferences.normalRate); normal.disabled = speedBusy || !preferences.enabled; }
-    const boost = document.getElementById("settingsBoostSpeed");
-    if (boost) { boost.value = String(preferences.boostRate); boost.disabled = speedBusy || !preferences.enabled; }
+    updateSpeedSelect("settingsNormalSpeed", preferences.normalRate === null ? "" : String(preferences.normalRate), speedBusy || !preferences.enabled);
+    updateSpeedSelect("settingsBoostSpeed", String(preferences.boostRate), speedBusy || !preferences.enabled);
     const audio = document.getElementById("settingsSpeedAudioInfo");
     if (audio) audio.textContent = speedAudioText(preferences);
     const reset = document.getElementById("settingsSpeedAudioReset");
@@ -324,6 +446,11 @@
     if (!model || speedInitialized) return;
     speedInitialized = true;
     document.addEventListener("click", event => {
+      const option = event.target.closest?.("[data-speed-choice]");
+      if (option) { chooseSpeedOption(option); return; }
+      const trigger = event.target.closest?.(".settings-speed-trigger");
+      if (trigger) { openSpeedMenu(trigger); return; }
+      if (speedMenu && !speedMenu.menu.contains(event.target)) closeSpeedMenu();
       const toggle = event.target.closest?.("#settingsSpeedControl");
       const reset = event.target.closest?.("#settingsSpeedAudioReset");
       const control = toggle || reset;
@@ -332,6 +459,8 @@
       const preferences = model.normalize(speedPreferences, speedIsMobile());
       void saveSpeedControlPatch(toggle ? { enabled: !preferences.enabled } : { defaultVolume: null, defaultMuted: null });
     });
+    // Consume menu Escape before main's bubble shortcut leaves Settings.
+    document.addEventListener("keydown", speedMenuKey, true);
     document.addEventListener("change", event => {
       const control = event.target;
       if (control.disabled || speedBusy) return;
