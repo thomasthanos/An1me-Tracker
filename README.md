@@ -145,14 +145,16 @@ manifest.json       Browser entry point and extension permissions
 background.js       MV3 background service worker (sync, alarms, storage)
 popup.html          Main library UI, search, and settings dashboard
 src/                Modular scripts: content, player hooks, cloud, common utils
-scripts/            Packaging and native iOS packaging utilities
-test/               Automated regression test suite
+dev/                Development files, kept out of the extension bundle
+  scripts/          Packaging and native iOS packaging utilities
+  test/             Automated regression test suite
+  screenshots/      Store and documentation screenshots
 ```
 
 ```sh
 # Package clean release archives into dist/
-node scripts/package.js --zip                  # Desktop Chrome/Edge bundle
-node scripts/package.js --target safari --zip  # Safari iOS bundle
+node dev/scripts/package.js --zip                  # Desktop Chrome/Edge bundle
+node dev/scripts/package.js --target safari --zip  # Safari iOS bundle
 ```
 
 <div align="center">
@@ -160,7 +162,7 @@ node scripts/package.js --target safari --zip  # Safari iOS bundle
 Run the automated test suite (**PowerShell**):
 
 ```powershell
-Get-ChildItem test -Filter '*.test.js' | ForEach-Object { node $_.FullName }
+Get-ChildItem dev/test -Filter '*.test.js' | ForEach-Object { node $_.FullName }
 ```
 
 </div>
