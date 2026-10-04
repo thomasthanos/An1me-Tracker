@@ -1,174 +1,181 @@
 <div align="center">
 
-<img src=".github/assets/hero-animated.svg" width="1100" alt="An1me Tracker — Watch. Resume. Keep your place. A library and playback companion for desktop and iPhone.">
+<img src=".github/assets/hero-animated.svg" width="100%" alt="An1me Tracker — Never lose your episode">
 
 [![Version 8.2.0](.github/assets/badge-v-tracker.svg)](CHANGELOG.md)
 [![Manifest V3](.github/assets/badge-manifest.svg)](manifest.json)
-[![Optional cloud sync](.github/assets/badge-cloud-sync.svg)](PRIVACY.md)
+[![Cloud Sync](.github/assets/badge-cloud-sync.svg)](PRIVACY.md)
 
-**Resume** · **Organise** · **Sync**
+**Instant resume, automated tracking, and cross-device sync for anime lovers.**  
+<sub>Built for Chrome, Edge, and Safari on iPhone (via SideStore)</sub>
 
-<sub>Chrome · Edge · Safari on iPhone</sub>
+<p align="center">
+  <a href="#-quick-install"><b>⚡ Install</b></a> &nbsp;•&nbsp;
+  <a href="#-features"><b>✨ Features</b></a> &nbsp;•&nbsp;
+  <a href="#-speed-controls"><b>🚀 Speed Boost</b></a> &nbsp;•&nbsp;
+  <a href="#-platforms"><b>📱 Platforms</b></a> &nbsp;•&nbsp;
+  <a href="IOS.md"><b>🍏 iPhone Setup</b></a> &nbsp;•&nbsp;
+  <a href="CHANGELOG.md"><b>📜 Changelog</b></a>
+</p>
 
 </div>
 
 <img src=".github/assets/divider.svg" width="100%" alt="">
 
-Your an1me.to library, with a place to return to. An1me Tracker remembers episodes and playback
-positions, brings unfinished titles into Continue Watching, and keeps your library organised.
-Use it locally, or sign in to carry progress between desktop and iPhone.
+<br>
 
-<img src=".github/assets/tracker-features.svg" width="1100" alt="Resume your episode; organise your library; control playback speed; optionally sync across devices.">
+<div align="center">
 
-## <img src=".github/assets/icon-play.svg" width="24" height="29" alt="" align="top"> Made for watching
+## ✨ Features
 
-- **Keep your place.** Automatic episode tracking, saved positions, Resume and a Continue Watching row. Completion follows watched progress; changing speed keeps the real video timestamp.
-- **Make the library yours.** Covers, search, categories, sorting, merged seasons, filler labels, manual additions, goals and stats. Export or import a backup anytime.
-- **Control the player.** Integrated Speed Control, local preferences, and a boost that returns to your previous speed. AniSkip powers the outro skip button.
-- **Connect if you want.** Optional cloud sync across devices — use it locally without an account.
+<img src=".github/assets/tracker-features.svg" width="100%" alt="An1me Tracker Core Features">
 
-## <img src=".github/assets/icon-key.svg" width="24" height="29" alt="" align="top"> What runs where
+</div>
 
-Most of the tracker works identically on desktop and iPhone. A few features stay on desktop: AniList
-syncing, new-episode alerts and the side panel. Automatic 4K selection, Copy Guard and the Skiptime
-contributor tool are desktop-only as well, and mobile uses shorter fetch timeouts — background work
-is trimmed there to protect battery and temperature.
+<br>
 
-<img src=".github/assets/matrix-platforms.svg" width="1100" alt="Capability matrix: tracking, resume, library, speed control and optional cloud sync run on both desktop and iPhone; AniList, new-episode alerts and the side panel are desktop only.">
+- ⏱ **Exact-Second Resume** — Remembers your precise timestamp. Click any episode in *Continue Watching* and jump straight back into the action.
+- 🎯 **Smart Auto-Tracking** — Marks episodes as watched once you reach 85% of playback, keeping your watchlist updated hands-free.
+- 📚 **Full Anime Library** — Cover artwork, search, custom categories, watch counters, filler episode tags, and one-click JSON backup / restore.
+- ⚡ **Instant Speed Boost** — Hold <kbd>F7</kbd> on PC or tap and hold on iPhone for instant turbo playback with pitch correction.
+- ⏭ **Outro Auto-Skip** — Powered by AniSkip to smoothly skip ending credits and move to the next episode.
+- ☁️ **Cross-Device Sync** — Optional Firebase cloud sync carries your exact library and resume points between desktop and mobile. 100% functional offline or without an account.
 
-### Mobile performance
+<br>
 
-Covers load near the viewport through a bounded queue. Unchanged cards stay mounted during a fetch,
-hidden popup work pauses, and extra episode tags render when opened.
+<img src=".github/assets/divider.svg" width="100%" alt="">
 
-You can disable Speed Control or optional settings you do not use; fetch and cloud sync still run
-when requested. Automated checks cover progress and lifecycle behaviour, but audio, native
-fullscreen and temperature need verification on a physical iPhone.
+<br>
 
-## <img src=".github/assets/icon-install.svg" width="24" height="29" alt="" align="top"> Install
+<div align="center">
 
-### Desktop
+## 📱 Platforms
 
-Works with **Chrome and Edge** as an unpacked extension.
+<img src=".github/assets/matrix-platforms.svg" width="100%" alt="Platform Feature Matrix">
 
-1. [Download the repository](https://github.com/thomasthanos/an1me-extensions/archive/refs/heads/main.zip) and extract it to a permanent location.
-2. Open `chrome://extensions` or `edge://extensions` and enable **Developer mode**.
-3. Choose **Load unpacked** and select the **root folder containing `manifest.json`**.
-4. Pin An1me Tracker, open an1me.to and start a video.
+</div>
 
-> [!IMPORTANT]
-> **Upgrading an existing install.** The tracker now lives at the repository root, so loading it from
-> a different folder gives the browser a different extension ID and separate storage. Export a backup
-> from the old tracker, import it into the new one, and check your library and Resume positions
-> before removing the old entry. A backup carries watched episodes and playback positions, not every
-> preference or cache — sign in again and reset device settings as needed.
+<br>
 
-For a clean folder containing only browser files, run `node scripts/package.js --zip` and load
-`dist/an1me-tracker`. Keep that path fixed for future reloads.
+<img src=".github/assets/divider.svg" width="100%" alt="">
 
-### iPhone
+<br>
 
-The Safari extension ships inside an unsigned iOS app for **SideStore**, on **iOS 18+**.
+<div align="center">
 
-Add this URL in **SideStore → Sources → +**:
+## ⚡ Quick Install
+
+</div>
+
+### 💻 Desktop (Chrome / Edge / Brave)
+
+1. [**Download the repo archive**](https://github.com/thomasthanos/an1me-extensions/archive/refs/heads/main.zip) and unzip it into a permanent folder.
+2. Go to `chrome://extensions` or `edge://extensions` and enable **Developer mode** (top-right toggle).
+3. Click **Load unpacked** and select the folder containing `manifest.json`.
+4. Pin the extension icon and open [an1me.to](https://an1me.to) to begin tracking!
+
+---
+
+### 📱 iPhone (Safari via SideStore)
+
+> Compatible with **iOS 18+**. Runs as a native Safari Web Extension inside an unsigned IPA wrapper.
+
+<div align="center">
+
+Add the official source in **SideStore → Sources → +**:
 
 ```text
 https://github.com/thomasthanos/an1me-extensions/releases/download/tracker-source/source.json
 ```
 
-Or [download the 8.2.0 IPA](https://github.com/thomasthanos/an1me-extensions/releases/download/tracker-v8.2.0/An1meTracker-8.2.0.ipa) for a manual install.
-Update over the existing app to keep its library, progress and caches. **Refresh** renews the
-signature; **Update** installs a newer build. Full steps: [iPhone setup guide](IOS.md).
+Or download the prebuilt IPA directly:  
+[**Download An1meTracker-8.2.0.ipa**](https://github.com/thomasthanos/an1me-extensions/releases/download/tracker-v8.2.0/An1meTracker-8.2.0.ipa)
 
-## <img src=".github/assets/icon-sparkle.svg" width="24" height="29" alt="" align="top"> Speed Control
+For step-by-step instructions with screenshots, read the **[iPhone Setup Guide (IOS.md)](IOS.md)**.
 
-| | Desktop | iPhone |
-|---|---|---|
-| Choose a speed | Settings → Speed Control | Tap the player speed button |
-| Temporary boost | Hold **F7** | Hold the button for **2×** |
-| Toggle boost | **F8** | Release to return |
-| Boost / player choices | **1.5× · 2× · 3× · 4× · 8×**; default **4×** | **1× · 1.25× · 1.5× · 2×** |
-| Audio | Volume and mute remembered locally | Managed by iOS |
+</div>
 
-The normal speed follows the player until you pick a preference. Speed settings stay on the device,
-outside library sync, and add no network requests or permanent polling.
-
-> [!NOTE]
-> On iPhone the button belongs to the page player. Native Safari fullscreen keeps its own controls,
-> and inaccessible embedded players may not expose a controllable video.
->
-> The separate **An1me.to Speed Control** extension is superseded — disable it, its folder is gone.
-
-## <img src=".github/assets/icon-shield.svg" width="24" height="29" alt="" align="top"> Privacy
-
-Works without an account. With sign-in enabled, your library and watch progress sync through
-Firebase. Metadata services receive titles or IDs for lookups. No analytics, no ad SDK.
-Full details in the [privacy policy](PRIVACY.md).
-
-| Permission | Purpose |
-|---|---|
-| `storage`, `unlimitedStorage` | Library, preferences, positions, caches |
-| `alarms` | Scheduled checks and sync |
-| `identity` | Desktop Google sign-in |
-| `notifications` | Desktop new-episode alerts |
-| `sidePanel` | Desktop side panel |
-
-The Safari package omits the unsupported identity, notifications and side panel permissions.
-Declared hosts cover an1me.to, auth/cloud, metadata providers and artwork — see
-[manifest.json](manifest.json).
-
-## <img src=".github/assets/icon-code.svg" width="24" height="29" alt="" align="top"> Development
-
-Plain JavaScript, no bundler. The extension lives directly in the repository root:
-
-```text
-manifest.json       Browser entry points and permissions
-background.js       Background worker entry point
-popup.html          Library and settings shell
-src/                Shared data, player, popup and background modules
-scripts/            Packaging, native iOS setup, SideStore source
-ios/                Native iOS app resources
-test/               Regression tests
-.github/            Build workflow and README artwork
-```
-
-```sh
-node scripts/package.js --zip                      # desktop
-node scripts/package.js --target safari --zip      # Safari
-```
-
-Run the test suite (**PowerShell**):
-
-```powershell
-foreach ($test in Get-ChildItem test -Filter '*.test.js') {
-    node $test.FullName
-    if ($LASTEXITCODE -ne 0) { throw "Test failed: $($test.Name)" }
-}
-```
-
-DOM tests use Playwright when available, otherwise they skip. The
-[iOS workflow](.github/workflows/tracker-ipa.yml) builds the Safari wrapper, attaches the IPA to its
-release and updates the SideStore source after a successful build.
-
-## <img src=".github/assets/icon-help.svg" width="24" height="29" alt="" align="top"> Troubleshooting
-
-- **Earlier phone position on PC** — let phone sync finish on a working connection, then refresh the
-  desktop cloud data. A suspended Safari page can leave an upload pending; reopening it retries.
-  See [iPhone troubleshooting](IOS.md#troubleshooting).
-- **Missing metadata** — use the library's fetch/repair controls. Interrupted queues resume and
-  usable caches remain; a service timeout never removes watch progress.
-- **Report a bug** — [open an issue](https://github.com/thomasthanos/an1me-extensions/issues/new)
-  with your version, device/browser, steps and any error text.
+<br>
 
 <img src=".github/assets/divider.svg" width="100%" alt="">
 
+<br>
+
 <div align="center">
+
+## 🚀 Speed Controls
+
+Integrated player speed boost designed for quickly skimming recaps or pacing your watch.
+
+| Action | Desktop (Chrome / Edge) | iPhone Safari |
+| :--- | :---: | :---: |
+| **Instant Turbo Boost** | Hold <kbd>F7</kbd> *(default 4×)* | Hold player speed button for **2×** |
+| **Toggle Boost** | Press <kbd>F8</kbd> | Tap button to return |
+| **Speed Selection** | 1.5× · 2× · 3× · 4× · 8× | 1× · 1.25× · 1.5× · 2× |
+| **Audio Memory** | Remembers local volume & mute | Handled natively by iOS |
+
+</div>
+
+<br>
+
+<img src=".github/assets/divider.svg" width="100%" alt="">
+
+<br>
+
+<div align="center">
+
+## 🛠️ Development & Builds
+
+Zero build step required for desktop. Written in clean, vanilla modern JavaScript.
+
+</div>
+
+```text
+manifest.json       Browser entry point and extension permissions
+background.js       MV3 background service worker (sync, alarms, storage)
+popup.html          Main library UI, search, and settings dashboard
+src/                Modular scripts: content, player hooks, cloud, common utils
+scripts/            Packaging and native iOS packaging utilities
+test/               Automated regression test suite
+```
+
+```sh
+# Package clean release archives into dist/
+node scripts/package.js --zip                  # Desktop Chrome/Edge bundle
+node scripts/package.js --target safari --zip  # Safari iOS bundle
+```
+
+<div align="center">
+
+Run the automated test suite (**PowerShell**):
+
+```powershell
+Get-ChildItem test -Filter '*.test.js' | ForEach-Object { node $_.FullName }
+```
+
+</div>
+
+<br>
+
+<img src=".github/assets/divider.svg" width="100%" alt="">
+
+<br>
+
+<div align="center">
+
+## 🔒 Privacy & Permissions
+
+**No telemetry. No tracking pixels. No ad SDKs.**
+
+- Works entirely offline with local storage by default.
+- Cloud sync is completely optional and strictly scoped to your Firebase user record (`users/{uid}`).
+- Full permission audit breakdown in **[PRIVACY.md](PRIVACY.md)**.
+
+<br>
+
 <sub>
-
-**Source-available · all rights reserved.** Personal use and source review permitted under the
-[licence](LICENSE); redistribution requires permission.
-
-Not affiliated with an1me.to, AniList, MyAnimeList or Google.
-
+<b>Source-available project</b> · Personal use and code review permitted under the <a href="LICENSE">License</a>.<br>
+Not affiliated with an1me.to, AniList, MyAnimeList, or Google.
 </sub>
+
 </div>

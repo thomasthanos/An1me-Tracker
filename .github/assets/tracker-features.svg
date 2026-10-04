@@ -1,49 +1,241 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="378" viewBox="0 0 1100 378" role="img" aria-labelledby="features-title features-description">
-  <title id="features-title">An1me Tracker features</title>
-  <desc id="features-description">Resume at the second you left. Keep series and episodes organized in your library. Use playback speed shortcuts on PC and hold for 2× on iPhone. Sign in for optional progress sync across devices.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="340" viewBox="0 0 1100 340" role="img" aria-labelledby="feat-title feat-desc">
+  <title id="feat-title">An1me Tracker Core Features</title>
+  <desc id="feat-desc">Instant Resume, Smart Library, Speed Control, and Cross-Device Cloud Sync.</desc>
+  <defs>
+    <!-- Background & Card Gradients -->
+    <linearGradient id="grid-card-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0e1d2e"/>
+      <stop offset="100%" stop-color="#081320"/>
+    </linearGradient>
+
+    <linearGradient id="neon-cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#63e0c7"/>
+      <stop offset="100%" stop-color="#57d6ff"/>
+    </linearGradient>
+
+    <linearGradient id="neon-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#57d6ff"/>
+      <stop offset="100%" stop-color="#4b8cff"/>
+    </linearGradient>
+
+    <linearGradient id="neon-amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffb84d"/>
+      <stop offset="100%" stop-color="#ff7b54"/>
+    </linearGradient>
+
+    <linearGradient id="neon-purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+
+    <filter id="feat-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
   <style>
-    text { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
-    .feature-title { fill: #edf3ff; font-size: 38px; font-weight: 600; letter-spacing: -0.8px; }
-    .feature-copy { fill: #a8bed4; font-size: 28px; }
-    .feature-icon { fill: none; stroke: #57d6ff; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+    text {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Keyframes */
+    @keyframes needleRev {
+      0%, 100% { transform: rotate(-35deg); }
+      40% { transform: rotate(45deg); }
+      70% { transform: rotate(15deg); }
+    }
+    @keyframes radarSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes arrowFloatY {
+      0%, 100% { transform: translateY(0px); opacity: 0.8; }
+      50% { transform: translateY(-6px); opacity: 1; }
+    }
+    @keyframes arrowFloatDown {
+      0%, 100% { transform: translateY(0px); opacity: 0.8; }
+      50% { transform: translateY(6px); opacity: 1; }
+    }
+    @keyframes bookHover {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-4px) rotate(-1.5deg); }
+    }
+    @keyframes cardBorderGlow {
+      0%, 100% { stroke-opacity: 0.35; }
+      50% { stroke-opacity: 0.85; }
+    }
+    @keyframes playPulse {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.12); opacity: 1; }
+    }
+
+    .border-active { animation: cardBorderGlow 4s ease-in-out infinite; }
+    .radar-rotate { animation: radarSpin 9s linear infinite; transform-origin: 32px 32px; }
+    .needle-anim { animation: needleRev 3.5s ease-in-out infinite; transform-origin: 32px 32px; }
+    .arrow-up { animation: arrowFloatY 2s ease-in-out infinite; }
+    .arrow-down { animation: arrowFloatDown 2s ease-in-out infinite 1s; }
+    .stack-float { animation: bookHover 5s ease-in-out infinite; transform-origin: 32px 32px; }
+    .play-pulsing { animation: playPulse 2.5s ease-in-out infinite; transform-origin: 32px 32px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .border-active, .radar-rotate, .needle-anim, .arrow-up, .arrow-down, .stack-float, .play-pulsing {
+        animation: none !important;
+      }
+    }
   </style>
-  <rect x="1" y="1" width="1098" height="376" rx="18" fill="#091827" stroke="#20394f" stroke-width="2"/>
-  <path d="M550 34V344M41 189H1059" stroke="#233a50"/>
 
-  <g transform="translate(46 48) scale(1.25)" class="feature-icon">
-    <path d="M31 14A15 15 0 1 1 23 2"/>
-    <path d="M23 2H31V10"/>
-    <path d="M12 9L22 15L12 21Z" fill="#57d6ff" stroke="none"/>
-  </g>
-  <text x="122" y="85" class="feature-title">Resume</text>
-  <text x="122" y="128" class="feature-copy">Pick up at the</text>
-  <text x="122" y="161" class="feature-copy">second you left.</text>
+  <!-- ================= 4 COMPACT INTERACTIVE CARDS ================= -->
 
-  <g transform="translate(596 48) scale(1.25)" class="feature-icon">
-    <rect x="1" y="3" width="8" height="27" rx="1.5"/>
-    <rect x="13" y="3" width="8" height="27" rx="1.5"/>
-    <path d="M25 5L30 4L36 28L31 29Z"/>
-    <path d="M4 9H6M16 9H18"/>
-  </g>
-  <text x="672" y="85" class="feature-title">Library</text>
-  <text x="672" y="128" class="feature-copy">Keep episodes and</text>
-  <text x="672" y="161" class="feature-copy">series organized.</text>
+  <!-- CARD 1: INSTANT RESUME -->
+  <g transform="translate(0, 0)">
+    <rect x="0" y="0" width="260" height="340" rx="18" fill="url(#grid-card-bg)" stroke="#223d57" stroke-width="1.6"/>
+    <rect x="0" y="0" width="260" height="340" rx="18" fill="none" stroke="#57d6ff" stroke-width="1.6" class="border-active"/>
 
-  <g transform="translate(45 232) scale(1.25)" class="feature-icon">
-    <path d="M2 29A18 18 0 1 1 34 29M5 22H9M20 3V7M31 10L28 13"/>
-    <path d="M20 23L28 15"/>
-    <circle cx="20" cy="23" r="3" fill="#57d6ff" stroke="none"/>
-    <path d="M11 32H28"/>
-  </g>
-  <text x="122" y="269" class="feature-title">Speed</text>
-  <text x="122" y="312" class="feature-copy">PC shortcuts.</text>
-  <text x="122" y="345" class="feature-copy">iPhone 2× hold.</text>
+    <!-- Animated Icon Area -->
+    <g transform="translate(24, 28)">
+      <rect x="0" y="0" width="64" height="64" rx="16" fill="#0d263b" stroke="#254869" stroke-width="1.2"/>
+      
+      <!-- Rotating Radar Ring -->
+      <g transform="translate(0, 0)">
+        <circle cx="32" cy="32" r="22" fill="none" stroke="#57d6ff" stroke-width="1.8" stroke-dasharray="8 6" class="radar-rotate"/>
+      </g>
+      
+      <!-- Pulsing Play Triangle -->
+      <g class="play-pulsing">
+        <polygon points="28,24 40,32 28,40" fill="url(#neon-cyan)" filter="url(#feat-glow)"/>
+        <polygon points="28,24 40,32 28,40" fill="#ffffff"/>
+      </g>
+    </g>
 
-  <g transform="translate(595 232) scale(1.25)" class="feature-icon">
-    <path d="M7 23H6A6 6 0 0 1 6 11A11 11 0 0 1 27 9A7 7 0 0 1 31 23H30"/>
-    <path d="M13 29V15L9 19M13 15L17 19M24 17V31L20 27M24 31L28 27"/>
+    <!-- Content -->
+    <text x="24" y="132" fill="#ffffff" font-size="22" font-weight="700">Instant Resume</text>
+    <text x="24" y="160" fill="#8ea8c2" font-size="14.5" font-weight="400">
+      <tspan x="24" dy="0">Picks up right at the exact</tspan>
+      <tspan x="24" dy="22">second you stopped watching.</tspan>
+      <tspan x="24" dy="22">No guessing, no scrubbing.</tspan>
+    </text>
+
+    <!-- Visual Chip -->
+    <g transform="translate(24, 260)">
+      <rect x="0" y="0" width="212" height="42" rx="10" fill="#0b1c2b" stroke="#1d3e5b" stroke-width="1"/>
+      <circle cx="20" cy="21" r="4" fill="#63e0c7"/>
+      <text x="32" y="26" fill="#63e0c7" font-size="12" font-weight="700">RESUME AT</text>
+      <text x="194" y="26" text-anchor="end" fill="#ffffff" font-size="14" font-weight="700">14:28</text>
+    </g>
   </g>
-  <text x="672" y="269" class="feature-title">Optional sync</text>
-  <text x="672" y="312" class="feature-copy">Sign in to sync</text>
-  <text x="672" y="345" class="feature-copy">across devices.</text>
+
+  <!-- CARD 2: SMART LIBRARY -->
+  <g transform="translate(280, 0)">
+    <rect x="0" y="0" width="260" height="340" rx="18" fill="url(#grid-card-bg)" stroke="#223d57" stroke-width="1.6"/>
+    <rect x="0" y="0" width="260" height="340" rx="18" fill="none" stroke="#63e0c7" stroke-width="1.6" class="border-active"/>
+
+    <!-- Animated Icon Area -->
+    <g transform="translate(24, 28)">
+      <rect x="0" y="0" width="64" height="64" rx="16" fill="#0e2836" stroke="#1f4b5c" stroke-width="1.2"/>
+      
+      <!-- Floating Stack -->
+      <g class="stack-float">
+        <rect x="18" y="20" width="28" height="28" rx="5" fill="#1b4157" stroke="#63e0c7" stroke-width="1.4"/>
+        <rect x="22" y="16" width="28" height="28" rx="5" fill="#133446" stroke="#57d6ff" stroke-width="1.4"/>
+        <!-- Checkmark badge -->
+        <circle cx="36" cy="30" r="7" fill="#63e0c7"/>
+        <path d="M33 30 L35 32 L39 28" fill="none" stroke="#061922" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+
+    <!-- Content -->
+    <text x="24" y="132" fill="#ffffff" font-size="22" font-weight="700">Smart Library</text>
+    <text x="24" y="160" fill="#8ea8c2" font-size="14.5" font-weight="400">
+      <tspan x="24" dy="0">Organized covers, filler</tspan>
+      <tspan x="24" dy="22">indicators, watch goals,</tspan>
+      <tspan x="24" dy="22">search and quick backup.</tspan>
+    </text>
+
+    <!-- Visual Chip -->
+    <g transform="translate(24, 260)">
+      <rect x="0" y="0" width="212" height="42" rx="10" fill="#0b2024" stroke="#19484b" stroke-width="1"/>
+      <text x="16" y="26" fill="#a4ebdb" font-size="12.5" font-weight="600">Ep. 12 Watched</text>
+      <rect x="144" y="10" width="54" height="22" rx="6" fill="#63e0c7"/>
+      <text x="171" y="25" text-anchor="middle" fill="#082322" font-size="11" font-weight="800">DONE</text>
+    </g>
+  </g>
+
+  <!-- CARD 3: SPEED CONTROL -->
+  <g transform="translate(560, 0)">
+    <rect x="0" y="0" width="260" height="340" rx="18" fill="url(#grid-card-bg)" stroke="#223d57" stroke-width="1.6"/>
+    <rect x="0" y="0" width="260" height="340" rx="18" fill="none" stroke="#ffb84d" stroke-width="1.6" class="border-active"/>
+
+    <!-- Animated Icon Area -->
+    <g transform="translate(24, 28)">
+      <rect x="0" y="0" width="64" height="64" rx="16" fill="#2d2212" stroke="#5c441c" stroke-width="1.2"/>
+      
+      <!-- Speedometer Gauge -->
+      <path d="M 16 38 A 18 18 0 1 1 48 38" fill="none" stroke="#684f27" stroke-width="3" stroke-linecap="round"/>
+      <path d="M 16 38 A 18 18 0 0 1 38 16" fill="none" stroke="url(#neon-amber)" stroke-width="3.5" stroke-linecap="round"/>
+      
+      <!-- Animated Needle -->
+      <g class="needle-anim">
+        <line x1="32" y1="32" x2="42" y2="20" stroke="#ff7b54" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="32" cy="32" r="3.5" fill="#ffb84d"/>
+      </g>
+    </g>
+
+    <!-- Content -->
+    <text x="24" y="132" fill="#ffffff" font-size="22" font-weight="700">Speed Boost</text>
+    <text x="24" y="160" fill="#8ea8c2" font-size="14.5" font-weight="400">
+      <tspan x="24" dy="0">Instant turbo shortcuts.</tspan>
+      <tspan x="24" dy="22">Hold F7 on desktop or tap</tspan>
+      <tspan x="24" dy="22">and hold 2× on iOS Safari.</tspan>
+    </text>
+
+    <!-- Visual Chip -->
+    <g transform="translate(24, 260)">
+      <rect x="0" y="0" width="212" height="42" rx="10" fill="#24190c" stroke="#4e3518" stroke-width="1"/>
+      <!-- Key badge -->
+      <rect x="12" y="9" width="60" height="24" rx="6" fill="#3b2b16" stroke="#ffb84d" stroke-width="1"/>
+      <text x="42" y="25" text-anchor="middle" fill="#ffb84d" font-size="11.5" font-weight="700">HOLD F7</text>
+      <text x="194" y="26" text-anchor="end" fill="#ffb84d" font-size="15" font-weight="800">4.0×</text>
+    </g>
+  </g>
+
+  <!-- CARD 4: CLOUD SYNC -->
+  <g transform="translate(840, 0)">
+    <rect x="0" y="0" width="260" height="340" rx="18" fill="url(#grid-card-bg)" stroke="#223d57" stroke-width="1.6"/>
+    <rect x="0" y="0" width="260" height="340" rx="18" fill="none" stroke="#c084fc" stroke-width="1.6" class="border-active"/>
+
+    <!-- Animated Icon Area -->
+    <g transform="translate(24, 28)">
+      <rect x="0" y="0" width="64" height="64" rx="16" fill="#231738" stroke="#482d73" stroke-width="1.2"/>
+      
+      <!-- Cloud Outline -->
+      <path d="M 22 38 A 7 7 0 0 1 21 24 A 12 12 0 0 1 43 23 A 8 8 0 0 1 45 38 Z" fill="none" stroke="#c084fc" stroke-width="2" stroke-linejoin="round"/>
+      
+      <!-- Upload / Download Data Arrows -->
+      <g class="arrow-up" transform="translate(28, 26)">
+        <line x1="0" y1="8" x2="0" y2="0" stroke="#818cf8" stroke-width="2" stroke-linecap="round"/>
+        <polyline points="-3,3 0,0 3,3" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round"/>
+      </g>
+      <g class="arrow-down" transform="translate(36, 26)">
+        <line x1="0" y1="0" x2="0" y2="8" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
+        <polyline points="-3,5 0,8 3,5" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- Content -->
+    <text x="24" y="132" fill="#ffffff" font-size="22" font-weight="700">Cross-Device</text>
+    <text x="24" y="160" fill="#8ea8c2" font-size="14.5" font-weight="400">
+      <tspan x="24" dy="0">Carry your watch progress</tspan>
+      <tspan x="24" dy="22">seamlessly between your</tspan>
+      <tspan x="24" dy="22">PC and iPhone via cloud.</tspan>
+    </text>
+
+    <!-- Visual Chip -->
+    <g transform="translate(24, 260)">
+      <rect x="0" y="0" width="212" height="42" rx="10" fill="#1b122c" stroke="#422566" stroke-width="1"/>
+      <text x="14" y="26" fill="#c084fc" font-size="12" font-weight="600">PC ⇄ iPhone</text>
+      <circle cx="186" cy="21" r="4.5" fill="#c084fc"/>
+      <circle cx="186" cy="21" r="8" fill="none" stroke="#c084fc" stroke-width="1" opacity="0.5"/>
+    </g>
+  </g>
 </svg>
