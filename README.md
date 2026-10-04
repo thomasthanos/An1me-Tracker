@@ -176,6 +176,9 @@ Get-ChildItem test -Filter '*.test.js' | ForEach-Object { node $_.FullName }
 
 ## 🔒 Privacy & Permissions
 
+Report suspected vulnerabilities privately using the process in [SECURITY.md](SECURITY.md).
+The repository uses CodeQL, Dependabot and secret scanning.
+
 <img src=".github/assets/privacy-card.svg" width="100%" alt="Privacy and Permissions">
 
 <br><br>
