@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="480" viewBox="0 0 1100 480" role="img" aria-labelledby="hero-title hero-desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="480" viewBox="0 0 1100 480" overflow="hidden" role="img" aria-labelledby="hero-title hero-desc">
   <title id="hero-title">An1me Tracker — Never lose your episode</title>
   <desc id="hero-desc">Modern anime library and playback progress tracker for Chrome, Edge, and Safari on iPhone.</desc>
   <defs>
@@ -35,7 +35,7 @@
 
     <linearGradient id="border-shimmer" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#57d6ff" stop-opacity="0.4"/>
-      <stop offset="50%" stop-color="#243f5a" stop-opacity="0.2"/>
+      <stop offset="50%" stop-color="#23425f" stop-opacity="0.2"/>
       <stop offset="100%" stop-color="#4b8cff" stop-opacity="0.4"/>
     </linearGradient>
 
@@ -62,13 +62,16 @@
     </pattern>
 
     <!-- Clip Paths -->
+    <clipPath id="hero-clip">
+      <rect x="1" y="1" width="1098" height="478" rx="24"/>
+    </clipPath>
     <clipPath id="card-screen-clip">
-      <rect x="625" y="160" width="395" height="152" rx="10"/>
+      <rect x="625" y="118" width="395" height="152" rx="10"/>
     </clipPath>
 
     <!-- Glow Filter -->
     <filter id="neon-glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feGaussianBlur stdDeviation="5" result="blur"/>
       <feComposite in="SourceGraphic" in2="blur" operator="over"/>
     </filter>
   </defs>
@@ -78,22 +81,18 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Ambient float animations */
-    @keyframes floatSlow {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-7px); }
-    }
+    /* Ambient float animations - Pure vertical translation, no jump */
     @keyframes floatCard {
       0%, 100% { transform: translateY(0px); }
       50% { transform: translateY(-5px); }
     }
     @keyframes pulseGlow {
-      0%, 100% { opacity: 0.7; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.08); }
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
     }
     @keyframes sweepPass {
-      0% { transform: translateX(-600px); }
-      100% { transform: translateX(1200px); }
+      0% { transform: translateX(-500px); }
+      100% { transform: translateX(1100px); }
     }
 
     /* Progress bar playback cycle */
@@ -116,14 +115,15 @@
     @keyframes eqBar3 { 0%, 100% { height: 9px; y: 15px; } 50% { height: 18px; y: 6px; } }
     @keyframes eqBar4 { 0%, 100% { height: 15px; y: 9px; } 50% { height: 8px; y: 16px; } }
 
-    /* Ping Ripple for Cloud sync status */
+    /* Ping Ripple for Cloud sync status - Animates r and opacity directly */
     @keyframes beaconRipple {
-      0% { r: 3.5; opacity: 1; }
-      100% { r: 11; opacity: 0; }
+      0% { r: 3.5px; opacity: 1; }
+      100% { r: 10px; opacity: 0; }
     }
+    /* Stars twinkle purely via opacity */
     @keyframes starTwinkle {
-      0%, 100% { opacity: 0.3; transform: scale(0.8); }
-      50% { opacity: 1; transform: scale(1.2); }
+      0%, 100% { opacity: 0.25; }
+      50% { opacity: 1; }
     }
 
     .card-floater { animation: floatCard 6.5s ease-in-out infinite; }
@@ -143,10 +143,9 @@
       stroke-width: 1.5;
       fill: none;
       animation: beaconRipple 2.2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
-      transform-origin: 946px 145px;
     }
-    .star-1 { animation: starTwinkle 3s ease-in-out infinite; transform-origin: 720px 195px; }
-    .star-2 { animation: starTwinkle 4s ease-in-out infinite 1.5s; transform-origin: 860px 180px; }
+    .star-1 { animation: starTwinkle 3s ease-in-out infinite; }
+    .star-2 { animation: starTwinkle 4s ease-in-out infinite 1.5s; }
 
     @media (prefers-reduced-motion: reduce) {
       .card-floater, .logo-glow, .light-sweep, .bar-anim, .head-anim,
@@ -156,165 +155,170 @@
     }
   </style>
 
-  <!-- Container Box -->
-  <rect x="1" y="1" width="1098" height="478" rx="24" fill="url(#bg-grad)" stroke="url(#border-shimmer)" stroke-width="2"/>
-  <rect x="1" y="1" width="1098" height="478" rx="24" fill="url(#hero-grid)"/>
-  <rect x="1" y="1" width="1098" height="478" rx="24" fill="url(#glow-cyan)"/>
-  <rect x="1" y="1" width="1098" height="478" rx="24" fill="url(#glow-blue)"/>
-
-  <!-- Shimmer sweep -->
+  <!-- Container Box with Safe Clipping -->
   <g clip-path="url(#hero-clip)">
+    <rect x="1" y="1" width="1098" height="478" rx="24" fill="url(#bg-grad)"/>
+    <rect x="1" y="1" width="1098" height="478" rx="24" fill="url(#hero-grid)"/>
+    <rect x="1" y="1" width="1098" height="478" rx="24" fill="url(#glow-cyan)"/>
+    <rect x="1" y="1" width="1098" height="478" rx="24" fill="url(#glow-blue)"/>
+
+    <!-- Shimmer sweep -->
     <rect class="light-sweep" x="-500" y="0" width="450" height="480" fill="url(#sweep-grad)"/>
-  </g>
 
-  <!-- ================= LEFT COLUMN: HERO CONTENT ================= -->
-  
-  <!-- Brand Logo & Version Pill -->
-  <g transform="translate(56, 52)">
-    <!-- Stylized Cut-Angle T Brand Icon -->
-    <g class="logo-glow">
-      <rect x="0" y="0" width="48" height="48" rx="14" fill="#0d2338" stroke="#57d6ff" stroke-width="1.6"/>
-      <path d="M14 15 H34 L30 22 H26 V33 H22 V22 H14 Z" fill="url(#brand-ink)"/>
-    </g>
-    <text x="62" y="32" fill="#ffffff" font-size="28" font-weight="700" letter-spacing="-0.5">An1me Tracker</text>
+    <!-- ================= LEFT COLUMN: HERO CONTENT ================= -->
     
-    <!-- Version Tag -->
-    <rect x="250" y="13" width="76" height="24" rx="12" fill="#13273c" stroke="#2b4e70" stroke-width="1"/>
-    <circle cx="262" cy="25" r="3.5" fill="#63e0c7"/>
-    <text x="272" y="29.5" fill="#a4cbef" font-size="12" font-weight="700" letter-spacing="0.4">v8.2.0</text>
-  </g>
-
-  <!-- Catchy, Non-AI Centered Headline -->
-  <g transform="translate(56, 172)">
-    <text x="0" y="0" fill="url(#title-grad)" font-size="52" font-weight="800" letter-spacing="-1.8">
-      Never lose your place.
-    </text>
-    <text x="0" y="58" fill="#57d6ff" font-size="50" font-weight="800" letter-spacing="-1.8">
-      Watch. Resume. Sync.
-    </text>
-
-    <!-- Compact Punchy Subtitle -->
-    <text x="2" y="112" fill="#9db6cf" font-size="19" font-weight="400">
-      Autotrack episodes, 1-click resume, speed boost &amp; cross-device sync.
-    </text>
-  </g>
-
-  <!-- Supported Platforms Badges -->
-  <g transform="translate(56, 372)">
-    <!-- Chrome / Edge Pill -->
-    <g>
-      <rect x="0" y="0" width="186" height="42" rx="21" fill="#0e2135" stroke="#25425f" stroke-width="1.3"/>
-      <!-- Monitor Icon -->
-      <g fill="none" stroke="#57d6ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" transform="translate(18, 11)">
-        <rect x="0" y="0" width="20" height="14" rx="2"/>
-        <line x1="10" y1="14" x2="10" y2="18"/>
-        <line x1="5" y1="18" x2="15" y2="18"/>
+    <!-- Brand Logo & Version Pill -->
+    <g transform="translate(56, 52)">
+      <!-- Cut-Angle T Brand Icon -->
+      <g class="logo-glow">
+        <rect x="0" y="0" width="48" height="48" rx="14" fill="#0d2338" stroke="#57d6ff" stroke-width="1.6"/>
+        <path d="M14 15 H34 L30 22 H26 V33 H22 V22 H14 Z" fill="url(#brand-ink)"/>
       </g>
-      <text x="48" y="26" fill="#eaf3ff" font-size="14.5" font-weight="600">Chrome &amp; Edge</text>
-    </g>
-
-    <!-- Safari iPhone Pill -->
-    <g transform="translate(202, 0)">
-      <rect x="0" y="0" width="220" height="42" rx="21" fill="#0e2135" stroke="#25425f" stroke-width="1.3"/>
-      <!-- Phone Icon -->
-      <g fill="none" stroke="#63e0c7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" transform="translate(18, 10)">
-        <rect x="0" y="0" width="13" height="21" rx="3"/>
-        <line x1="5" y1="17" x2="8" y2="17"/>
-      </g>
-      <text x="43" y="26" fill="#eaf3ff" font-size="14.5" font-weight="600">Safari on iPhone</text>
-      <text x="162" y="26" fill="#6ba7d6" font-size="12" font-weight="500">(SideStore)</text>
-    </g>
-  </g>
-
-  <!-- ================= RIGHT COLUMN: INTERACTIVE PLAYER CARD ================= -->
-  
-  <g class="card-floater">
-    <!-- Card Frame -->
-    <rect x="605" y="68" width="436" height="344" rx="20" fill="url(#card-bg)" stroke="#233e59" stroke-width="1.8"/>
-
-    <!-- Window Header -->
-    <g transform="translate(625, 88)">
-      <circle cx="6" cy="6" r="4.5" fill="#ff5f57"/>
-      <circle cx="20" cy="6" r="4.5" fill="#febc2e"/>
-      <circle cx="34" cy="6" r="4.5" fill="#28c840"/>
-
-      <!-- Window Title -->
-      <text x="56" y="10" fill="#9db6cf" font-size="13.5" font-weight="600" letter-spacing="0.2">Now Playing</text>
-
-      <!-- Sync Status with Ping Wave -->
-      <g transform="translate(290, 0)">
-        <circle cx="20" cy="6" r="7" class="beacon-wave"/>
-        <circle cx="20" cy="6" r="3.5" class="beacon-core"/>
-        <text x="32" y="10" fill="#63e0c7" font-size="12" font-weight="600">Cloud Synced</text>
-      </g>
-    </g>
-
-    <!-- Mini Anime Player Screen -->
-    <g clip-path="url(#card-screen-clip)">
-      <rect x="625" y="118" width="395" height="152" fill="url(#screen-sky)"/>
+      <text x="62" y="32" fill="#ffffff" font-size="28" font-weight="700" letter-spacing="-0.5">An1me Tracker</text>
       
-      <!-- Stars & Moon in background -->
-      <circle cx="945" cy="155" r="22" fill="#57d6ff" fill-opacity="0.85" filter="url(#neon-glow)"/>
-      <circle cx="945" cy="155" r="22" fill="#d9f6ff"/>
-      <circle cx="720" cy="150" r="1.8" fill="#ffffff" class="star-1"/>
-      <circle cx="860" cy="138" r="1.5" fill="#ffffff" class="star-2"/>
-      <circle cx="660" cy="170" r="1.4" fill="#ffffff" opacity="0.6"/>
+      <!-- Version Tag -->
+      <rect x="250" y="13" width="76" height="24" rx="12" fill="#13273c" stroke="#2b4e70" stroke-width="1"/>
+      <circle cx="262" cy="25" r="3.5" fill="#63e0c7"/>
+      <text x="272" y="29.5" fill="#a4cbef" font-size="12" font-weight="700" letter-spacing="0.4">v8.2.0</text>
+    </g>
 
-      <!-- Mountain Silhouettes -->
-      <path d="M 625 240 L 685 195 L 755 242 L 815 210 L 885 246 L 965 198 L 1020 240 L 1020 270 L 625 270 Z" fill="#13273e"/>
-      <path d="M 625 250 L 710 215 L 775 254 L 845 224 L 920 258 L 1020 220 L 1020 270 L 625 270 Z" fill="#0a1727"/>
+    <!-- Catchy Headline -->
+    <g transform="translate(56, 172)">
+      <text x="0" y="0" fill="url(#title-grad)" font-size="52" font-weight="800" letter-spacing="-1.8">
+        Never lose your place.
+      </text>
+      <text x="0" y="58" fill="#57d6ff" font-size="50" font-weight="800" letter-spacing="-1.8">
+        Watch. Resume. Sync.
+      </text>
 
-      <!-- Anime Torii Gate & Scenery Silhouette -->
-      <g transform="translate(735, 196)" fill="#06101c">
-        <rect x="0" y="3" width="46" height="5" rx="1.5"/>
-        <path d="M -4 3 Q 23 -3 50 3 L 48 6 Q 23 2 -2 6 Z"/>
-        <rect x="7" y="5" width="5" height="34"/>
-        <rect x="34" y="5" width="5" height="34"/>
-        <rect x="5" y="14" width="36" height="3"/>
+      <!-- Compact Subtitle -->
+      <text x="2" y="112" fill="#9db6cf" font-size="19" font-weight="400">
+        Autotrack episodes, 1-click resume, speed boost &amp; cross-device sync.
+      </text>
+    </g>
+
+    <!-- Supported Platforms Badges -->
+    <g transform="translate(56, 372)">
+      <!-- Chrome / Edge Pill -->
+      <g>
+        <rect x="0" y="0" width="186" height="42" rx="21" fill="#0e2135" stroke="#25425f" stroke-width="1.3"/>
+        <!-- Monitor Icon -->
+        <g fill="none" stroke="#57d6ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" transform="translate(18, 11)">
+          <rect x="0" y="0" width="20" height="14" rx="2"/>
+          <line x1="10" y1="14" x2="10" y2="18"/>
+          <line x1="5" y1="18" x2="15" y2="18"/>
+        </g>
+        <text x="48" y="26" fill="#eaf3ff" font-size="14.5" font-weight="600">Chrome &amp; Edge</text>
       </g>
 
-      <!-- Speed Badge floating on screen -->
-      <g transform="translate(642, 134)">
-        <rect x="0" y="0" width="70" height="24" rx="6" fill="#000000" fill-opacity="0.65" stroke="#57d6ff" stroke-width="1"/>
-        <text x="10" y="16" fill="#57d6ff" font-size="12" font-weight="700">⚡ 2.0×</text>
-      </g>
-
-      <!-- Equalizer Visualizer on Screen -->
-      <g transform="translate(960, 222)" fill="#57d6ff">
-        <rect x="0" y="12" width="3.5" height="12" rx="1.5" class="eq-1"/>
-        <rect x="6" y="6" width="3.5" height="18" rx="1.5" class="eq-2"/>
-        <rect x="12" y="10" width="3.5" height="14" rx="1.5" class="eq-3"/>
-        <rect x="18" y="8" width="3.5" height="16" rx="1.5" class="eq-4"/>
+      <!-- Safari iPhone Pill -->
+      <g transform="translate(202, 0)">
+        <rect x="0" y="0" width="220" height="42" rx="21" fill="#0e2135" stroke="#25425f" stroke-width="1.3"/>
+        <!-- Phone Icon -->
+        <g fill="none" stroke="#63e0c7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" transform="translate(18, 10)">
+          <rect x="0" y="0" width="13" height="21" rx="3"/>
+          <line x1="5" y1="17" x2="8" y2="17"/>
+        </g>
+        <text x="43" y="26" fill="#eaf3ff" font-size="14.5" font-weight="600">Safari on iPhone</text>
+        <text x="162" y="26" fill="#6ba7d6" font-size="12" font-weight="500">(SideStore)</text>
       </g>
     </g>
 
-    <!-- Episode Meta -->
-    <g transform="translate(625, 292)">
-      <text x="0" y="0" fill="#ffffff" font-size="17" font-weight="700">Solo Leveling</text>
-      <text x="0" y="20" fill="#88a5c2" font-size="13.5" font-weight="500">Season 2 · Episode 08</text>
-      
-      <!-- Resume Tag -->
-      <rect x="315" y="-14" width="80" height="24" rx="12" fill="#132c42" stroke="#57d6ff" stroke-width="1"/>
-      <text x="355" y="2" text-anchor="middle" fill="#57d6ff" font-size="11.5" font-weight="700">RESUMED</text>
-    </g>
+    <!-- ================= RIGHT COLUMN: INTERACTIVE PLAYER CARD ================= -->
+    
+    <g class="card-floater">
+      <!-- Card Frame -->
+      <rect x="605" y="68" width="436" height="344" rx="20" fill="url(#card-bg)" stroke="#233e59" stroke-width="1.8"/>
 
-    <!-- Progress Bar Section -->
-    <g transform="translate(625, 335)">
-      <!-- Track Background -->
-      <rect x="0" y="0" width="395" height="7" rx="3.5" fill="#16293d"/>
-      
-      <!-- Animated Progress Fill -->
-      <rect class="bar-anim" x="0" y="0" width="190" height="7" rx="3.5" fill="url(#brand-ink)"/>
+      <!-- Window Header -->
+      <g transform="translate(625, 88)">
+        <circle cx="6" cy="6" r="4.5" fill="#ff5f57"/>
+        <circle cx="20" cy="6" r="4.5" fill="#febc2e"/>
+        <circle cx="34" cy="6" r="4.5" fill="#28c840"/>
 
-      <!-- Animated Playhead Glow & Dot -->
-      <g class="head-anim" transform="translate(190, 3.5)">
-        <circle cx="0" cy="0" r="9" fill="#57d6ff" fill-opacity="0.3" filter="url(#neon-glow)"/>
-        <circle cx="0" cy="0" r="5" fill="#ffffff"/>
+        <!-- Window Title -->
+        <text x="56" y="10" fill="#9db6cf" font-size="13.5" font-weight="600" letter-spacing="0.2">Now Playing</text>
+
+        <!-- Sync Status with Ping Wave -->
+        <g transform="translate(290, 0)">
+          <circle cx="20" cy="6" r="3.5" class="beacon-wave"/>
+          <circle cx="20" cy="6" r="3.5" class="beacon-core"/>
+          <text x="32" y="10" fill="#63e0c7" font-size="12" font-weight="600">Cloud Synced</text>
+        </g>
       </g>
 
-      <!-- Time Stamps -->
-      <text x="0" y="28" fill="#57d6ff" font-size="13" font-weight="600">14:20</text>
-      <text x="395" y="28" text-anchor="end" fill="#6d8ba8" font-size="13" font-weight="500">23:45</text>
+      <!-- Mini Anime Player Screen -->
+      <g clip-path="url(#card-screen-clip)">
+        <rect x="625" y="118" width="395" height="152" fill="url(#screen-sky)"/>
+        
+        <!-- Stars & Moon in background -->
+        <circle cx="945" cy="155" r="22" fill="#57d6ff" fill-opacity="0.85" filter="url(#neon-glow)"/>
+        <circle cx="945" cy="155" r="22" fill="#d9f6ff"/>
+        <circle cx="720" cy="150" r="2" fill="#ffffff" class="star-1"/>
+        <circle cx="860" cy="138" r="1.8" fill="#ffffff" class="star-2"/>
+        <circle cx="660" cy="170" r="1.6" fill="#ffffff" opacity="0.6"/>
+
+        <!-- Mountain Silhouettes -->
+        <path d="M 625 240 L 685 195 L 755 242 L 815 210 L 885 246 L 965 198 L 1020 240 L 1020 270 L 625 270 Z" fill="#13273e"/>
+        <path d="M 625 250 L 710 215 L 775 254 L 845 224 L 920 258 L 1020 220 L 1020 270 L 625 270 Z" fill="#0a1727"/>
+
+        <!-- Anime Torii Gate & Scenery Silhouette -->
+        <g transform="translate(735, 196)" fill="#06101c">
+          <rect x="0" y="3" width="46" height="5" rx="1.5"/>
+          <path d="M -4 3 Q 23 -3 50 3 L 48 6 Q 23 2 -2 6 Z"/>
+          <rect x="7" y="5" width="5" height="34"/>
+          <rect x="34" y="5" width="5" height="34"/>
+          <rect x="5" y="14" width="36" height="3"/>
+        </g>
+
+        <!-- Speed Badge floating on screen -->
+        <g transform="translate(642, 134)">
+          <rect x="0" y="0" width="70" height="24" rx="6" fill="#000000" fill-opacity="0.65" stroke="#57d6ff" stroke-width="1"/>
+          <text x="10" y="16" fill="#57d6ff" font-size="12" font-weight="700">⚡ 2.0×</text>
+        </g>
+
+        <!-- Equalizer Visualizer on Screen -->
+        <g transform="translate(960, 222)" fill="#57d6ff">
+          <rect x="0" y="12" width="3.5" height="12" rx="1.5" class="eq-1"/>
+          <rect x="6" y="6" width="3.5" height="18" rx="1.5" class="eq-2"/>
+          <rect x="12" y="10" width="3.5" height="14" rx="1.5" class="eq-3"/>
+          <rect x="18" y="8" width="3.5" height="16" rx="1.5" class="eq-4"/>
+        </g>
+      </g>
+
+      <!-- Episode Meta -->
+      <g transform="translate(625, 292)">
+        <text x="0" y="0" fill="#ffffff" font-size="17" font-weight="700">Solo Leveling</text>
+        <text x="0" y="20" fill="#88a5c2" font-size="13.5" font-weight="500">Season 2 · Episode 08</text>
+        
+        <!-- Resume Tag -->
+        <rect x="315" y="-14" width="80" height="24" rx="12" fill="#132c42" stroke="#57d6ff" stroke-width="1"/>
+        <text x="355" y="2" text-anchor="middle" fill="#57d6ff" font-size="11.5" font-weight="700">RESUMED</text>
+      </g>
+
+      <!-- Progress Bar Section -->
+      <g transform="translate(625, 335)">
+        <!-- Track Background -->
+        <rect x="0" y="0" width="395" height="7" rx="3.5" fill="#16293d"/>
+        
+        <!-- Animated Progress Fill -->
+        <rect class="bar-anim" x="0" y="0" width="140" height="7" rx="3.5" fill="url(#brand-ink)"/>
+
+        <!-- Animated Playhead Glow & Dot -->
+        <g transform="translate(140, 3.5)">
+          <g class="head-anim">
+            <circle cx="0" cy="0" r="9" fill="#57d6ff" fill-opacity="0.3" filter="url(#neon-glow)"/>
+            <circle cx="0" cy="0" r="5" fill="#ffffff"/>
+          </g>
+        </g>
+
+        <!-- Time Stamps -->
+        <text x="0" y="28" fill="#57d6ff" font-size="13" font-weight="600">14:20</text>
+        <text x="395" y="28" text-anchor="end" fill="#6d8ba8" font-size="13" font-weight="500">23:45</text>
+      </g>
     </g>
   </g>
+
+  <!-- Border on Top -->
+  <rect x="1" y="1" width="1098" height="478" rx="24" fill="none" stroke="url(#border-shimmer)" stroke-width="2"/>
 </svg>
