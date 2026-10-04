@@ -2,7 +2,7 @@
 //
 // The countdown used to be baked straight into the card's HTML string, so it froze the moment the
 // list rendered and a long-open side panel showed an increasingly wrong number. One interval for
-// the whole list (not one per card) rewrites each node from its own data-next-airing-at.
+// the whole list (not one per card) updates each label from its own data-next-airing-at.
 (function () {
   "use strict";
 
@@ -32,19 +32,33 @@
     const diff = at - now;
     if (diff <= 0) {
       const late = -diff;
-      if (late < DUE_WINDOW_MS) return { text: "⏰ due now", overdue: false };
-      if (late < DAY) return { text: "⏰ due today", overdue: true };
+      if (late < DUE_WINDOW_MS) return { text: "due now", overdue: false };
+      if (late < DAY) return { text: "due today", overdue: true };
       const days = Math.floor(late / DAY);
-      return { text: `⏰ delayed ${days}d`, overdue: true };
+      return { text: `delayed ${days}d`, overdue: true };
     }
 
     const totalMinutes = Math.max(1, Math.floor(diff / MINUTE));
     const days = Math.floor(totalMinutes / (60 * 24));
     const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
     const minutes = totalMinutes % 60;
-    if (days > 0) return { text: `🚀 ${days}d ${hours}h`, overdue: false };
-    if (hours > 0) return { text: `🚀 ${hours}h ${minutes}m`, overdue: false };
-    return { text: `🚀 ${minutes}m`, overdue: false };
+    if (days > 0) return { text: `${days}d ${hours}h`, overdue: false };
+    if (hours > 0) return { text: `${hours}h ${minutes}m`, overdue: false };
+    return { text: `${minutes}m`, overdue: false };
+  }
+
+  function getLabelNode(node) {
+    const existing = node.querySelector(".meta-time-label");
+    if (existing) return existing;
+    // Older rendered spans contain only text. Upgrade once; ticks then retain both children.
+    const icon = document.createElement("span");
+    icon.className = "meta-time-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = AT.UIHelpers.createIcon("time");
+    const label = document.createElement("span");
+    label.className = "meta-time-label";
+    node.replaceChildren(icon, label);
+    return label;
   }
 
   function refresh(root = document) {
@@ -63,7 +77,8 @@
       const label = format(node.dataset.nextAiringAt, now);
       if (!label.text) continue;
       visibleCount++;
-      if (node.textContent !== label.text) node.textContent = label.text;
+      const textNode = getLabelNode(node);
+      if (textNode.textContent !== label.text) textNode.textContent = label.text;
       node.classList.toggle("meta-time-eta-overdue", label.overdue);
     }
     if (_enabled && !document.hidden && visibleCount > 0) {

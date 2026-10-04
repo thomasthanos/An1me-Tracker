@@ -1675,10 +1675,12 @@ async function pollCloudData(reason = "consumer-connected", { force = false, req
       if (cacheFresh) {
         _lastCloudPollAt = Date.now();
         persistBgPollState({ cloudPollAt: _lastCloudPollAt });
-        dlog(`[BG-RT] Poll skipped (${reason}) — cache still fresh (${Math.round((Date.now() - cloudCache.time) / 1000)}s old)`);
-
-        if (cloudCache.doc) await applyCloudUpdate(cloudCache.doc);
-        return cloudCache.doc;
+        // A local TTL cannot tell us whether another device just saved a newer
+        // Resume position. Check the small revision field before reusing it;
+        // unchanged revisions still avoid downloading the library again.
+        const cloudDoc = await fetchCloudDataCached(user, token, `poll:${reason}`, { requireRevalidation: true });
+        if (cloudDoc) await applyCloudUpdate(cloudDoc);
+        return cloudDoc;
       }
 
       const pollAt = Date.now();
@@ -1845,6 +1847,7 @@ async function fetchCloudDataCached(user, token, reason = "cache", options = {})
 }
 
 let _lastProgressSyncAt = 0;
+const PROGRESS_CHECKPOINT_MIN_GAP_MS = 30 * 1000;
 
 let _firestoreWriteQueue = Promise.resolve();
 function enqueueFirestoreWrite(fn) {
@@ -1855,6 +1858,14 @@ function enqueueFirestoreWrite(fn) {
 
 async function syncProgressOnly(reason = "progress", options = {}) {
   if (options.markPending !== false) markProgressSyncPending(reason);
+  if (options.respectRetry === true) {
+    try {
+      const retry = await chrome.alarms.get(PROGRESS_SYNC_RETRY_ALARM);
+      if (retry?.scheduledTime > Date.now()) {
+        return { success: false, queued: true, state: "pending", kind: "progress" };
+      }
+    } catch {}
+  }
   if (syncState.progressInProgress) {
     syncState.progressPending = true;
     return { success: false, queued: true, state: "pending", kind: "progress" };
@@ -1963,11 +1974,11 @@ async function syncProgressOnly(reason = "progress", options = {}) {
         invalidateBgCloudDocCache();
       }
       bgRememberOwnWrite(pushedAt);
-      clearSyncRetry("progress");
       return { success: true, wrote: true, kind: "progress", reason };
     });
 
     if (outcome.success) {
+      clearSyncRetry("progress");
       _lastProgressSyncAt = Date.now();
       persistBgPollState({ progressSyncAt: _lastProgressSyncAt });
       await finishSuccessfulSync({
@@ -2920,7 +2931,7 @@ async function flushPendingProgressSync() {
     cleared = await chrome.alarms.clear(PROGRESS_SYNC_ALARM);
   } catch {}
   if (cleared && !syncState.debounceTimeout && !syncState.inProgress) {
-    syncProgressOnly("flush").catch(() => {});
+    syncProgressOnly("flush", { respectRetry: true }).catch(() => {});
   }
   return cleared;
 }
@@ -3502,15 +3513,20 @@ const messageHandlers = {
     (async () => {
       await hydrateBgPollState();
       const sinceLast = Date.now() - _lastProgressSyncAt;
-      if (!message.force && _lastProgressSyncAt && sinceLast < 4 * 60 * 1000) {
+      const minGap = message.checkpoint === true ? PROGRESS_CHECKPOINT_MIN_GAP_MS : 4 * 60 * 1000;
+      if (!message.force && _lastProgressSyncAt && sinceLast < minGap) {
         markProgressSyncPending("msg:progress-throttled");
-        await armProgressSyncAlarmNoLater(5);
+        // Pause/hidden checkpoints should leave the final position available
+        // before mobile suspends us. Repeated events share one fixed deadline.
+        // Request the platform's full 30-second minimum. Asking for the remaining
+        // few seconds would be clamped and could postpone the alarm on each pause.
+        await armProgressSyncAlarmNoLater(message.checkpoint === true ? 0.5 : 5);
         return { success: false, queued: true, state: "pending", kind: "progress" };
       }
       try {
         await chrome.alarms.clear(PROGRESS_SYNC_ALARM);
       } catch {}
-      return syncProgressOnly("msg:progress-only");
+      return syncProgressOnly("msg:progress-only", { respectRetry: message.force !== true });
     })()
       .then((result) => {
         if (message.waitForCompletion === true) sendResponse(result);
@@ -3725,10 +3741,10 @@ const messageHandlers = {
   SAVE_PROGRESS_BEFORE_UNLOAD(message, sender, sendResponse) {
     persistBeforeUnloadProgress(message)
       .then(result => {
-        // Sync reads the committed sample, including pauses that previously synced
-        // before their throttled local write. Reuse the existing cloud rate limit.
+        // Sync reads the committed sample. Pauses and hidden-page saves use the
+        // shorter bounded checkpoint interval; periodic saves keep their limit.
         if (!result?.tracked && message.sync !== false) {
-          messageHandlers.SYNC_PROGRESS_ONLY({ force: message.forceSync === true }, sender, () => {});
+          messageHandlers.SYNC_PROGRESS_ONLY({ checkpoint: true, force: message.forceSync === true }, sender, () => {});
         }
         sendResponse({ success: true, saved: result?.saved === true });
       })
@@ -3918,7 +3934,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       markProgressSyncPending("alarm:progress-during-progress");
       return;
     }
-    syncProgressOnly("alarm:progress").catch(() => {});
+    syncProgressOnly("alarm:progress", { respectRetry: true }).catch(() => {});
     return;
   }
 
@@ -4012,7 +4028,7 @@ ensureAuthTokensMigrated();
       await syncToFirebase("recovery:stranded-full");
     } else if (progressPending) {
       dlog("[BG] Recovering stranded progress sync from previous SW incarnation");
-      await syncProgressOnly("recovery:stranded-progress");
+      await syncProgressOnly("recovery:stranded-progress", { respectRetry: true });
     }
     if (sidecarsPending) {
       dlog("[BG] Recovering stranded sidecar sync from previous SW incarnation");

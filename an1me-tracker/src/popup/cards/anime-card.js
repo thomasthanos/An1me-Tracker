@@ -334,7 +334,7 @@ const AnimeCardRenderer = {
         inlineEtaHtml =
           `<span class="meta-time-eta meta-time-eta-site${label.overdue ? " meta-time-eta-overdue" : ""}"` +
           ` data-next-airing-at="${nextEpisodeMs}"` +
-          ` title="${UIHelpers.escapeHtml(tip)}">${UIHelpers.escapeHtml(label.text)}</span>`;
+          ` title="${UIHelpers.escapeHtml(tip)}"><span class="meta-time-icon" aria-hidden="true">${UIHelpers.createIcon("time")}</span><span class="meta-time-label">${UIHelpers.escapeHtml(label.text)}</span></span>`;
       } else if (StatsEngine && !isCardComplete && !isDropped && !isOnHold && knownTotalEpisodes > 0) {
         const allAnime = (window.AnimeTracker && window.AnimeTracker._animeDataRef) || null;
         const idx = allAnime ? StatsEngine.buildWatchIndex(allAnime, window.AnimeTracker?.PopupState?.libraryRevision) : null;
@@ -399,7 +399,7 @@ const AnimeCardRenderer = {
                 </div>
             </div>
             <div class="meta-time-row">
-                <span class="meta-time">${timeAgoText}</span>
+                <span class="meta-time"><span class="meta-time-icon" aria-hidden="true">${UIHelpers.createIcon("calendar")}</span><span class="meta-time-label">${timeAgoText}</span></span>
                 ${inlineEtaHtml}
                 ${
                   showProgressBar

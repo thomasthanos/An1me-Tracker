@@ -5,6 +5,16 @@ const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../src/popup/lib/airing-countdown.js"), "utf8");
 function page() {
   const document = new EventTarget(), window = new EventTarget(), timers = new Set();
+  function element() {
+    let text = "", children = [];
+    return { className: "", setAttribute() {}, innerHTML: "",
+      get textContent() { return children.length ? children.map(child => child.textContent).join("") : text; },
+      set textContent(value) { text = value; children = []; },
+      querySelector(selector) { return children.find(child => child.className === selector.slice(1)) || null; },
+      replaceChildren(...value) { children = value; text = ""; } };
+  }
+  document.createElement = element;
+  window.AnimeTracker = { UIHelpers: { createIcon: () => "<svg></svg>" } };
   let nodes = [];
   document.hidden = false;
   document.querySelectorAll = () => nodes;
@@ -12,9 +22,11 @@ function page() {
   vm.runInContext(source, context);
   function node(at = Date.now() + 3600000) {
     const classes = new Set();
-    return { dataset: { nextAiringAt: String(at) }, textContent: "stale", isConnected: true, visible: true,
+    const schedule = Object.assign(element(), { dataset: { nextAiringAt: String(at) }, isConnected: true, visible: true,
       getClientRects() { return this.visible ? [{}] : []; },
-      classList: { toggle(name, value) { if (value) classes.add(name); else classes.delete(name); }, contains: name => classes.has(name) } };
+      classList: { toggle(name, value) { if (value) classes.add(name); else classes.delete(name); }, contains: name => classes.has(name) } });
+    schedule.textContent = "stale";
+    return schedule;
   }
   return { document, window, timers, context, countdown: window.AnimeTracker.AiringCountdown, node, setNodes(value) { nodes = value; } };
 }
@@ -26,7 +38,7 @@ test("an enabled empty library owns no countdown interval", () => {
 });
 test("countdowns appear on render without duplicate timers and disappear with the last schedule", () => {
   const h = page(); h.countdown.start(); const schedule = h.node(); h.setNodes([schedule]);
-  h.countdown.refresh(); assert.equal(h.timers.size, 1); assert.match(schedule.textContent, /^🚀 /);
+  h.countdown.refresh(); assert.equal(h.timers.size, 1); assert.match(schedule.textContent, /^\d+[hm]/);
   h.countdown.refresh(); h.countdown.start(); assert.equal(h.timers.size, 1);
   h.setNodes([]); h.countdown.refresh(); assert.equal(h.timers.size, 0);
 });
@@ -46,7 +58,7 @@ test("document visibility pauses the timer and refreshes the schedule immediatel
   h.document.hidden = true; h.document.dispatchEvent(new Event("visibilitychange")); assert.equal(h.timers.size, 0);
   schedule.dataset.nextAiringAt = String(Date.now() - 2 * 86400000);
   h.document.hidden = false; h.document.dispatchEvent(new Event("visibilitychange"));
-  assert.equal(h.timers.size, 1); assert.equal(schedule.textContent, "⏰ delayed 2d");
+  assert.equal(h.timers.size, 1); assert.equal(schedule.textContent, "delayed 2d");
   assert.equal(schedule.classList.contains("meta-time-eta-overdue"), true);
   h.countdown.stop(); h.countdown.refresh(); assert.equal(h.timers.size, 0);
 });
@@ -70,6 +82,6 @@ test("returning from a secondary view restarts visible countdowns without a list
   assert.equal(h.timers.size, 0);
   schedule.dataset.nextAiringAt = String(Date.now() - 2 * 86400000);
   AT.StatsViews.setViewMode(null);
-  assert.equal(h.timers.size, 1); assert.equal(schedule.textContent, "⏰ delayed 2d");
+  assert.equal(h.timers.size, 1); assert.equal(schedule.textContent, "delayed 2d");
 });
 process.exitCode = failures ? 1 : 0;

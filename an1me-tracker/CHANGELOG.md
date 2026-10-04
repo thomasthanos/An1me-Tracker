@@ -7,6 +7,31 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [8.1.1] — 2026-10-04
+
+### Fixed
+
+- Upload pause and hidden-page playback checkpoints after a bounded 30-second minimum gap,
+  instead of delaying another pause for several minutes. Repeated checkpoints keep one deadline;
+  final page-exit saves retain their immediate flush. Periodic uploads keep their existing limit.
+- Revalidate the cloud revision before reusing a fresh local cloud cache on a consumer poll.
+  A new phone position reaches desktop Resume without waiting for the ten-minute cache to expire;
+  unchanged revisions avoid downloading the library again and consumer polls remain rate limited.
+- Keep pause checkpoints and automatic deferred flushes behind an active upload retry deadline,
+  including after the worker restarts. Repeated failures no longer bypass or postpone retry backoff;
+  locally saved positions and durable pending retries remain intact.
+
+### Changed
+
+- Give SideStore's app listing and source badge the same light T-and-anime artwork, using a
+  release-specific icon URL so image caches do not retain the old dark source badge.
+- Match the native app name in SideStore, clarify tracking and optional cloud sync, and add
+  supported source presentation fields with a consistent cyan-blue tint.
+- Replace date/countdown emoji with static calendar and clock SVGs, improve readability and
+  allow the progress indicator to wrap on narrow screens. Countdown ticks retain their SVG nodes,
+  and compact Airing summaries retain the complete duration and due/delayed status.
+- Keep native adaptive icons, watched history, playback progress and usable metadata caches.
+
 ## [8.1.0] — 2026-10-04
 
 ### Fixed

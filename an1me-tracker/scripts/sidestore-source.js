@@ -16,37 +16,44 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error("Repository must be owner/repo");
 
   const baseURL = `https://github.com/${repository}/releases/download`;
-  const iconURL = `https://raw.githubusercontent.com/${repository}/main/an1me-tracker/src/icons/ios/AppIcon-dark.png`;
+  const appName = "An1me Tracker";
+  // The source badge and listing use flat PNGs; native iOS icon appearances stay in the IPA.
+  // A release-specific URL prevents SideStore's image cache from reusing older artwork.
+  const iconURL = `https://raw.githubusercontent.com/${repository}/tracker-v${version}/an1me-tracker/src/icons/ios/AppIcon-sidestore.png`;
+  const tintColor = "168aad";
   const privacy = Object.fromEntries(Object.entries(appInfo).filter(([key]) => key.endsWith("UsageDescription")));
   const appDescription =
-    "The official companion Safari extension & tracker for an1me.to on iOS.\n\n" +
-    "✨ Key Features:\n" +
-    "• Automatic Episode Tracking: Accurately saves your watch progress and playback timestamp.\n" +
-    "• Real-time Cloud Sync: Seamlessly syncs your library between iPhone and PC.\n" +
-    "• Desktop AniList Sync: Mobile progress syncs to the tracker cloud; the desktop extension updates AniList. AniList requests are disabled on mobile to save battery.\n" +
-    "• Smart Filler Detection: Highlights and skips filler episodes smoothly.\n" +
-    "• Modern iOS Experience: Native dark design, fluid Safari popup sheets, and iOS 27 Liquid Glass aesthetic.\n\n" +
-    "Optimized for iOS 27 & modern iPhones.";
+    "Keep your an1me.to library and watch progress together in Safari.\n\n" +
+    "• Track episodes and playback timestamps automatically.\n" +
+    "• Resume watching where you left off.\n" +
+    "• Organise your library, view covers and mark filler episodes.\n\n" +
+    "Works locally without an account. Sign in to sync your library and watch progress between iPhone and desktop.\n\n" +
+    "AniList updates run in the desktop extension; mobile watch progress syncs through the tracker cloud.";
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Fixed missing Resume for legacy saved progress and partial movies; live actions follow the displayed episode.\n" +
-    "• Redesigned T/anime iOS icons with light, dark, native glass and user-selected tint appearances.\n" +
-    "• Preserved watched/playback progress, caches, interrupted fetch queues and mobile battery optimisations.";
+    "• Faster final watch-progress checkpoints and fresh Resume positions across devices.\n" +
+    "• Consistent SideStore source and app icons using the native light artwork.\n" +
+    "• Clearer calendar and airing countdown SVGs in the library.\n" +
+    "• Existing watch progress, library data and native icon appearances are retained.";
 
   return {
-    name: manifest.name,
+    name: appName,
+    subtitle: "Safari companion for an1me.to",
+    description: "Track episodes, resume watching and manage your an1me.to library in Safari. Optional cloud sync connects your iPhone and desktop library.",
+    website: `https://github.com/${repository}/tree/main/an1me-tracker`,
     identifier: "io.github.thomasthanos.an1metracker.source",
     sourceURL: `${baseURL}/tracker-source/source.json`,
     iconURL,
+    tintColor,
     apps: [{
-      name: manifest.name,
+      name: appName,
       bundleIdentifier: appInfo.CFBundleIdentifier,
       developerName: manifest.author,
-      subtitle: "Safari Extension & Tracker for an1me.to",
+      subtitle: "Track episodes and resume watching in Safari",
       localizedDescription: appDescription,
       iconURL,
-      tintColor: "54d2ff",
+      tintColor,
       versions: [{
         version,
         buildVersion: appInfo.CFBundleVersion,

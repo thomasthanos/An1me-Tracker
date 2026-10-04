@@ -73,6 +73,15 @@ New-episode alerts are not available on iPhone: Safari extensions cannot show no
 
 ## Troubleshooting
 
+- **Desktop Resume shows an earlier phone position** — update the phone and desktop extension to
+  8.1.1 or later. Pause/hidden-page saves use a bounded 30-second checkpoint interval, and desktop
+  polls check the remote revision before reusing their cache. Page-exit saves request an immediate
+  flush, but iOS suspension or a failed network request can still defer an upload. The local position
+  and pending retry remain saved. Open Safari again with a working connection, then use the PC's
+  cloud refresh if needed; the sync must finish on the phone before the PC can receive its position.
+- **SideStore shows a small icon beside the app name** — this is its source badge. In 8.1.1 the
+  source and app listing use the same light artwork at a new release-specific URL. SideStore owns
+  this layout; native Home Screen icon appearances remain available through iOS.
 - **Saved progress exists but Resume is missing** — update to 8.1.0 or later. Legacy positions
   without a percentage use their saved time and duration, and partial movie positions remain
   available even if the movie is marked completed. Watched series episodes, completed series,

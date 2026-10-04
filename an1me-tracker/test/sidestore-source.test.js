@@ -27,44 +27,66 @@ test("source describes the built app and its release download", () => {
   const { createSource } = require("../scripts/sidestore-source.js");
   const source = JSON.parse(JSON.stringify(createSource(fixture())));
   assert.equal(source.sourceURL, "https://github.com/example/tracker/releases/download/tracker-source/source.json");
+  assert.equal(source.identifier, "io.github.thomasthanos.an1metracker.source");
   assert.equal(source.apps.length, 1);
-  const appDescription =
-    "The official companion Safari extension & tracker for an1me.to on iOS.\n\n" +
-    "✨ Key Features:\n" +
-    "• Automatic Episode Tracking: Accurately saves your watch progress and playback timestamp.\n" +
-    "• Real-time Cloud Sync: Seamlessly syncs your library between iPhone and PC.\n" +
-    "• Desktop AniList Sync: Mobile progress syncs to the tracker cloud; the desktop extension updates AniList. AniList requests are disabled on mobile to save battery.\n" +
-    "• Smart Filler Detection: Highlights and skips filler episodes smoothly.\n" +
-    "• Modern iOS Experience: Native dark design, fluid Safari popup sheets, and iOS 27 Liquid Glass aesthetic.\n\n" +
-    "Optimized for iOS 27 & modern iPhones.";
-
-  const versionReleaseNotes =
-    "v9.3.1 (Build 77):\n" +
-    "• Fixed missing Resume for legacy saved progress and partial movies; live actions follow the displayed episode.\n" +
-    "• Redesigned T/anime iOS icons with light, dark, native glass and user-selected tint appearances.\n" +
-    "• Preserved watched/playback progress, caches, interrupted fetch queues and mobile battery optimisations.";
-
-  assert.deepEqual(source.apps[0], {
-    name: "Example Tracker",
+  const { localizedDescription, versions, ...app } = source.apps[0];
+  assert.ok(localizedDescription.length > 0);
+  assert.deepEqual(app, {
+    name: "An1me Tracker",
     bundleIdentifier: "com.example.Tracker",
     developerName: "Example",
-    subtitle: "Safari Extension & Tracker for an1me.to",
-    localizedDescription: appDescription,
-    iconURL: "https://raw.githubusercontent.com/example/tracker/main/an1me-tracker/src/icons/ios/AppIcon-dark.png",
-    tintColor: "54d2ff",
-    versions: [{
-      version: "9.3.1",
-      buildVersion: "77",
-      date: "2026-10-03",
-      downloadURL: "https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1.ipa",
-      localizedDescription: versionReleaseNotes,
-      size: 123456,
-      sha256: "a".repeat(64),
-      minOSVersion: "18.0",
-    }],
+    subtitle: "Track episodes and resume watching in Safari",
+    iconURL: "https://raw.githubusercontent.com/example/tracker/tracker-v9.3.1/an1me-tracker/src/icons/ios/AppIcon-sidestore.png",
+    tintColor: "168aad",
     appPermissions: { entitlements: [], privacy: {} },
   });
+  const { localizedDescription: versionReleaseNotes, ...release } = versions[0];
+  assert.ok(versionReleaseNotes.length > 0);
+  assert.equal(versions.length, 1);
+  assert.deepEqual(release, {
+    version: "9.3.1",
+    buildVersion: "77",
+    date: "2026-10-03",
+    downloadURL: "https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1.ipa",
+    size: 123456,
+    sha256: "a".repeat(64),
+    minOSVersion: "18.0",
+  });
   assert.equal("marketplaceID" in source.apps[0], false);
+});
+
+test("source and app icon URLs change with the release so cached older artwork cannot be reused", () => {
+  const { createSource } = require("../scripts/sidestore-source.js");
+  const current = createSource(fixture());
+  const input = fixture();
+  input.manifest.version = "9.3.2";
+  input.appInfo.CFBundleShortVersionString = "9.3.2";
+  input.ipaName = "An1meTracker-9.3.2.ipa";
+  const next = createSource(input);
+  assert.equal(current.iconURL, current.apps[0].iconURL);
+  assert.equal(next.iconURL, next.apps[0].iconURL);
+  assert.notEqual(current.iconURL, next.iconURL);
+  assert.equal(next.iconURL, "https://raw.githubusercontent.com/example/tracker/tracker-v9.3.2/an1me-tracker/src/icons/ios/AppIcon-sidestore.png");
+});
+
+test("source provides optional SideStore presentation fields without changing its identity", () => {
+  const { createSource } = require("../scripts/sidestore-source.js");
+  const source = createSource(fixture());
+  assert.equal(source.name, source.apps[0].name);
+  assert.equal(source.website, "https://github.com/example/tracker/tree/main/an1me-tracker");
+  assert.ok(source.subtitle.length > 0);
+  assert.ok(source.description.length > 0);
+  assert.match(source.tintColor, /^[a-f0-9]{6}$/);
+  assert.equal(source.tintColor, source.apps[0].tintColor);
+});
+
+test("SideStore artwork is a full-bleed opaque 1024px PNG for native image decoding", () => {
+  const png = fs.readFileSync(path.join(__dirname, "../src/icons/ios/AppIcon-sidestore.png"));
+  assert.deepEqual(png.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  assert.equal(png.readUInt32BE(16), 1024);
+  assert.equal(png.readUInt32BE(20), 1024);
+  assert.equal(png[24], 8, "8-bit channels");
+  assert.equal(png[25], 2, "RGB without transparency");
 });
 
 test("missing or malformed content hashes cannot create source metadata", () => {

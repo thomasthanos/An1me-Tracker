@@ -890,11 +890,15 @@
   flex-shrink: 0;
 }
 
-.meta-time-row{ display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 1px; min-width: 0; }
+.meta-time-row{ display: flex; align-items: center; gap: 4px 9px; flex-wrap: wrap; margin-top: 1px; min-width: 0; }
 
-.meta-time{ display: block; font-size: 9px; color: rgba(154, 168, 195, 0.72); white-space: nowrap; }
+.meta-time{ display: inline-flex; align-items: center; gap: 4px; font-size: 10px; line-height: 14px; color: rgba(210, 222, 239, 0.72); white-space: nowrap; }
 
-.meta-time-eta{ display: inline-flex; align-items: center; font-size: 9px; font-weight: 700; white-space: nowrap; letter-spacing: 0.01em; }
+.meta-time-eta{ display: inline-flex; align-items: center; gap: 4px; font-size: 10px; line-height: 14px; font-weight: 600; white-space: nowrap; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+
+.meta-time-icon{ display: inline-flex; width: 12px; height: 12px; flex: 0 0 12px; pointer-events: none; }
+
+.meta-time-icon svg{ display: block; width: 100%; height: 100%; }
 
 .meta-time-eta-ai{ color: rgba(232, 237, 248, 0.84); }
 

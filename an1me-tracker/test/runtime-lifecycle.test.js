@@ -95,7 +95,11 @@ function page(url = "https://an1me.to/watch/naruto-episode-1") {
   });
   await test("airing countdown stops hidden timers and starts exactly one when shown", () => {
     const h = page();
-    h.doc.querySelectorAll = () => [{ dataset: { nextAiringAt: Date.now() + 3600000 }, textContent: "", classList: { toggle() {} }, getClientRects: () => [{}] }];
+    // Rendered cards retain a dedicated text child alongside their decorative SVG.
+    const label = { textContent: "" };
+    const countdownNode = { dataset: { nextAiringAt: Date.now() + 3600000 }, classList: { toggle() {} },
+      getClientRects: () => [{}], querySelector: selector => selector === ".meta-time-label" ? label : null };
+    h.doc.querySelectorAll = () => [countdownNode];
     h.load("src/popup/lib/airing-countdown.js");
     const countdown = h.c.window.AnimeTracker.AiringCountdown; countdown.start(); assert.equal(h.timers.size, 1);
     h.doc.hidden = true; h.doc.dispatchEvent(new Event("visibilitychange")); assert.equal(h.timers.size, 0);

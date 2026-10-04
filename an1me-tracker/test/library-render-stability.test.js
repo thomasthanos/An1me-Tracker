@@ -71,6 +71,33 @@ function runInBrowser() {
     equal(resume.querySelector(".ip-continue-btn").href, "https://an1me.to/watch/standalone-movie-episode-1", "movie Resume URL");
     equal(AT.PopupState.animeData["standalone-movie"].listState, "completed", "completed list state retained");
   });
+  // The real formatter supplies plain text; stripping an old emoji prefix would lose days,
+  // hours or due/delayed status from the compact section even while card countdowns look right.
+  for (const { offset, expected } of [
+    { offset: 31 * 3600000, expected: "1 anime · next in 1d 7h" },
+    { offset: (3 * 60 + 12) * 60000, expected: "1 anime · next in 3h 12m" },
+    { offset: 5 * 60000, expected: "1 anime · next in 5m" },
+    { offset: -3600000, expected: "1 anime · due now" },
+    { offset: -7 * 3600000, expected: "1 anime · due today" },
+    { offset: -2 * 86400000, expected: "1 anime · delayed 2d" },
+  ]) {
+    test(`compact Airing section preserves "${expected}"`, () => {
+      const previousService = AT.AnilistService, previousNow = Date.now;
+      const now = Date.parse("2026-10-04T10:00:00Z");
+      Date.now = () => now;
+      AT.AnilistService = { ...previousService,
+        getStatus: () => "RELEASING", getTotalEpisodes: () => 13, getLatestEpisode: () => 5,
+        getNextEpisodeAt: () => new Date(now + offset).toISOString(), getAiringSchedule: () => ({ episode: 6 }) };
+      try {
+        reset({ "airing-series": entry("Airing Series", { releaseStatus: "RELEASING", totalEpisodes: 13,
+          episodes: Array.from({ length: 5 }, (_, i) => ({ number: i + 1, duration: 1440 })) }) });
+        equal(list.querySelector(".airing-list-label-sub").textContent, expected, "complete section countdown");
+      } finally {
+        AT.AnilistService = previousService;
+        Date.now = previousNow;
+      }
+    });
+  }
   // Catches replacing the whole list after a single metadata update. Real cards/images and
   // delegated expansion handlers are used so retaining a renderer mock cannot satisfy it.
   test("one entry update keeps the other 118 cards and their images attached", () => {
@@ -189,9 +216,9 @@ const scripts = ["src/common/utils.js", "src/common/data/multipart-mappings.js",
   "src/common/data/franchise-seasons.js", "src/common/data/media-type.js", "src/common/data/entry-state.js",
   "src/popup/lib/config.js", "src/common/data/merge-utils.js", "src/common/data/cache-policy.js",
   "src/popup/lib/ui-helpers.js", "src/popup/services/filler-service.js", "src/popup/lib/anime-status.js",
-  "src/popup/lib/progress-manager.js", "src/popup/cards/anime-card.js"];
+  "src/popup/lib/progress-manager.js", "src/popup/lib/airing-countdown.js", "src/popup/cards/anime-card.js"];
 const setup = `window.AnimeTracker = {}; window.PopupLogger = {debug(){}, error(){}};`;
-const html = `<html><head><style>.main-content {height:120px;overflow:auto}.anime-card {min-height:70px}</style></head><body>
+const html = `<html><head><meta charset="utf-8"><style>.main-content {height:120px;overflow:auto}.anime-card {min-height:70px}</style></head><body>
   <div class="main-content"><div id="animeList"></div></div><div id="emptyState"></div><div id="searchEmptyState"></div>
   <span id="searchEmptyQuery"></span><div id="listLoading"></div><pre id="results">pending</pre>
   <script>${setup}</script>${scripts.map(file => `<script>${fs.readFileSync(path.join(root, file), "utf8").replace(/<\/script/gi, "<\\/script")}</script>`).join("")}

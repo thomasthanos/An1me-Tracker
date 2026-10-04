@@ -530,10 +530,8 @@
       if (soonest === null) return `${suffix} · Caught up`;
       const label = AiringCountdown.format(soonest);
       if (!label.text) return `${suffix} · Caught up`;
-      // Strip the emoji the card badges use; "next 3d 4h" reads as a wait, "due now"/"delayed"
-      // read as states and should not be prefixed with "next".
-      const bare = label.text.replace(/^[^\s]+\s/, "");
-      return soonest <= Date.now() ? `${suffix} · ${bare}` : `${suffix} · next in ${bare}`;
+      // Formatter labels are plain text. Preserve every unit and due/delayed state.
+      return soonest <= Date.now() ? `${suffix} · ${label.text}` : `${suffix} · next in ${label.text}`;
     }
 
     const airingGroupHtml =
