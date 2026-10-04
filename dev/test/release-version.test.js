@@ -13,7 +13,6 @@ const path = require("path");
 const REPO = path.join(__dirname, "../..");
 const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
 const { version } = JSON.parse(read("manifest.json"));
-const escaped = version.replace(/\./g, "\\.");
 
 let failures = 0;
 function check(label, ok) {
@@ -29,19 +28,19 @@ function check(label, ok) {
 check("the manifest version is a plain x.y.z", /^\d+\.\d+\.\d+$/.test(version));
 
 const readme = read("README.md");
-check("README badge reads the manifest version", new RegExp(`alt="Version ${escaped}"`).test(readme));
+check("README badge reads the manifest version", readme.includes(`alt="Version ${version}"`));
 check(
   "README iPhone download link points at this version's release and IPA",
   readme.includes(`/releases/download/tracker-v${version}/An1meTracker-${version}.ipa`),
 );
 
-check("IOS.md badge reads the manifest version", new RegExp(`\\[!\\[Version ${escaped}\\]`).test(read("IOS.md")));
+check("IOS.md badge reads the manifest version", read("IOS.md").includes(`[![Version ${version}]`));
 
 const badge = read(".github/assets/badge-v-tracker.svg");
 check("version badge SVG is labelled with the manifest version", badge.includes(`aria-label="Version ${version}"`));
-check("version badge SVG shows the manifest version", new RegExp(`>${escaped}</text>`).test(badge));
+check("version badge SVG shows the manifest version", badge.includes(`>${version}</text>`));
 
-check("hero SVG shows the manifest version", new RegExp(`>v${escaped}</text>`).test(read(".github/assets/hero-animated.svg")));
+check("hero SVG shows the manifest version", read(".github/assets/hero-animated.svg").includes(`>v${version}</text>`));
 
 const changelog = read("CHANGELOG.md");
 const latest = changelog.match(/^## \[(\d+\.\d+\.\d+)\]/m);
