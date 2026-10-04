@@ -20,6 +20,7 @@ function fixture() {
     ipaSize: 123456,
     ipaSha256: "a".repeat(64),
     date: "2026-10-03",
+    revision: "b".repeat(40),
   };
 }
 
@@ -36,7 +37,7 @@ test("source describes the built app and its release download", () => {
     bundleIdentifier: "com.example.Tracker",
     developerName: "Example",
     subtitle: "Track episodes and resume watching in Safari",
-    iconURL: "https://raw.githubusercontent.com/example/tracker/tracker-v9.3.1/an1me-tracker/src/icons/ios/AppIcon-sidestore.png",
+    iconURL: `https://raw.githubusercontent.com/example/tracker/${"b".repeat(40)}/src/icons/ios/AppIcon-sidestore.png`,
     tintColor: "168aad",
     appPermissions: { entitlements: [], privacy: {} },
   });
@@ -55,25 +56,38 @@ test("source describes the built app and its release download", () => {
   assert.equal("marketplaceID" in source.apps[0], false);
 });
 
-test("source and app icon URLs change with the release so cached older artwork cannot be reused", () => {
+test("source and app icon URLs change with the build commit so cached older artwork cannot be reused", () => {
   const { createSource } = require("../scripts/sidestore-source.js");
   const current = createSource(fixture());
   const input = fixture();
   input.manifest.version = "9.3.2";
   input.appInfo.CFBundleShortVersionString = "9.3.2";
   input.ipaName = "An1meTracker-9.3.2.ipa";
+  input.revision = "c".repeat(40);
   const next = createSource(input);
   assert.equal(current.iconURL, current.apps[0].iconURL);
   assert.equal(next.iconURL, next.apps[0].iconURL);
   assert.notEqual(current.iconURL, next.iconURL);
-  assert.equal(next.iconURL, "https://raw.githubusercontent.com/example/tracker/tracker-v9.3.2/an1me-tracker/src/icons/ios/AppIcon-sidestore.png");
+  assert.equal(next.iconURL, `https://raw.githubusercontent.com/example/tracker/${input.revision}/src/icons/ios/AppIcon-sidestore.png`);
+});
+
+test("rebuilding an existing version uses artwork from the actual immutable build commit", () => {
+  const { createSource } = require("../scripts/sidestore-source.js");
+  const revision = "b".repeat(40);
+  const source = createSource({ ...fixture(), revision });
+  assert.equal(source.iconURL, `https://raw.githubusercontent.com/example/tracker/${revision}/src/icons/ios/AppIcon-sidestore.png`);
+  assert.equal(source.iconURL, source.apps[0].iconURL);
+  assert.equal(source.apps[0].versions[0].downloadURL, "https://github.com/example/tracker/releases/download/tracker-v9.3.1/An1meTracker-9.3.1.ipa");
+  assert.notEqual(source.iconURL, createSource({ ...fixture(), revision: "c".repeat(40) }).iconURL);
+  assert.throws(() => createSource({ ...fixture(), revision: "../main" }), /revision/i);
+  assert.throws(() => createSource({ ...fixture(), revision: undefined }), /revision/i);
 });
 
 test("source provides optional SideStore presentation fields without changing its identity", () => {
   const { createSource } = require("../scripts/sidestore-source.js");
   const source = createSource(fixture());
   assert.equal(source.name, source.apps[0].name);
-  assert.equal(source.website, "https://github.com/example/tracker/tree/main/an1me-tracker");
+  assert.equal(source.website, "https://github.com/example/tracker");
   assert.ok(source.subtitle.length > 0);
   assert.ok(source.description.length > 0);
   assert.match(source.tintColor, /^[a-f0-9]{6}$/);
@@ -133,13 +147,20 @@ test("CLI reads built metadata and emits dates accepted by SideStore's ISO8601 d
     fs.writeFileSync(infoPath, JSON.stringify({ ...fixture().appInfo, CFBundleShortVersionString: manifest.version }));
     // Packaging validates the archive; this generator's boundary is its bytes and app metadata.
     fs.writeFileSync(ipaPath, "hello");
-    const output = execFileSync(process.execPath, [path.join(__dirname, "../scripts/sidestore-source.js"), infoPath, ipaPath, "example/tracker"], { encoding: "utf8" });
+    const revision = "d".repeat(40);
+    const output = execFileSync(process.execPath, [path.join(__dirname, "../scripts/sidestore-source.js"), infoPath, ipaPath, "example/tracker"], { encoding: "utf8", env: { ...process.env, GITHUB_SHA: revision } });
     const source = JSON.parse(output);
     const version = source.apps[0].versions[0];
     assert.match(version.date, /^\d{4}-\d{2}-\d{2}$/);
     assert.equal(version.size, 5);
     assert.equal(version.sha256, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
     assert.equal(source.apps[0].bundleIdentifier, "com.example.Tracker");
+    assert.equal(source.iconURL, `https://raw.githubusercontent.com/example/tracker/${revision}/src/icons/ios/AppIcon-sidestore.png`);
+    const command = [path.join(__dirname, "../scripts/sidestore-source.js"), infoPath, ipaPath, "example/tracker"];
+    assert.throws(() => execFileSync(process.execPath, command, { env: { ...process.env, GITHUB_SHA: "" }, stdio: "pipe" }), /revision.*commit/i);
+    const explicitRevision = "e".repeat(40);
+    const explicit = JSON.parse(execFileSync(process.execPath, [...command, explicitRevision], { encoding: "utf8", env: { ...process.env, GITHUB_SHA: "" } }));
+    assert.equal(explicit.iconURL, `https://raw.githubusercontent.com/example/tracker/${explicitRevision}/src/icons/ios/AppIcon-sidestore.png`);
   } finally {
     // Only remove the exact directory returned by mkdtemp inside the system temp directory.
     fs.rmSync(temp, { recursive: true, force: true });

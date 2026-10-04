@@ -1,10 +1,11 @@
 // Generate a SideStore/AltStore source from the built app's Info.plist and IPA.
-// node scripts/sidestore-source.js <app-info.json> <app.ipa> <owner/repo> > source.json
+// node scripts/sidestore-source.js <app-info.json> <app.ipa> <owner/repo> <commit-sha> > source.json
+// In GitHub Actions, GITHUB_SHA supplies the commit when the final argument is omitted.
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha256, date }) {
+function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha256, date, revision }) {
   for (const field of ["CFBundleIdentifier", "CFBundleShortVersionString", "CFBundleVersion", "MinimumOSVersion"]) {
     if (typeof appInfo[field] !== "string" || !appInfo[field]) throw new Error(`Missing app Info.plist field: ${field}`);
   }
@@ -14,12 +15,14 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
   if (!Number.isSafeInteger(ipaSize) || ipaSize <= 0) throw new Error("IPA size must be a positive integer");
   if (!/^[a-f0-9]{64}$/.test(ipaSha256)) throw new Error("IPA SHA256 must be a 64-character lowercase hash");
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error("Repository must be owner/repo");
+  if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("Artwork revision must be a full Git commit SHA (pass commit-sha or set GITHUB_SHA)");
 
   const baseURL = `https://github.com/${repository}/releases/download`;
   const appName = "An1me Tracker";
   // The source badge and listing use flat PNGs; native iOS icon appearances stay in the IPA.
-  // A release-specific URL prevents SideStore's image cache from reusing older artwork.
-  const iconURL = `https://raw.githubusercontent.com/${repository}/tracker-v${version}/an1me-tracker/src/icons/ios/AppIcon-sidestore.png`;
+  // A rebuild may retain its release tag after files move. Pin artwork to the actual build
+  // commit so the URL stays valid and SideStore does not reuse older cached artwork.
+  const iconURL = `https://raw.githubusercontent.com/${repository}/${revision}/src/icons/ios/AppIcon-sidestore.png`;
   const tintColor = "168aad";
   const privacy = Object.fromEntries(Object.entries(appInfo).filter(([key]) => key.endsWith("UsageDescription")));
   const appDescription =
@@ -43,7 +46,7 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
     name: appName,
     subtitle: "Safari companion for an1me.to",
     description: "Track episodes, resume watching and manage your an1me.to library in Safari. Optional cloud sync connects your iPhone and desktop library.",
-    website: `https://github.com/${repository}/tree/main/an1me-tracker`,
+    website: `https://github.com/${repository}`,
     identifier: "io.github.thomasthanos.an1metracker.source",
     sourceURL: `${baseURL}/tracker-source/source.json`,
     iconURL,
@@ -74,11 +77,12 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 }
 
 if (require.main === module) {
-  const [infoPath, ipaPath, repository] = process.argv.slice(2);
-  if (!infoPath || !ipaPath || !repository) throw new Error("Usage: sidestore-source.js <app-info.json> <app.ipa> <owner/repo>");
+  const [infoPath, ipaPath, repository, revision] = process.argv.slice(2);
+  if (!infoPath || !ipaPath || !repository) throw new Error("Usage: sidestore-source.js <app-info.json> <app.ipa> <owner/repo> <commit-sha> (or set GITHUB_SHA)");
   const ipa = fs.readFileSync(ipaPath);
   const source = createSource({
     repository,
+    revision: revision || process.env.GITHUB_SHA,
     manifest: JSON.parse(fs.readFileSync(path.join(__dirname, "../manifest.json"), "utf8")),
     appInfo: JSON.parse(fs.readFileSync(infoPath, "utf8")),
     ipaName: path.basename(ipaPath),

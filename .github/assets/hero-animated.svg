@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="480" viewBox="0 0 1100 480" role="img" aria-labelledby="hero-title hero-description">
+  <title id="hero-title">An1me Tracker — Watch. Resume. Keep your place.</title>
+  <desc id="hero-description">An1me Tracker 8.2.0 for Chrome and Edge on desktop, and Safari on iPhone through SideStore. A stylized player shows episode 7 with progress saved at 12 minutes 48 seconds. The progress line advances gently once and rests. Reduced-motion preferences show the final, static state.</desc>
+  <defs>
+    <linearGradient id="hero-surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c2033"/>
+      <stop offset="0.62" stop-color="#071320"/>
+      <stop offset="1" stop-color="#0c1b2d"/>
+    </linearGradient>
+    <linearGradient id="hero-brand" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#57d6ff"/>
+      <stop offset="1" stop-color="#4b8cff"/>
+    </linearGradient>
+    <linearGradient id="hero-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#193b59"/>
+      <stop offset="1" stop-color="#0f2238"/>
+    </linearGradient>
+    <linearGradient id="hero-horizon" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#4b8cff" stop-opacity="0"/>
+      <stop offset="0.6" stop-color="#57d6ff" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#57d6ff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="hero-scene-clip">
+      <rect x="621" y="164" width="382" height="144" rx="8"/>
+    </clipPath>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
+    .hero-progress { transform-box: fill-box; transform-origin: left center; animation: hero-progress 12s ease-out 1 both; }
+    .hero-playhead { animation: hero-playhead 12s ease-out 1 both; }
+    .hero-status { animation: hero-status 12s ease-out 1 both; }
+    @keyframes hero-progress { from { transform: scaleX(0.8); } to { transform: scaleX(1); } }
+    @keyframes hero-playhead { from { transform: translateX(-40.6px); } to { transform: translateX(0); } }
+    @keyframes hero-status { 0%, 70% { opacity: 0.55; } 100% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .hero-progress, .hero-playhead, .hero-status { animation: none; }
+    }
+  </style>
+  <rect x="1" y="1" width="1098" height="478" rx="22" fill="url(#hero-surface)" stroke="#20394f" stroke-width="2"/>
+
+  <!-- A cut-angle T is the sole large brand motif. -->
+  <path d="M55 49H112L105 63H91V102H75V63H55Z" fill="url(#hero-brand)"/>
+  <path d="M55 109H75" stroke="#57d6ff" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+  <text x="132" y="88" fill="#edf3ff" font-size="40" font-weight="650" letter-spacing="-1.2">An1me Tracker</text>
+  <text x="1046" y="83" text-anchor="end" fill="#96abc4" font-size="19">8.2.0</text>
+
+  <text x="55" y="191" fill="#edf3ff" font-size="54" font-weight="650" letter-spacing="-2">Watch. Resume.</text>
+  <text x="55" y="253" fill="#edf3ff" font-size="54" font-weight="650" letter-spacing="-2">Keep your place.</text>
+  <text x="58" y="301" fill="#a8bed4" font-size="22">Your library, across devices.</text>
+
+  <!-- Original vector scenery suggests the quiet end of an anime episode. -->
+  <rect x="601" y="123" width="422" height="275" rx="15" fill="#0a1727" stroke="#294258"/>
+  <text x="622" y="148" fill="#d4e3f5" font-size="16" font-weight="600">Continue watching</text>
+  <g clip-path="url(#hero-scene-clip)">
+    <rect x="621" y="164" width="382" height="144" fill="url(#hero-sky)"/>
+    <circle cx="885" cy="206" r="24" fill="#91dfff" opacity="0.85"/>
+    <circle cx="885" cy="206" r="33" fill="none" stroke="#57d6ff" stroke-opacity="0.17"/>
+    <path d="M636 186L750 180M790 174L849 171M922 242L1003 235" stroke="#a4eaff" stroke-width="1.5" stroke-linecap="round" opacity="0.26"/>
+    <path d="M672 250L731 203L788 253L833 231L865 259L934 214L994 260L1030 252V310H621V271Z" fill="#18344c"/>
+    <path d="M615 270H656V250H681V275H714V258H738V283H775V263H796V246H819V277H858V266H883V280H931V251H950V277H985V260H1010V310H615Z" fill="#0c2135"/>
+    <path d="M630 288H1003" stroke="url(#hero-horizon)" stroke-width="2"/>
+    <path d="M661 270H694V293H661ZM808 281H845V308H808ZM953 282H976V309H953Z" fill="#071320"/>
+    <path d="M664 270L677 261L691 270M953 282L965 275L976 282" fill="none" stroke="#071320" stroke-width="5"/>
+    <path d="M705 307L738 279H765L798 307" fill="#06121e"/>
+    <path d="M738 278L745 269H758L765 278" fill="#06121e"/>
+    <path d="M864 310V272M864 279L840 283M864 274L888 269" stroke="#081727" stroke-width="3"/>
+    <path d="M728 293H771" stroke="#58caff" stroke-width="1.5" opacity="0.45"/>
+  </g>
+  <text x="622" y="337" fill="#edf3ff" font-size="20" font-weight="600">Episode 07</text>
+  <g class="hero-status">
+    <circle cx="913" cy="331" r="3" fill="#57d6ff"/>
+    <text x="925" y="336" fill="#9bc6dd" font-size="14">Saved</text>
+  </g>
+  <rect x="622" y="355" width="380" height="5" rx="2.5" fill="#223449"/>
+  <rect class="hero-progress" x="622" y="355" width="203" height="5" rx="2.5" fill="url(#hero-brand)"/>
+  <circle class="hero-playhead" cx="825" cy="357.5" r="4.5" fill="#b5efff"/>
+  <text x="622" y="382" fill="#a8bed4" font-size="15">Resume from 12:48</text>
+  <text x="1002" y="382" text-anchor="end" fill="#829ab5" font-size="15">24:00</text>
+
+  <path d="M57 350H526" stroke="#294258"/>
+  <g fill="none" stroke="#8fc9e7" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="58" y="374" width="23" height="16" rx="2"/>
+    <path d="M69.5 391V396M64 396H75"/>
+    <rect x="297" y="373" width="13" height="24" rx="3"/>
+    <path d="M302 393H305"/>
+  </g>
+  <text x="94" y="392" fill="#d4e3f5" font-size="18">Chrome / Edge</text>
+  <text x="323" y="392" fill="#d4e3f5" font-size="18">Safari on iPhone</text>
+  <text x="323" y="420" fill="#829ab5" font-size="15">via SideStore</text>
+  <path d="M57 446H1043" stroke="#1c3349"/>
+</svg>
