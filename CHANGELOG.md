@@ -7,6 +7,36 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [8.2.1] — 2026-10-04
+
+### Fixed
+
+- Stop the cloud poll from re-uploading Resume. While a video plays, the local Resume position is
+  always ahead of the cloud copy, and every side-panel poll treated that gap as a reason to run a
+  full sync (a revalidation read plus a library write). A poll now runs the full sync only when the
+  library itself differs from the cloud; when only Resume differs it leaves the upload to the
+  progress alarm, which sends the newest position within 5 minutes.
+- Stop a service-worker restart from uploading pending Resume that an armed progress alarm already
+  owns. A missing or overdue alarm is still recovered immediately, so no position is left behind.
+- On a simulated 24-minute episode with the side panel polling every 3 minutes and the worker
+  restarting at each poll, cloud traffic drops from 30 reads / 11 writes to 13 reads / 5 writes.
+  Local saves, pause/hidden/unload checkpoints, forced unload uploads, retry backoff and the rule
+  that an older sample never lowers a newer Resume are unchanged.
+
+### Changed
+
+- Move `test/`, `scripts/` and `screenshots/` under `dev/`. The extension bundle is unchanged
+  (packaging copies an explicit file list). Commands are now `node dev/scripts/package.js` and
+  `node dev/test/<name>.test.js`.
+- The hero image takes its version from `manifest.json` instead of a hardcoded number.
+
+### Added
+
+- Regression tests for the poll and restart paths, including that an unowned pending position is
+  still recovered on boot and that a library difference still triggers the full sync.
+- `dev/test/release-version.test.js` pins the README and IOS.md badges, the badge and hero SVGs,
+  the IPA download link and the newest changelog entry to `manifest.json`.
+
 ## [8.2.0] — 2026-10-04
 
 ### Added
