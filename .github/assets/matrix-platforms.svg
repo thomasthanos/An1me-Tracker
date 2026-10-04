@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="420" viewBox="0 0 1100 420" role="img" aria-labelledby="matrix-title matrix-description">
+  <title id="matrix-title">An1me Tracker — what runs where</title>
+  <desc id="matrix-description">A capability matrix. Tracking, resume, library, speed control and optional cloud sync run on both desktop and iPhone. New-episode alerts, the side panel and AniList run on desktop only. The outro skip button also appears on iPhone, where the player exposes it. Reduced-motion preferences show the final, static state.</desc>
+  <defs>
+    <linearGradient id="mx-surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c2033"/>
+      <stop offset="0.62" stop-color="#071320"/>
+      <stop offset="1" stop-color="#0c1b2d"/>
+    </linearGradient>
+    <linearGradient id="mx-ink" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#57d6ff"/>
+      <stop offset="1" stop-color="#4b8cff"/>
+    </linearGradient>
+    <linearGradient id="mx-phone" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#1d3d5c"/>
+      <stop offset="1" stop-color="#102132"/>
+    </linearGradient>
+    <linearGradient id="mx-screen" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#123a5a"/>
+      <stop offset="1" stop-color="#08192a"/>
+    </linearGradient>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
+    .mx-name { fill: #e6eefb; font-size: 16px; font-weight: 600; }
+    .mx-note { fill: #7d94ad; font-size: 13px; }
+    .mx-head { fill: #8fa6be; font-size: 12px; font-weight: 700; letter-spacing: 1.6px; }
+    .mx-rule { stroke: #1b3448; stroke-width: 1.4; }
+    /* Row icons live in one 24x24 cell centred on x=82. */
+    .mx-icon { fill: none; stroke: url(#mx-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .mx-solid { fill: url(#mx-ink); }
+    /* Column marks. */
+    .mx-here { fill: none; stroke: url(#mx-ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .mx-absent { fill: none; stroke: #3c556b; stroke-width: 2.2; stroke-linecap: round; }
+    /* Available, but only where the player exposes the control. */
+    .mx-cond { fill: none; stroke: #7fb2ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .mx-dot-here { fill: #63e0c7; animation: mx-breathe 4.4s ease-in-out infinite; }
+    .mx-dot-cond { fill: #7fb2ff; animation: mx-breathe 4.4s ease-in-out 0.7s infinite; }
+    .mx-dot-absent { fill: #33475c; }
+    .mx-phone { animation: mx-float 7s ease-in-out infinite; }
+    @keyframes mx-breathe { 0%, 100% { r: 3.4; opacity: 0.65; } 50% { r: 5; opacity: 1; } }
+    @keyframes mx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @media (prefers-reduced-motion: reduce) {
+      .mx-dot-here, .mx-dot-cond, .mx-phone { animation: none; }
+    }
+  </style>
+
+  <rect x="1" y="1" width="1098" height="418" rx="20" fill="url(#mx-surface)" stroke="#20394f" stroke-width="2"/>
+
+  <!-- Column headers: glyph, breathing status dot, label. -->
+  <g class="mx-icon">
+    <rect x="516" y="30" width="24" height="17" rx="3"/>
+    <path d="M516 36H540"/>
+  </g>
+  <circle cx="556" cy="38.5" r="3.4" class="mx-dot-here"/>
+  <text x="570" y="43" class="mx-head">DESKTOP</text>
+
+  <g class="mx-phone">
+    <rect x="816" y="23" width="22" height="33" rx="5" fill="url(#mx-phone)"/>
+    <rect x="817.2" y="24.2" width="19.6" height="30.6" rx="4" fill="none" stroke="#2b465e" stroke-width="1.2"/>
+    <rect x="820" y="23" width="14" height="4.5" rx="2.2" fill="#08131f"/>
+    <rect x="819.5" y="32" width="15" height="19" rx="2.5" fill="url(#mx-screen)"/>
+    <circle cx="827" cy="41.5" r="3.2" fill="#0b2133" stroke="#2b465e" stroke-width="0.9"/>
+    <path d="M826 40L828.4 41.5L826 43Z" class="mx-solid"/>
+    <rect x="822" y="54" width="10" height="1.5" rx=".75" fill="#38536b"/>
+  </g>
+  <circle cx="856" cy="38.5" r="3.4" class="mx-dot-here"/>
+  <text x="870" y="43" class="mx-head">IPHONE</text>
+
+  <path d="M56 78H1043" class="mx-rule"/>
+
+  <!-- Row 1: Tracking, Resume, Continue Watching (two-line) -->
+  <g class="mx-icon">
+    <circle cx="82" cy="110" r="10.5"/>
+    <path d="M79 105.5L88 110L79 114.5Z" class="mx-solid" stroke="none"/>
+  </g>
+  <text x="112" y="105" class="mx-name">Tracking, Resume, Continue Watching</text>
+  <text x="112" y="125" class="mx-note">episode progress and playback positions</text>
+  <path d="M545 110L550 116L560 102" class="mx-here"/><path d="M845 110L850 116L860 102" class="mx-here"/>
+
+  <path d="M56 148H1043" class="mx-rule"/>
+
+  <!-- Row 2: Cloud sync (single-line) -->
+  <g class="mx-icon">
+    <path d="M73 172A7 7 0 0 1 73.5 158A10 10 0 0 1 93 156.5A7 7 0 0 1 92.5 172Z"/>
+    <path d="M82 163V177M78 173.5L82 177.5L86 173.5"/>
+  </g>
+  <text x="112" y="169" class="mx-name">Optional cloud sync</text>
+  <path d="M545 166L550 172L560 158" class="mx-cond"/><path d="M845 166L850 172L860 158" class="mx-cond"/>
+
+  <path d="M56 204H1043" class="mx-rule"/>
+
+  <!-- Row 3: Library (two-line) -->
+  <g class="mx-icon">
+    <rect x="73" y="214" width="4.6" height="18" rx="1.6"/>
+    <rect x="80.2" y="214" width="4.6" height="18" rx="1.6"/>
+    <path d="M88.4 214.6L92.6 213.7L96.6 231.4L92.4 232.3Z"/>
+  </g>
+  <text x="112" y="222" class="mx-name">Library, stats, backups</text>
+  <text x="112" y="242" class="mx-note">covers, search, categories, filler labels</text>
+  <path d="M545 227L550 233L560 219" class="mx-here"/><path d="M845 227L850 233L860 219" class="mx-here"/>
+
+  <path d="M56 264H1043" class="mx-rule"/>
+
+  <!-- Row 4: Speed Control and the outro skip button (single-line) -->
+  <g class="mx-icon">
+    <path d="M71 286A11.5 11.5 0 0 1 93 286"/>
+    <path d="M82 286L89 277"/>
+    <circle cx="82" cy="286" r="2.2" class="mx-solid" stroke="none"/>
+  </g>
+  <text x="112" y="285" class="mx-name">Speed Control and the outro skip button</text>
+  <path d="M545 282L550 288L560 274" class="mx-here"/><path d="M845 282L850 288L860 274" class="mx-cond"/>
+
+  <path d="M56 312H1043" class="mx-rule"/>
+
+  <!-- Row 5: AniList (two-line) -->
+  <g class="mx-icon">
+    <path d="M72 336L82 316L92 336"/>
+    <path d="M76 329H88"/>
+    <path d="M68 340H96"/>
+  </g>
+  <text x="112" y="330" class="mx-name">AniList import and updates</text>
+  <text x="112" y="350" class="mx-note">kept off mobile to reduce background work</text>
+  <path d="M545 335L550 341L560 327" class="mx-here"/><path d="M846 335H858" class="mx-absent"/>
+
+  <path d="M56 372H1043" class="mx-rule"/>
+
+  <!-- Row 6: Alerts and side panel (two-line) -->
+  <g class="mx-icon">
+    <path d="M74 389A8 8 0 0 1 90 389L92 395H72Z"/>
+    <path d="M79.5 395A2.5 2.5 0 0 0 84.5 395"/>
+    <path d="M82 376V379"/>
+  </g>
+  <text x="112" y="388" class="mx-name">New-episode alerts and side panel</text>
+  <text x="112" y="408" class="mx-note">desktop Chrome and Edge</text>
+  <path d="M545 393L550 399L560 385" class="mx-here"/><path d="M846 393H858" class="mx-absent"/>
+</svg>
