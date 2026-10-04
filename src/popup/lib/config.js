@@ -540,7 +540,7 @@ const SeasonGrouping = {
         // Nothing below can merge without a relation suffix (the final condition requires one), and it
         // is the expensive part: media-type resolution per entry and two RegExp builds for EVERY pair.
         // Checking it first turns that O(G^2) pass into a cheap prefix scan. None of the skipped work
-        // has side effects, so the result is unchanged - test/grouping.test.js pins that.
+        // has side effects, so the result is unchanged - dev/test/grouping.test.js pins that.
         if (!relationSuffix) continue;
         const numericRelationMatch = relationSuffix.match(/^([1-9]\d?)(?:-|$)/);
         const numericRelation = numericRelationMatch ? Number(numericRelationMatch[1]) : 0;

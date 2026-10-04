@@ -10,8 +10,8 @@ on:
       - "background.js"
       - "popup.html"
       - "src/**"
-      - "scripts/**"
-      - "test/**"
+      - "dev/scripts/**"
+      - "dev/test/**"
       - "ios/**"
       - ".github/workflows/tracker-ipa.yml"
   workflow_dispatch:
@@ -36,12 +36,12 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Test
-        run: for t in test/*.test.js; do node "$t" > /dev/null || { node "$t"; exit 1; }; done
+        run: for t in dev/test/*.test.js; do node "$t" > /dev/null || { node "$t"; exit 1; }; done
 
       - name: Package the extension for Safari
         id: meta
         run: |
-          node scripts/package.js --target safari
+          node dev/scripts/package.js --target safari
           echo "version=$(node -p 'require("./manifest.json").version')" >> "$GITHUB_OUTPUT"
 
       - name: Generate the Xcode project
@@ -58,10 +58,10 @@ jobs:
           xcodebuild -list -project "$project"
 
       - name: Configure native and adaptive iOS icons
-        run: node scripts/setup-ios-icons.js build
+        run: node dev/scripts/setup-ios-icons.js build
 
       - name: Configure iOS app UI
-        run: node scripts/setup-ios-ui.js build
+        run: node dev/scripts/setup-ios-ui.js build
 
       - name: Build (unsigned)
         run: |
@@ -104,7 +104,7 @@ jobs:
         run: |
           app="$(find build/ipa/Payload -maxdepth 1 -name '*.app' -print -quit)"
           plutil -convert json -o build/app-info.json "$app/Info.plist"
-          node scripts/sidestore-source.js build/app-info.json "${{ steps.ipa.outputs.file }}" "$GITHUB_REPOSITORY" > build/source.json
+          node dev/scripts/sidestore-source.js build/app-info.json "${{ steps.ipa.outputs.file }}" "$GITHUB_REPOSITORY" > build/source.json
 
       - uses: actions/upload-artifact@v4
         with:
