@@ -352,7 +352,9 @@
     if (!el) return;
     const isUrl = /^https?:\/\//i.test(rawInput || "") || /\//.test(rawInput || "");
     if (isUrl && slug && slug !== rawInput.trim()) {
-      el.innerHTML = `Detected slug: <code>${slug}</code>`;
+      const code = document.createElement("code");
+      code.textContent = slug;
+      el.replaceChildren("Detected slug: ", code);
       el.style.display = "block";
     } else {
       el.style.display = "none";

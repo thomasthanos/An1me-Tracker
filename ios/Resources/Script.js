@@ -43,7 +43,7 @@
       // No native bridge: follow the URL ourselves so the page still works.
       if (action.indexOf("open-url:") === 0) {
         var url = action.slice("open-url:".length);
-        if (/^https:\/\//i.test(url)) window.location.href = url;
+        if (url.startsWith("https://")) window.location.href = url;
       }
     }
   }
