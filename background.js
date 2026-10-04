@@ -435,9 +435,18 @@ function clearProgressSyncPending() {
   });
 }
 
+function isFirestoreUrl(url) {
+  if (typeof url !== "string") return false;
+  try {
+    return new URL(url).hostname === "firestore.googleapis.com";
+  } catch {
+    return false;
+  }
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   if (options?.keepalive) return fetch(url, options);
-  const _fsTimed = typeof url === "string" && url.includes("firestore.googleapis.com");
+  const _fsTimed = isFirestoreUrl(url);
   const _fsT0 = _fsTimed ? Date.now() : 0;
   const ctrl = new AbortController();
   let timedOut = false;

@@ -145,7 +145,8 @@ const SeasonGrouping = {
     const totalWatchTimeSeconds = Number(anime.totalWatchTime) || 0;
     const avgMinutes = trackedEpisodes > 0 ? totalWatchTimeSeconds / 60 / trackedEpisodes : 0;
 
-    const hasSeriesSlugHint = /-season-?\d+|-s\d+|-(part|cour)-?\d+|-\d+(st|nd|rd|th)-season|-(ii|iii|iv|v|vi)$/i.test(lowerSlug);
+    const hasSeriesSlugHint =
+      /-season-?\d+|-s\d+|-(part|cour)-?\d+|-\d+(st|nd|rd|th)-season/i.test(lowerSlug) || /-(ii|iii|iv|v|vi)$/i.test(lowerSlug);
     const hasSeriesTitleHint = /\bseason\b|\bpart\b|\bcour\b/i.test(lowerTitle);
 
     if (hasSeriesSlugHint || hasSeriesTitleHint || hasNonMovieHint) {

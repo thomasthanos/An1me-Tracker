@@ -42,7 +42,8 @@
     if (!post(action)) {
       // No native bridge: follow the URL ourselves so the page still works.
       if (action.indexOf("open-url:") === 0) {
-        window.location.href = action.slice("open-url:".length);
+        var url = action.slice("open-url:".length);
+        if (/^https:\/\//i.test(url)) window.location.href = url;
       }
     }
   }

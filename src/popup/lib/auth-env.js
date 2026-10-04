@@ -15,7 +15,7 @@
   // chrome.identity at all) sign in with email/password and receive the AniList login through cloud sync.
   function supportsWebAuthFlow() {
     if (typeof chrome?.identity?.launchWebAuthFlow !== "function") return false;
-    return /^https:\/\/[a-z0-9]+\.chromiumapp\.org/.test(getRedirectUrl());
+    return /^https:\/\/[a-z0-9]+\.chromiumapp\.org(?:\/|$)/.test(getRedirectUrl());
   }
 
   // The user closed or declined the sign-in window — not an error worth reporting.

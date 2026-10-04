@@ -590,9 +590,15 @@
         }
         if (statsEl) {
           const parts = [];
-          if (availableTotal) parts.push(`<span>${availableTotal} eps</span>`);
-          if (status === "RELEASING") parts.push(`<span class="stat-airing">⬤ Airing</span>`);
-          else if (status === "FINISHED") parts.push(`<span class="stat-finished">Finished airing</span>`);
+          const addPart = (className, text) => {
+            const span = document.createElement("span");
+            if (className) span.className = className;
+            span.textContent = text;
+            parts.push(span);
+          };
+          if (availableTotal) addPart("", `${availableTotal} eps`);
+          if (status === "RELEASING") addPart("stat-airing", "⬤ Airing");
+          else if (status === "FINISHED") addPart("stat-finished", "Finished airing");
           const tracked = AT.PopupState.animeData?.[slug];
           const watchedNums =
             tracked && Array.isArray(tracked.episodes)
@@ -602,9 +608,9 @@
                   .sort((a, b) => a - b)
               : [];
           if (watchedNums.length > 0) {
-            parts.push(`<span class="stat-watched">✓ Watched ${AT.EpisodeParse.buildRangeString(watchedNums)}</span>`);
+            addPart("stat-watched", `✓ Watched ${AT.EpisodeParse.buildRangeString(watchedNums)}`);
           }
-          statsEl.innerHTML = parts.join(" · ");
+          statsEl.replaceChildren(...parts.flatMap((part, index) => (index ? [" · ", part] : [part])));
         }
       } else {
         const slugCard = slugMeta.closest(".slug-card");
