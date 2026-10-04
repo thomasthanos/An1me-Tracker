@@ -117,6 +117,59 @@ test("automatic deferred flushes honor backoff but final page exit can explicitl
   assert.equal(w.remote.videoProgress[id].currentTime, 185);
   assert.equal(w.alarms.has("progressSyncRetry"), false, "a successful forced upload cancels old backoff");
 });
+// Local Resume ahead of the cloud copy: a library with the same anime on both sides, so progress is the only difference.
+function aheadOfCloud() {
+  const snapshot = initial(), email = "test@example.com", savedAt = "2026-10-04T11:58:00Z";
+  const cloudEntry = { currentTime: 180, duration: 1440, savedAt, percentage: 12 };
+  snapshot.videoProgress[id] = { ...cloudEntry, currentTime: 300, percentage: 20, savedAt: "2026-10-04T11:59:30Z" };
+  const doc = { email, animeData: snapshot.animeData, videoProgress: { [id]: cloudEntry }, deletedAnime: {}, lastUpdated: savedAt };
+  return { snapshot, doc };
+}
+test("a pull that only finds local Resume ahead leaves the upload to the progress alarm and still delivers it", async () => {
+  const { snapshot, doc } = aheadOfCloud();
+  snapshot._bgCloudDocCachePersisted = { uid: "test-user", doc, cachedAt: epoch - 60000 };
+  const w = cloudWorker(snapshot, doc); await flush();
+  await w.request("WAKE_AND_POLL_CLOUD", { reason: "popup:refresh" }); await flush();
+  assert.equal(w.requests.filter(request => request.method === "PATCH").length, 0, "a poll does not upload the library for a Resume gap");
+  assert.equal(w.store.videoProgress[id].currentTime, 300, "local Resume is untouched");
+  assert.ok(w.store["syncState.pendingProgressFlush"], "the position stays marked as not yet uploaded");
+  assert.ok(w.alarms.get("progressSyncDebounce").scheduledTime <= w.now() + 5 * 60000, "and the progress alarm owns its upload");
+  w.advance(5 * 60000); w.alarms.delete("progressSyncDebounce");
+  await w.call("syncProgressOnly", "alarm:progress", { respectRetry: true }); await flush();
+  assert.equal(w.remote.videoProgress[id].currentTime, 300, "the position reaches the cloud when the alarm fires");
+  assert.equal(w.store["syncState.pendingProgressFlush"], undefined);
+});
+test("a pull that finds the library out of sync with the cloud still runs the full verify-merge sync", async () => {
+  const { snapshot, doc } = aheadOfCloud();
+  snapshot.animeData = { ...snapshot.animeData, extra: { title: "Extra", episodes: [] } };
+  snapshot._bgCloudDocCachePersisted = { uid: "test-user", doc, cachedAt: epoch - 60000 };
+  const w = cloudWorker(snapshot, doc); await flush();
+  await w.request("WAKE_AND_POLL_CLOUD", { reason: "popup:refresh" }); await flush();
+  assert.equal(w.requests.filter(request => request.method === "PATCH").length, 1);
+  assert.ok(w.remote.animeData.extra, "a local library change is never left waiting for an alarm");
+  assert.equal(w.remote.videoProgress[id].currentTime, 300, "the same full sync carries the newest Resume");
+});
+test("a worker restart leaves pending Resume to a future progress alarm, and that alarm still delivers it", async () => {
+  const { snapshot, doc } = aheadOfCloud();
+  snapshot["syncState.pendingProgressFlush"] = epoch - 30000;
+  const w = cloudWorker(snapshot, doc, { alarms: [["progressSyncDebounce", { scheduledTime: epoch + 120000 }]] }); await flush();
+  assert.equal(w.requests.length, 0, "the armed alarm survives the restart, so the boot does not upload again");
+  assert.equal(w.store.videoProgress[id].currentTime, 300);
+  assert.ok(w.store["syncState.pendingProgressFlush"]);
+  w.advance(120000); w.alarms.delete("progressSyncDebounce");
+  await w.call("syncProgressOnly", "alarm:progress", { respectRetry: true }); await flush();
+  assert.equal(w.remote.videoProgress[id].currentTime, 300);
+});
+test("pending Resume with no armed alarm, or only an overdue one, is still recovered immediately on boot", async () => {
+  for (const alarms of [[], [["progressSyncDebounce", { scheduledTime: epoch - 1000 }]]]) {
+    const { snapshot, doc } = aheadOfCloud();
+    snapshot["syncState.pendingProgressFlush"] = epoch - 30000;
+    const w = cloudWorker(snapshot, doc, { alarms }); await flush();
+    assert.equal(w.remote.videoProgress[id].currentTime, 300, "an unowned pending position is never left stranded");
+    assert.equal(w.requests.filter(request => request.method === "PATCH").length, 1);
+    assert.equal(w.store["syncState.pendingProgressFlush"], undefined);
+  }
+});
 (async () => {
   const watchdog = setTimeout(() => { console.error("FAIL worker test timed out"); process.exit(1); }, 10000);
   try { let failures = 0; for (const { name, fn } of cases) { try { await fn(); console.log("PASS " + name); }

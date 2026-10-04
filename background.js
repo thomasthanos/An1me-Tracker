@@ -960,6 +960,8 @@ async function bgMutateFirebaseAuth(request = {}) {
 }
 
 const PROGRESS_SYNC_ALARM = "progressSyncDebounce";
+// Longest an unsynced Resume position waits for the progress alarm while a video plays.
+const PROGRESS_SYNC_DEFAULT_DELAY_MIN = 5;
 
 // Arms the progress-sync alarm no later than `delayInMinutes` from now, and never pushes an armed
 // alarm further out. chrome.alarms.create with an existing name REPLACES the alarm, so calling it on
@@ -2512,9 +2514,9 @@ async function _doApplyCloudUpdate(cloudDoc) {
           Object.prototype.hasOwnProperty.call(cloudAnimeComparable, slug) &&
           areAnimeEntriesEqual(mergedAnime[slug], cloudAnimeComparable[slug]),
       );
-    const cloudMatchesMerged =
+    const progressMatchesCloud = areProgressMapsEqual(mergedProgress, cloudDoc.videoProgress || {});
+    const libraryMatchesCloud =
       animeMatchesCloud &&
-      areProgressMapsEqual(mergedProgress, cloudDoc.videoProgress || {}) &&
       shallowEqualDeletedAnime(mergedDeleted, cloudDoc.deletedAnime || {}) &&
       shallowEqualObjectMap(mergedGroup, cloudGroup) &&
       shallowEqualObjectMap(mergedGoals, cloudGoals) &&
@@ -2549,8 +2551,15 @@ async function _doApplyCloudUpdate(cloudDoc) {
     }
 
     const pending = await bgStorageGet([PENDING_SYNC_KEY, PENDING_PROGRESS_SYNC_KEY]);
-    if (!cloudMatchesMerged || pending[PENDING_SYNC_KEY] || pending[PENDING_PROGRESS_SYNC_KEY]) {
+    if (!libraryMatchesCloud || pending[PENDING_SYNC_KEY]) {
       await syncToFirebase("cloud-pull:verify-merge");
+    } else if (!progressMatchesCloud || pending[PENDING_PROGRESS_SYNC_KEY]) {
+      // While a video plays, the local Resume position is always ahead of the cloud copy. That gap alone
+      // used to run a full sync on every poll (a revalidation read plus a library PATCH, again and again).
+      // The position is already durable locally and owned by the progress alarm, so make sure that alarm
+      // exists instead; it uploads the newest position within PROGRESS_SYNC_DEFAULT_DELAY_MIN.
+      if (!pending[PENDING_PROGRESS_SYNC_KEY]) markProgressSyncPending("cloud-pull:progress-ahead");
+      await armProgressSyncAlarmNoLater(PROGRESS_SYNC_DEFAULT_DELAY_MIN);
     } else {
       await persistCloudSyncStatus("synced", {
         kind: "poll",
@@ -2926,6 +2935,19 @@ async function clearPendingSidecarSyncs() {
   } catch {}
 }
 
+// A progress alarm still waiting for its deadline survives a worker restart and will upload the pending
+// position itself, so the restart does not need an extra push. An overdue or missing alarm proves nothing
+// (Safari can suspend before firing it), which is why only a future deadline counts as owning the push.
+async function progressAlarmOwnsPendingPush() {
+  try {
+    const now = Date.now();
+    const alarms = await Promise.all([chrome.alarms.get(PROGRESS_SYNC_ALARM), chrome.alarms.get(PROGRESS_SYNC_RETRY_ALARM)]);
+    return alarms.some((alarm) => alarm && alarm.scheduledTime > now);
+  } catch {
+    return false;
+  }
+}
+
 async function flushPendingProgressSync() {
   let cleared = false;
   try {
@@ -3037,7 +3059,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
       syncState.progressPending = true;
       void armProgressSyncAlarmNoLater(0.5);
     } else {
-      void armProgressSyncAlarmNoLater(5);
+      void armProgressSyncAlarmNoLater(PROGRESS_SYNC_DEFAULT_DELAY_MIN);
     }
   }
 
@@ -3544,7 +3566,7 @@ const messageHandlers = {
         // before mobile suspends us. Repeated events share one fixed deadline.
         // Request the platform's full 30-second minimum. Asking for the remaining
         // few seconds would be clamped and could postpone the alarm on each pause.
-        await armProgressSyncAlarmNoLater(message.checkpoint === true ? 0.5 : 5);
+        await armProgressSyncAlarmNoLater(message.checkpoint === true ? 0.5 : PROGRESS_SYNC_DEFAULT_DELAY_MIN);
         return { success: false, queued: true, state: "pending", kind: "progress" };
       }
       try {
@@ -4051,8 +4073,12 @@ ensureAuthTokensMigrated();
       dlog("[BG] Recovering stranded full sync from previous SW incarnation");
       await syncToFirebase("recovery:stranded-full");
     } else if (progressPending) {
-      dlog("[BG] Recovering stranded progress sync from previous SW incarnation");
-      await syncProgressOnly("recovery:stranded-progress", { respectRetry: true });
+      if (await progressAlarmOwnsPendingPush()) {
+        dlog("[BG] Pending progress is already owned by an armed alarm; skipping stranded recovery");
+      } else {
+        dlog("[BG] Recovering stranded progress sync from previous SW incarnation");
+        await syncProgressOnly("recovery:stranded-progress", { respectRetry: true });
+      }
     }
     if (sidecarsPending) {
       dlog("[BG] Recovering stranded sidecar sync from previous SW incarnation");
