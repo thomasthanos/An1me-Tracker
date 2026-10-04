@@ -2,7 +2,7 @@
 
 <img src=".github/assets/ios-setting-up.svg" width="1100" alt="An1me.to Tracker on iPhone: the Safari extension switched on in the address bar, delivered and signed through SideStore with a free Apple ID.">
 
-[![Version 8.2.0](.github/assets/badge-v-tracker.svg)](CHANGELOG.md)
+[![Version 8.2.1](.github/assets/badge-v-tracker.svg)](CHANGELOG.md)
 
 **iOS 18+** · **No Mac needed** · **Free Apple ID**
 

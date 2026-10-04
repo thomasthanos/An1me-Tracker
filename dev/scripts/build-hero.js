@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
+const { version } = require('../../manifest.json');
 const b64 = fs.readFileSync(path.join(__dirname, '../../src/icons/icon128.png')).toString('base64');
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="480" viewBox="0 0 1100 480" overflow="hidden" role="img" aria-labelledby="hero-title hero-desc">
@@ -222,7 +223,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="480" v
       <g transform="translate(302, 12)">
         <rect x="0" y="0" width="80" height="25" rx="12.5" fill="#13273c" stroke="#2b4e70" stroke-width="1"/>
         <circle cx="13" cy="12.5" r="3.5" fill="#63e0c7"/>
-        <text x="24" y="17" fill="#a4cbef" font-size="12" font-weight="700" letter-spacing="0.4">v8.2.0</text>
+        <text x="24" y="17" fill="#a4cbef" font-size="12" font-weight="700" letter-spacing="0.4">v${version}</text>
       </g>
     </g>
 
