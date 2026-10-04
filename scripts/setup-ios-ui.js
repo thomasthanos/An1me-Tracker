@@ -7,6 +7,37 @@ const ROOT = path.join(__dirname, "..");
 const IOS_SRC = path.join(ROOT, "ios");
 const ICONS_SRC = path.join(ROOT, "src/icons/ios");
 
+// The extension manifest is the single source of truth for the version. The native app already
+// reads it at runtime (the workflow passes MARKETING_VERSION from the same manifest, and
+// ViewController reads CFBundleShortVersionString). The WebKit fallback resources are stamped
+// here so their copy of the number cannot drift away from it.
+function manifestVersion(root = ROOT) {
+  const version = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8")).version;
+  if (typeof version !== "string" || !version.trim()) {
+    throw new Error("manifest.json has no usable version");
+  }
+  return version;
+}
+
+// Stamps every element marked with data-version, and checks the count so a renamed or removed
+// element fails the build instead of quietly shipping the number that is written in the repo.
+// The attribute must be followed by whitespace or ">": a plain \b would also match the
+// "data-version" prefix of an unrelated attribute such as data-version-anchor.
+function stampVersion(html, version) {
+  if (!html.includes("data-version")) {
+    throw new Error("Main.html has no data-version element to stamp");
+  }
+  let stamped = 0;
+  const out = html.replace(/(<[a-z][\w-]*\b[^>]*\sdata-version(?=[\s>])[^>]*>)([\s\S]*?)(<\/[a-z][\w-]*>)/gi, (_m, open, _body, close) => {
+    stamped++;
+    return `${open}${version}${close}`;
+  });
+  if (stamped === 0) {
+    throw new Error("Main.html has a data-version attribute but no element content to replace");
+  }
+  return { html: out, stamped };
+}
+
 function findFilesByName(dir, targetName) {
   const results = [];
   if (!fs.existsSync(dir)) return results;
@@ -92,9 +123,12 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
   const htmlFiles = findFilesByName(buildDir, "Main.html");
   const srcHtml = path.join(IOS_SRC, "Resources/Base.lproj/Main.html");
   if (fs.existsSync(srcHtml)) {
+    // Stamp the manifest version into the fallback page rather than trusting a hand-written number.
+    const version = manifestVersion();
+    const { html, stamped } = stampVersion(fs.readFileSync(srcHtml, "utf8"), version);
     for (const dest of htmlFiles) {
-      fs.copyFileSync(srcHtml, dest);
-      console.log(`[setup-ios-ui] Updated Main.html at: ${dest}`);
+      fs.writeFileSync(dest, html);
+      console.log(`[setup-ios-ui] Updated Main.html at: ${dest} (v${version} in ${stamped} place${stamped === 1 ? "" : "s"})`);
       htmlFilesCount++;
     }
   }
@@ -141,4 +175,4 @@ if (require.main === module) {
   setupUI(buildDir);
 }
 
-module.exports = { setupUI, findFilesByName, findAssetCatalogs };
+module.exports = { setupUI, findFilesByName, findAssetCatalogs, manifestVersion, stampVersion };

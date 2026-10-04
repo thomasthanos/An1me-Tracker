@@ -47,10 +47,19 @@ test("setupUI injects SwiftUI ViewController, AppLogo imageset, and web resource
     assert.ok(fs.existsSync(path.join(logoDir, "Contents.json")));
     assert.ok(fs.existsSync(path.join(logoDir, "AppLogo.png")));
 
-    // Verify Main.html was replaced
+    // Verify Main.html was replaced, and that its controls kept the contract the native
+    // bridge relies on: Script.js forwards data-action values to the `controller` handler,
+    // so these attribute values are the interface, not styling details.
     const html = fs.readFileSync(path.join(resDir, "Main.html"), "utf8");
     assert.match(html, /An1me Tracker/);
-    assert.match(html, /openSettingsBtn/);
+    assert.doesNotMatch(html, /dummy/);
+    assert.match(html, /data-action="open-settings"/);
+    assert.match(html, /data-action="open-url:https:\/\/an1me\.to"/);
+    assert.match(html, /data-action="open-url:https:\/\/github\.com\/thomasthanos\/an1me-extensions"/);
+
+    // The version badge is stamped from manifest.json, replacing the template placeholder.
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../manifest.json"), "utf8"));
+    assert.match(html, new RegExp(`\\sdata-version(?=[\\s>])[^>]*>${manifest.version.replace(/\./g, "\\.")}<`));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
