@@ -35,7 +35,7 @@ versions. In short, from a Windows PC:
 1. In SideStore, open **Sources → +** and paste this source URL:
 
    ```text
-   https://github.com/thomasthanos/an1me-extensions/releases/download/tracker-source/source.json
+   https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-source/source.json
    ```
 
 2. Confirm the source, open **An1me.to Tracker** and tap **Install**. Keep LocalDevVPN connected while
@@ -44,7 +44,7 @@ versions. In short, from a Windows PC:
 
 > [!IMPORTANT]
 > That URL returns JSON for **Add Source**. To install the IPA by hand instead, download
-> `An1meTracker-<version>.ipa` from the [releases page](https://github.com/thomasthanos/an1me-extensions/releases)
+> `An1meTracker-<version>.ipa` from the [releases page](https://github.com/thomasthanos/An1me-Tracker/releases)
 > and use **My Apps → +**. An IPA download URL cannot be added as a Source.
 
 ## <img src=".github/assets/icon-sparkle.svg" width="24" height="29" alt="" align="top"> 3. Turn the extension on

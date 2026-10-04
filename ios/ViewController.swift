@@ -677,7 +677,7 @@ struct An1meTrackerAppView: View {
                 title: "GitHub Repository"
             ) {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                if let url = URL(string: "https://github.com/thomasthanos/an1me-extensions") {
+                if let url = URL(string: "https://github.com/thomasthanos/An1me-Tracker") {
                     UIApplication.shared.open(url, options: [:], completionHandler: nil)
                 }
             }

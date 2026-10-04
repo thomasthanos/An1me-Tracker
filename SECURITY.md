@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report suspected vulnerabilities privately through
-[GitHub's Report a vulnerability form](https://github.com/thomasthanos/an1me-extensions/security/advisories/new).
+[GitHub's Report a vulnerability form](https://github.com/thomasthanos/An1me-Tracker/security/advisories/new).
 The repository maintainer is [ThomasThanos](https://github.com/thomasthanos).
 
 Include the affected version/build, browser or iOS version, reproduction steps, expected versus
@@ -12,14 +12,14 @@ Redact passwords, access/refresh tokens, private keys and other people's library
 
 Keep sensitive reproduction details out of public issues while the report is investigated.
 Ordinary playback, layout and metadata bugs can be reported in
-[Issues](https://github.com/thomasthanos/an1me-extensions/issues).
+[Issues](https://github.com/thomasthanos/An1me-Tracker/issues).
 
 ## Supported versions
 
 Security fixes target the latest official stable tracker release and the current `main` branch.
 Update to the latest desktop package or SideStore build before testing a suspected issue.
 Older releases and the retired standalone Speed Control extension do not receive separate fixes.
-The available tracker builds are listed in [Releases](https://github.com/thomasthanos/an1me-extensions/releases).
+The available tracker builds are listed in [Releases](https://github.com/thomasthanos/An1me-Tracker/releases).
 
 ## System and scope
 
@@ -28,7 +28,7 @@ host app. It stores watch progress and library data locally, with optional Fireb
 sync and desktop AniList integration.
 
 This policy covers the extension entry points (`manifest.json`, `background.js`, `popup.html`),
-`src/`, native resources in `ios/`, packaging/source generators in `scripts/`, and the GitHub
+`src/`, native resources in `ios/`, packaging/source generators in `dev/scripts/`, and the GitHub
 workflows that build and publish desktop/Safari resources, IPAs and SideStore metadata.
 Credentials, private library data, playback positions, account identity and release integrity are
 the principal assets.

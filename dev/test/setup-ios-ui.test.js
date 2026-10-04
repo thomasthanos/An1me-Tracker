@@ -55,7 +55,7 @@ test("setupUI injects SwiftUI ViewController, AppLogo imageset, and web resource
     assert.doesNotMatch(html, /dummy/);
     assert.match(html, /data-action="open-settings"/);
     assert.match(html, /data-action="open-url:https:\/\/an1me\.to"/);
-    assert.match(html, /data-action="open-url:https:\/\/github\.com\/thomasthanos\/an1me-extensions"/);
+    assert.match(html, /data-action="open-url:https:\/\/github\.com\/thomasthanos\/An1me-Tracker"/);
 
     // The version badge is stamped from manifest.json, replacing the template placeholder.
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../../manifest.json"), "utf8"));

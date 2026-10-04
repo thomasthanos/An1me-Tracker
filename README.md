@@ -78,7 +78,7 @@
 
 ### 💻 Desktop (Chrome / Edge / Brave)
 
-1. [**Download the repo archive**](https://github.com/thomasthanos/an1me-extensions/archive/refs/heads/main.zip) and unzip it into a permanent folder.
+1. [**Download the repo archive**](https://github.com/thomasthanos/An1me-Tracker/archive/refs/heads/main.zip) and unzip it into a permanent folder.
 2. Go to `chrome://extensions` or `edge://extensions` and enable **Developer mode** (top-right toggle).
 3. Click **Load unpacked** and select the folder containing `manifest.json`.
 4. Pin the extension icon and open [an1me.to](https://an1me.to) to begin tracking!
@@ -94,11 +94,11 @@
 Add the official source in **SideStore → Sources → +**:
 
 ```text
-https://github.com/thomasthanos/an1me-extensions/releases/download/tracker-source/source.json
+https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-source/source.json
 ```
 
 Or download the prebuilt IPA directly:  
-[**Download An1meTracker-8.2.1.ipa**](https://github.com/thomasthanos/an1me-extensions/releases/download/tracker-v8.2.1/An1meTracker-8.2.1.ipa)
+[**Download An1meTracker-8.2.1.ipa**](https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-v8.2.1/An1meTracker-8.2.1.ipa)
 
 For step-by-step instructions with screenshots, read the **[iPhone Setup Guide (IOS.md)](IOS.md)**.
 
