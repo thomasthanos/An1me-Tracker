@@ -82,10 +82,21 @@ function importScriptsReferences(jsPath) {
 function zipPackage(version) {
   const zipPath = path.join(DIST, `${NAME}-${version}.zip`);
   fs.rmSync(zipPath, { force: true });
+  const entries = fs.readdirSync(OUT);
   if (process.platform === "win32") {
-    execFileSync("powershell", ["-NoProfile", "-Command", `Compress-Archive -Path '${OUT}\\*' -DestinationPath '${zipPath}'`]);
+    try {
+      execFileSync("tar", ["-a", "-c", "-f", zipPath, ...entries], { cwd: OUT });
+    } catch {
+      const escapedOut = OUT.replace(/'/g, "''");
+      const escapedZip = zipPath.replace(/'/g, "''");
+      execFileSync("powershell", [
+        "-NoProfile",
+        "-Command",
+        `Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('${escapedOut}', '${escapedZip}')`
+      ]);
+    }
   } else {
-    execFileSync("zip", ["-qr", zipPath, "."], { cwd: OUT });
+    execFileSync("zip", ["-qr", zipPath, ...entries], { cwd: OUT });
   }
   return zipPath;
 }
