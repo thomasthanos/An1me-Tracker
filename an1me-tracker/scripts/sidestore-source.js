@@ -26,15 +26,16 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
     "Keep your an1me.to library and watch progress together in Safari.\n\n" +
     "• Track episodes and playback timestamps automatically.\n" +
     "• Resume watching where you left off.\n" +
+    "• Choose playback speed or hold the player button for temporary 2×.\n" +
     "• Organise your library, view covers and mark filler episodes.\n\n" +
     "Works locally without an account. Sign in to sync your library and watch progress between iPhone and desktop.\n\n" +
     "AniList updates run in the desktop extension; mobile watch progress syncs through the tracker cloud.";
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Faster final watch-progress checkpoints and fresh Resume positions across devices.\n" +
-    "• Consistent SideStore source and app icons using the native light artwork.\n" +
-    "• Clearer calendar and airing countdown SVGs in the library.\n" +
+    "• Integrated Speed Control: 1×, 1.25×, 1.5× and 2× on iPhone, with hold for temporary 2×.\n" +
+    "• Local speed settings, no added polling or requests; phone audio remains controlled by iOS.\n" +
+    "• Verified media timestamps for Resume, completion and phone-to-PC sync at faster rates.\n" +
     "• Existing watch progress, library data and native icon appearances are retained.";
 
   return {

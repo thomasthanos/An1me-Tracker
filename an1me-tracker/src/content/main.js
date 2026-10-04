@@ -816,6 +816,7 @@
     clearTimeout(navigationDebounceTimeout);
     navigationDebounceTimeout = null;
     handleTimeUpdateSettled.cancel();
+    AT.SpeedControl?.stop();
     AT.PlayerObserver.stop();
     AT.VideoMonitor.cleanupPage();
     AT.VideoMonitor.cleanup();
@@ -1092,6 +1093,7 @@
     }
 
     VideoMonitor.startWatching(animeInfo, eventHandlers);
+    AT.SpeedControl?.start();
     AT.SkiptimeHelper?.mount();
 
     try {

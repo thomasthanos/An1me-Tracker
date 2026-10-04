@@ -2,7 +2,7 @@
 
 <img src=".github/assets/banner-tracker.svg" alt="An1me.to Tracker">
 
-[![Version 8.1.1](.github/assets/badge-v-tracker.svg)](manifest.json)
+[![Version 8.2.0](.github/assets/badge-v-tracker.svg)](manifest.json)
 [![Manifest V3](.github/assets/badge-manifest.svg)](manifest.json)
 [![Cloud sync optional](.github/assets/badge-cloud-sync.svg)](PRIVACY.md)
 <br>
@@ -40,6 +40,9 @@ each other. If you don't sign in, it still works — everything just stays local
 - **Episode highlighting** — watched episodes are visually marked on the series page.
 - **Skip outro** button, with timings pulled from <a href="https://aniskip.com/"><img src=".github/assets/tag-aniskip.svg" alt="AniSkip" align="middle"></a>.
 - **Movies and multi-part series** handled separately from ordinary episodes.
+- **Integrated Speed Control** — hold F7 or toggle F8 on PC; tap the player speed button on iPhone,
+  or hold it for temporary 2×. Configure normal speed and boost in **Settings → Speed Control**.
+  Preferences stay on this device and temporary boosts never become the saved normal speed.
 - **Never opens a tab to do its work** — metadata is fetched straight from the background worker.
   If an1me.to ever answers with a challenge, the tracker borrows a tab you already have open
   instead of creating one, and otherwise waits for the next attempt.
@@ -89,6 +92,13 @@ each other. If you don't sign in, it still works — everything just stays local
 Optional, but recommended: click the extension → **Sign in** to turn on cloud sync.
 
 **iPhone (Safari):** install the `.ipa` from the [releases](https://github.com/thomasthanos/an1me-extensions/releases) with SideStore — see [IOS.md](IOS.md).
+
+**Moving from An1me.to Speed Control:** disable the separate `an1me-speed-control` extension when
+using the tracker's integrated controls so only one extension changes playback speed. The separate
+extension remains available. Its preferences are separate; choose your normal speed and boost in
+the tracker. Until you choose a normal speed, the tracker keeps the player's own speed. PC boost
+choices are 1.5×, 2×, 3×, 4× (default) and 8×. PC volume and mute changes are remembered locally;
+iPhone audio stays under system control.
 
 <img src=".github/assets/divider.svg" width="100%" alt="">
 

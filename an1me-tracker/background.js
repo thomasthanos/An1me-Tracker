@@ -4,6 +4,7 @@
 importScripts(
   "src/common/utils.js",
   "src/common/data/library-keys.js",
+  "src/common/data/speed-preferences.js",
   "src/common/logger.js",
   "src/common/cloud.js",
   "src/common/data/cache-policy.js",
@@ -3388,7 +3389,30 @@ async function persistBeforeUnloadProgress(message) {
   });
 }
 
+// Playback preferences are local and have their own serial writer. Never advance
+// the library revision or enqueue cloud sync for a speed/volume change.
+let speedPreferenceWrite = Promise.resolve();
+function updateSpeedControlPreferences(message) {
+  const update = async () => {
+    const model = self.AnimeTrackerSpeedPreferences;
+    const stored = await bgStorageGet([model.KEY]);
+    const next = model.patch(stored[model.KEY], message.patch, message.mobile === true);
+    if (JSON.stringify(stored[model.KEY]) !== JSON.stringify(next)) {
+      await bgStorageSetRaw({ [model.KEY]: next });
+    }
+    return { success: true, preferences: next };
+  };
+  const result = speedPreferenceWrite.then(update, update);
+  speedPreferenceWrite = result.catch(() => {});
+  return result;
+}
+
 const messageHandlers = {
+  UPDATE_SPEED_CONTROL_PREFERENCES(message, _sender, sendResponse) {
+    updateSpeedControlPreferences(message).then(sendResponse)
+      .catch(error => sendResponse({ success: false, error: error?.message || String(error) }));
+    return true;
+  },
   LIBRARY_ENSURE_LEGACY_MIGRATION(_message, _sender, sendResponse) {
     ensureBgLegacySyncMigration()
       .then(() => sendResponse({ success: true }))

@@ -7,6 +7,31 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [8.2.0] — 2026-10-04
+
+### Added
+
+- Integrate Speed Control with the existing PlayerObserver. PC supports F7 hold and F8 toggle,
+  repeat-safe keys and boost choices 1.5×, 2×, 3×, 4× (default) and 8×. Combining F7/F8 retains the
+  toggle after F7 is released. Temporary holds cancel on blur, interrupted gestures or page hiding.
+- Add a 44px SVG speed button to the site player, with a wrapper fallback when controls are absent.
+  iPhone offers 1×, 1.25×, 1.5× and 2×; holding applies temporary 2× and release restores normal speed.
+  Safari native fullscreen and system volume remain under Safari/iOS control.
+- Add device-local Speed Control settings and serialized preference patches. Remember chosen normal
+  speed and desktop volume/mute, without enforcing a default normal speed, storing a boost as normal,
+  echoing programmatic changes or changing library/cloud data. Unsupported rates show feedback and
+  the actual rate. Disable removes player UI, listeners and observation; navigation/server changes
+  restore temporary boosts and clean the old player. No new permanent polling or network requests.
+- Add normal/boost, pointer cancellation, storage race, audio, server rebind and cleanup tests, plus
+  regression coverage at 1.25×/1.5×/2× for Resume, completion and phone-to-PC sync. Preserve actual
+  media timestamps, existing watch history, metadata caches and native icon appearances.
+
+### Migration
+
+- The separate speed extension stays available. Disable it when using the integrated feature.
+- Install the update over the existing app. Physical iPhone audio, native fullscreen and temperature
+  checks are separate from the automated suite and have not been verified on a device.
+
 ## [8.1.1] — 2026-10-04
 
 ### Fixed

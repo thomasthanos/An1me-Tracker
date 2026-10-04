@@ -15,6 +15,7 @@ const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
 const SHARED = {
   AnimeTrackerUtils: "src/common/utils.js",
   AnimeTrackerLibraryKeys: "src/common/data/library-keys.js",
+  AnimeTrackerSpeedPreferences: "src/common/data/speed-preferences.js",
   "AnimeTracker.AuthEnv": "src/popup/lib/auth-env.js",
   "AT.AuthEnv": "src/popup/lib/auth-env.js",
   "AT.SETTING_KEYS": "src/popup/lib/config.js",

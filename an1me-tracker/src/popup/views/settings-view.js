@@ -26,6 +26,7 @@
     },
     settingsAutoResume: { on: "Resume playback without asking", off: "Ask before resuming where you left off" },
     settingsAdGuard: { on: "Block pop-up ads on an1me.to", off: "Pop-up ads are allowed" },
+    settingsSpeedControl: { on: "Remember speed and hold-to-boost choices", off: "Speed control is turned off" },
   });
 
   function toggleSubtitle(id, enabled) {
@@ -67,6 +68,7 @@
     database:
       '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
     chevron: '<polyline points="9 18 15 12 9 6"/>',
+    speed: '<path d="M4 19a9 9 0 1 1 16 0"/><path d="m12 13 5-5"/><circle cx="12" cy="13" r="1.5"/><path d="M5 13h1M18 13h1M12 4v1"/>',
   };
 
   function sectionHead(iconKey, title, pill = "") {
@@ -222,6 +224,132 @@
         `;
   }
 
+  let speedPreferences = null;
+  let speedBusy = false;
+  let speedInitialized = false;
+  let speedRevision = 0;
+  const speedIsMobile = () => !!globalThis.AnimeTrackerUtils?.isMobileDevice?.();
+
+  function speedAudioText(preferences) {
+    const parts = [];
+    if (preferences.defaultVolume !== null) parts.push(`Volume ${Math.round(preferences.defaultVolume * 100)}%`);
+    if (preferences.defaultMuted !== null) parts.push(preferences.defaultMuted ? "Muted" : "Sound on");
+    return parts.length ? `Remembered audio: ${parts.join(", ")}` : "Player audio is used until you change volume or mute.";
+  }
+
+  function renderSpeedControlSection() {
+    const model = globalThis.AnimeTrackerSpeedPreferences;
+    if (!model) return "";
+    const mobile = speedIsMobile();
+    const preferences = model.normalize(speedPreferences, mobile);
+    const normalOptions = (mobile ? model.MOBILE_RATES : model.NORMAL_RATES)
+      .map(rate => `<option value="${rate}">${rate}×</option>`).join("");
+    const boostOptions = model.BOOST_RATES.map(rate => `<option value="${rate}">${rate}×</option>`).join("");
+    return `<section class="settings-card settings-speed-card" id="settingsSpeedSection">
+      ${sectionHead("speed", "Speed Control")}
+      ${renderToggleItem({ id: "settingsSpeedControl", subtitleId: "settingsSpeedControlSubtitle", iconKey: "speed",
+        title: "Speed control", subtitle: toggleSubtitle("settingsSpeedControl", preferences.enabled), enabled: preferences.enabled })}
+      <div class="settings-speed-fields">
+        <label class="settings-speed-field" for="settingsNormalSpeed"><span>Normal speed</span>
+          <select id="settingsNormalSpeed" aria-describedby="settingsSpeedHint"><option value="">Player default</option>${normalOptions}</select>
+        </label>
+        ${mobile ? "" : `<label class="settings-speed-field" for="settingsBoostSpeed"><span>Hold boost</span>
+          <select id="settingsBoostSpeed" aria-describedby="settingsSpeedHint">${boostOptions}</select></label>`}
+      </div>
+      <p class="settings-speed-hint" id="settingsSpeedHint">${mobile
+        ? "Press and hold the speed control for 2×; release to return. In native fullscreen, use the player’s own controls."
+        : "Hold F7 for a temporary boost; release to return. F8 toggles boost. Tap the speed control to choose normal speed."}</p>
+      ${mobile ? "" : `<div class="settings-speed-audio"><span id="settingsSpeedAudioInfo">${escapeHtml(speedAudioText(preferences))}</span>
+        <button class="settings-speed-reset" id="settingsSpeedAudioReset" type="button">Reset audio default</button></div>`}
+    </section>`;
+  }
+
+  function updateSpeedControl() {
+    const model = globalThis.AnimeTrackerSpeedPreferences;
+    const section = document.getElementById("settingsSpeedSection");
+    if (!model || !section) return;
+    const preferences = model.normalize(speedPreferences, speedIsMobile());
+    section.setAttribute("aria-busy", String(speedBusy));
+    updateToggle("settingsSpeedControl", preferences.enabled, toggleSubtitle("settingsSpeedControl", preferences.enabled));
+    const toggle = document.getElementById("settingsSpeedControl");
+    if (toggle) toggle.disabled = speedBusy;
+    const normal = document.getElementById("settingsNormalSpeed");
+    if (normal) { normal.value = preferences.normalRate === null ? "" : String(preferences.normalRate); normal.disabled = speedBusy || !preferences.enabled; }
+    const boost = document.getElementById("settingsBoostSpeed");
+    if (boost) { boost.value = String(preferences.boostRate); boost.disabled = speedBusy || !preferences.enabled; }
+    const audio = document.getElementById("settingsSpeedAudioInfo");
+    if (audio) audio.textContent = speedAudioText(preferences);
+    const reset = document.getElementById("settingsSpeedAudioReset");
+    if (reset) reset.disabled = speedBusy || !preferences.enabled || (preferences.defaultVolume === null && preferences.defaultMuted === null);
+  }
+
+  async function loadSpeedControlPreferences() {
+    const model = globalThis.AnimeTrackerSpeedPreferences;
+    const revision = speedRevision;
+    try {
+      const stored = await chrome.storage.local.get([model.KEY]);
+      if (revision === speedRevision) speedPreferences = model.normalize(stored[model.KEY], speedIsMobile());
+    } catch (error) {
+      window.PopupLogger?.warn?.("Settings", "Could not load speed preferences:", error);
+    }
+    updateSpeedControl();
+  }
+
+  async function saveSpeedControlPatch(delta) {
+    if (speedBusy) return;
+    const model = globalThis.AnimeTrackerSpeedPreferences;
+    const mobile = speedIsMobile();
+    speedBusy = true;
+    updateSpeedControl();
+    const revision = speedRevision;
+    try {
+      model.patch(speedPreferences, delta, mobile);
+      const response = await window.AnimeTracker.sendRuntimeRequest(
+        { type: "UPDATE_SPEED_CONTROL_PREFERENCES", patch: delta, mobile }, { timeoutMs: 10000 });
+      if (response?.success !== true || !response.preferences) throw new Error(response?.error || "Speed preferences were not saved");
+      // Storage events may already contain a newer edit from another popup or the player.
+      if (revision === speedRevision) speedPreferences = model.normalize(response.preferences, mobile);
+    } catch (error) {
+      await loadSpeedControlPreferences();
+      window.AnimeTracker.UIHelpers?.showToast?.("Could not save speed preference", { type: "error", duration: 2200 });
+      window.PopupLogger?.warn?.("Settings", "Speed preference update failed:", error);
+    } finally {
+      speedBusy = false;
+      updateSpeedControl();
+    }
+  }
+
+  async function initializeSpeedControl() {
+    const model = globalThis.AnimeTrackerSpeedPreferences;
+    if (!model || speedInitialized) return;
+    speedInitialized = true;
+    document.addEventListener("click", event => {
+      const toggle = event.target.closest?.("#settingsSpeedControl");
+      const reset = event.target.closest?.("#settingsSpeedAudioReset");
+      const control = toggle || reset;
+      if (!control || control.disabled || speedBusy) return;
+      event.stopPropagation();
+      const preferences = model.normalize(speedPreferences, speedIsMobile());
+      void saveSpeedControlPatch(toggle ? { enabled: !preferences.enabled } : { defaultVolume: null, defaultMuted: null });
+    });
+    document.addEventListener("change", event => {
+      const control = event.target;
+      if (control.disabled || speedBusy) return;
+      if (control.id === "settingsNormalSpeed") {
+        void saveSpeedControlPatch({ normalRate: control.value === "" ? null : Number(control.value) });
+      } else if (control.id === "settingsBoostSpeed" && !speedIsMobile()) {
+        void saveSpeedControlPatch({ boostRate: Number(control.value) });
+      }
+    });
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      if (namespace !== "local" || !changes[model.KEY]) return;
+      speedRevision++;
+      speedPreferences = model.normalize(changes[model.KEY].newValue, speedIsMobile());
+      updateSpeedControl();
+    });
+    await loadSpeedControlPreferences();
+  }
+
   function renderDataSection() {
     return `
             <section class="settings-card settings-data-card">
@@ -344,12 +472,14 @@
                 <div class="settings-view-inner">
                     ${renderHeader(user, needsReauth)}
                     ${renderPreferencesSection(state)}
+                    ${renderSpeedControlSection()}
                     ${renderConnectionsSection()}
                     ${renderDataSection()}
                     ${renderDangerCard(user, passwordIsSet, isMobileEffective)}
                     ${renderAboutCard()}
                 </div>
             `;
+      updateSpeedControl();
       return;
     }
 
@@ -446,6 +576,7 @@
       state.adGuard,
       toggleSubtitle("settingsAdGuard", state.adGuard),
     );
+    updateSpeedControl();
   }
 
   function _ensureSettingsLiveRegion() {
@@ -494,7 +625,7 @@
   }
 
   window.AnimeTracker = window.AnimeTracker || {};
-  window.AnimeTracker.SettingsView = { render, updateToggle, toggleSubtitle };
+  window.AnimeTracker.SettingsView = { render, updateToggle, toggleSubtitle, initializeSpeedControl };
 
   const initialContainer = document.getElementById("settingsView");
   if (initialContainer) {

@@ -17,6 +17,7 @@ const VideoMonitor = {
   rebindAfterServerSwitch() {
     const { Logger, PlayerObserver } = window.AnimeTrackerContent;
     Logger.debug("VideoMonitor: rebinding after server switch");
+    window.AnimeTrackerContent.SpeedControl?.resetForServerSwitch();
     this.cleanup();
     PlayerObserver.rescan();
   },

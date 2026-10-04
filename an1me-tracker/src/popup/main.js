@@ -2512,6 +2512,7 @@
 
     FillerFetchUI.init();
     AT.AiringCountdown.start();
+    await AT.SettingsView.initializeSpeedControl();
 
     // Popup instances are ephemeral, but the background repair state is durable.
     // Restore any modal-eligible active import before auth/cloud initialization so a

@@ -58,6 +58,29 @@ Google and AniList sign-in need Chrome's identity API, which Safari does not hav
 
 New-episode alerts are not available on iPhone: Safari extensions cannot show notifications.
 
+## Speed Control (8.2.0)
+
+On the page player, tap the speed button to choose **1×, 1.25×, 1.5× or 2×**. Hold it for temporary
+**2×**; releasing, cancelling the gesture or leaving the page restores your previous speed. The
+button uses the player's ArtPlayer/Plyr controls, with a small wrapper overlay as a fallback. It
+works on the video the tracker can access, including same-origin frames; inaccessible embedded
+players cannot be controlled without additional permissions.
+
+Use **Tracker → Settings → Speed Control** to disable the feature or choose a remembered normal
+speed. Initially the player keeps its own normal speed. These preferences stay local and do not
+sync with the library. Disabling the feature removes its player listeners, button and observation.
+The controls add no network requests or permanent polling and do not change how progress is saved.
+
+The button belongs to the page player. Safari's native fullscreen keeps its own controls; choose a
+speed before opening fullscreen or use Safari's available native controls. Volume and mute remain
+under iPhone system control. The tracker does not replace Safari's player.
+[Apple's Safari video documentation](https://developer.apple.com/documentation/webkit/delivering-video-content-for-safari)
+
+Disable the separate **An1me.to Speed Control** extension if installed, so it does not compete with
+the integrated feature. Update over your existing tracker installation to keep progress and caches.
+Automated tests cover speed/gesture state, preference writes and Resume/cloud timestamps. Audio,
+native fullscreen behaviour and device temperature still need a check on a physical iPhone.
+
 ## Updating and staying signed
 
 - SideStore re-signs the app every 7 days by itself while LocalDevVPN and Wi-Fi are on. If you go more
