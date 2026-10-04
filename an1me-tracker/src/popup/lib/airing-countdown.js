@@ -55,24 +55,31 @@
       return 0;
     }
     const now = Date.now();
+    let visibleCount = 0;
     for (const node of nodes) {
+      if (node.closest?.("[hidden]")) continue;
+      if (node.isConnected === false || (node.getClientRects && node.getClientRects().length === 0)) continue;
+      if (window.getComputedStyle?.(node).visibility === "hidden") continue;
       const label = format(node.dataset.nextAiringAt, now);
       if (!label.text) continue;
+      visibleCount++;
       if (node.textContent !== label.text) node.textContent = label.text;
       node.classList.toggle("meta-time-eta-overdue", label.overdue);
     }
-    return nodes.length;
+    if (_enabled && !document.hidden && visibleCount > 0) {
+      if (!_timer) _timer = setInterval(refresh, TICK_MS);
+    } else {
+      pause();
+    }
+    return visibleCount;
   }
 
   function start() {
     _enabled = true;
-    if (_timer || document.hidden) return;
-    // Nothing to tick until a list with countdowns is rendered; the interval is cheap enough that
-    // checking on a 30s cadence costs less than wiring render hooks through every view.
-    _timer = setInterval(() => {
-      if (document.hidden) return;
-      refresh();
-    }, TICK_MS);
+    if (document.hidden) return;
+    // The list render hook calls refresh when schedules appear or disappear, so an empty library
+    // and hidden views do not need a permanent interval to wait for the next render.
+    refresh();
   }
 
   function stop() {

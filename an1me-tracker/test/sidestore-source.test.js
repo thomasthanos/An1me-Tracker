@@ -40,9 +40,9 @@ test("source describes the built app and its release download", () => {
 
   const versionReleaseNotes =
     "v9.3.1 (Build 77):\n" +
-    "• Disabled AniList on mobile, including manual sync, import, retries and API requests, to save battery.\n" +
-    "• Removed mobile AniList sync controls and status timers; desktop AniList stays available.\n" +
-    "• Preserved account credentials, cached metadata and tracker cloud progress sync.";
+    "• Reduced library work with viewport cover loading, bounded transfers and unchanged-card reuse.\n" +
+    "• Preserved interrupted fetch queues, usable caches and watched/playback progress across updates.\n" +
+    "• Fixed metadata timeout handling and returning countdowns; mobile AniList and automatic 4K stay disabled.";
 
   assert.deepEqual(source.apps[0], {
     name: "Example Tracker",

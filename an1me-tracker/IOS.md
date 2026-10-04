@@ -73,10 +73,14 @@ New-episode alerts are not available on iPhone: Safari extensions cannot show no
 
 ## Troubleshooting
 
-- **The phone warms up when opening a large library** — update to 7.5.3 or later. Collapsed status
-  lists load their cards when opened, and hidden popup updates wait until visible. Automatic 4K
-  selection defaults off on mobile; check **Settings → Playback & Tracking** if you enabled it before.
+- **The phone warms up when opening a large library** — update to 8.0.3 or later. Covers load near
+  the viewport through a bounded queue, unchanged cards stay mounted during fetch, and overflow
+  episode tags load when you open their more control. Hidden popup work pauses. AniList and
+  automatic 4K selection are disabled on mobile, including older enabled preferences.
   These changes reduce unnecessary work; temperature still needs checking on the device.
+- **Fetch was interrupted by an update or a metadata service timeout** — the saved queue resumes
+  automatically. Usable metadata and filler caches remain available, while failed lookups wait
+  for retry. Updates preserve watched episodes and playback positions; do not uninstall to update.
 
 - **The extension is missing in Safari settings** — open the An1me Tracker app once, then check again.
 - **"Unable to verify app" / the app will not open** — open SideStore and refresh it, with LocalDevVPN on.

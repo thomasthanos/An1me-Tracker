@@ -152,6 +152,10 @@
       if (settingsView) settingsView.removeAttribute("hidden");
       renderSettingsView();
     }
+    // View switches can hide the library without rendering it. Reconcile schedule timers
+    // immediately, and wake deferred covers when the same library becomes visible again.
+    AT.AiringCountdown?.refresh?.();
+    if (!mode && elements.animeList) AT.LibraryCoverLoader?.observe(elements.animeList);
   }
 
   async function renderSettingsView() {

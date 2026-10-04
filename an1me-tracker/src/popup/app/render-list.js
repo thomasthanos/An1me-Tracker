@@ -13,6 +13,10 @@
   let lastCompactStatus = null;
   let lastCompactOpen = false;
   const compactExpansionStates = new Map();
+  // Store renderer output separately from live DOM: expansion, countdowns, lazy covers, and
+  // hydrated episode lists can change a card without changing its underlying rendered data.
+  const renderedNodeMarkup = new WeakMap();
+  const LIST_UNITS = ".anime-card, .anime-season-group, .anime-movie-group, .season-item, .movie-item, .ip-card";
 
   const COMPACT_TOGGLE_CHEVRONS = [
     ["airingListToggle", "airing-chevron"],
@@ -46,22 +50,35 @@
   function restoreExpansionState(listEl, state) {
     listEl.querySelectorAll(".anime-card").forEach((card) => {
       const slug = card.querySelector(".anime-delete")?.dataset?.slug;
-      if (slug && state.expandedCards.has(slug)) card.classList.add("expanded");
+      if (slug && state.expandedCards.has(slug)) {
+        card.classList.add("expanded");
+        card.setAttribute("aria-expanded", "true");
+      }
     });
     listEl.querySelectorAll(".anime-season-group").forEach((g) => {
-      if (g.dataset.baseSlug && state.expandedSeasonGroups.has(g.dataset.baseSlug)) g.classList.add("expanded");
+      if (g.dataset.baseSlug && state.expandedSeasonGroups.has(g.dataset.baseSlug)) {
+        g.classList.add("expanded");
+        setHeaderExpanded(g.querySelector(".season-group-header"), true);
+      }
     });
     listEl.querySelectorAll(".season-item:not(.season-item-movie)").forEach((item) => {
-      if (item.dataset.slug && state.expandedSeasonItems.has(item.dataset.slug)) item.classList.add("expanded");
+      if (item.dataset.slug && state.expandedSeasonItems.has(item.dataset.slug)) {
+        item.classList.add("expanded");
+        setHeaderExpanded(item.querySelector(".season-item-header"), true);
+      }
     });
     listEl.querySelectorAll(".anime-movie-group").forEach((g) => {
-      if (g.dataset.baseSlug && state.expandedMovieGroups.has(g.dataset.baseSlug)) g.classList.add("expanded");
+      if (g.dataset.baseSlug && state.expandedMovieGroups.has(g.dataset.baseSlug)) {
+        g.classList.add("expanded");
+        setHeaderExpanded(g.querySelector(".movie-group-header"), true);
+      }
     });
     if (state.ipGroupWasOpen) {
       const ipContent = listEl.querySelector(".ip-group-content");
       const ipChevron = listEl.querySelector(".ip-group-chevron");
       if (ipContent) ipContent.classList.add("open");
       if (ipChevron) ipChevron.style.transform = "rotate(0deg)";
+      setHeaderExpanded(listEl.querySelector(".ip-group-header"), true);
     }
   }
 
@@ -230,7 +247,7 @@
   function harvestImages(listEl) {
     const pool = new Map();
     listEl.querySelectorAll("img[src]").forEach((img) => {
-      const src = img.getAttribute("src");
+      const src = img.dataset.atCoverUrl || img.getAttribute("src");
       if (!src) return;
       let bucket = pool.get(src);
       if (!bucket) {
@@ -245,7 +262,7 @@
   function reuseImages(fragment, pool) {
     if (!pool.size) return;
     fragment.querySelectorAll("img[src]").forEach((freshImg) => {
-      const src = freshImg.getAttribute("src");
+      const src = freshImg.dataset.atCoverUrl || freshImg.getAttribute("src");
       const bucket = pool.get(src);
       if (!bucket || !bucket.length) return;
       const liveImg = bucket.shift();
@@ -253,6 +270,91 @@
       liveImg.alt = freshImg.alt;
       freshImg.replaceWith(liveImg);
     });
+  }
+
+  function listNodeKey(node) {
+    if (node.nodeType !== 1) return null;
+    for (const kind of ["anime-card", "season-item", "movie-item", "ip-card"]) {
+      if (node.classList.contains(kind) && node.dataset.slug) return `${kind}:${node.dataset.slug}`;
+    }
+    for (const kind of ["anime-season-group", "anime-movie-group"]) {
+      if (node.classList.contains(kind) && node.dataset.baseSlug) return `${kind}:${node.dataset.baseSlug}`;
+    }
+    if (node.dataset.compactSection) return `section:${node.dataset.compactSection}`;
+    if (node.dataset.compactStatus) return `status:${node.dataset.compactStatus}`;
+    if (node.id) return `id:${node.id}`;
+    return null;
+  }
+
+  function stableRenderedMarkup(node) {
+    // Cache resolution changes src from a transparent image to a blob. The original URL is the
+    // artwork identity; normalizing only this attribute avoids remounting a warmed library.
+    return node.outerHTML.replace(/<img\b[^>]*>/gi, (tag) => {
+      const original = tag.match(/\bdata-at-cover-url="([^"]*)"/);
+      return original ? tag.replace(/\bsrc="[^"]*"/, () => `src="${original[1]}"`) : tag;
+    });
+  }
+
+  function compatibleListNode(live, fresh) {
+    if (live.nodeType !== fresh.nodeType) return false;
+    if (live.nodeType !== 1) return true;
+    return live.localName === fresh.localName && live.classList.item(0) === fresh.classList.item(0);
+  }
+
+  function reconcileListNode(live, fresh) {
+    if (!live || !compatibleListNode(live, fresh)) return fresh;
+    if (fresh.nodeType !== 1) {
+      if (live.nodeValue !== fresh.nodeValue) live.nodeValue = fresh.nodeValue;
+      return live;
+    }
+    const markup = renderedNodeMarkup.get(fresh);
+    if (markup && markup === renderedNodeMarkup.get(live)) return live;
+    // Changed leaf cards get current markup; franchise shells recurse so unchanged member rows
+    // and their expanded/overflow state remain mounted. Cover reuse is local to this replacement.
+    if (fresh.matches(".anime-card, .season-item, .movie-item, .ip-card")) {
+      reuseImages(fresh, harvestImages(live));
+      return fresh;
+    }
+    for (const attribute of [...live.attributes]) {
+      if (!fresh.hasAttribute(attribute.name)) live.removeAttribute(attribute.name);
+    }
+    for (const attribute of fresh.attributes) {
+      if (attribute.name === "src" && live.localName === "img" && live.dataset.atCoverUrl &&
+          live.dataset.atCoverUrl === fresh.dataset.atCoverUrl) continue;
+      if (live.getAttribute(attribute.name) !== attribute.value) live.setAttribute(attribute.name, attribute.value);
+    }
+    reconcileListChildren(live, fresh);
+    if (markup) renderedNodeMarkup.set(live, markup);
+    return live;
+  }
+
+  function reconcileListChildren(parent, freshParent) {
+    const oldChildren = [...parent.childNodes];
+    const siblings = new Map();
+    const identity = node => listNodeKey(node) || `node:${node.nodeType}:${node.localName || ""}:${node.nodeType === 1 ? node.classList.item(0) || "" : ""}`;
+    for (const child of oldChildren) {
+      const key = identity(child);
+      if (!siblings.has(key)) siblings.set(key, []);
+      siblings.get(key).push(child);
+    }
+    const used = new Set();
+    const pairs = [...freshParent.childNodes].map(fresh => {
+      const live = siblings.get(identity(fresh))?.shift();
+      if (live) used.add(live);
+      return { live, fresh };
+    });
+    // Remove obsolete siblings first so unchanged cards after a deletion stay where they are.
+    for (const child of oldChildren) if (!used.has(child)) child.remove();
+    let cursor = parent.firstChild;
+    for (const { live, fresh } of pairs) {
+      const node = reconcileListNode(live, fresh);
+      if (live && node !== live && live.parentNode === parent) {
+        if (live === cursor) cursor = live.nextSibling;
+        live.remove();
+      }
+      if (node === cursor) cursor = cursor.nextSibling;
+      else parent.insertBefore(node, cursor);
+    }
   }
 
   function renderAnimeList(filter = "") {
@@ -308,6 +410,9 @@
       if (AT.PopupState.lastRenderedListMarkup !== "") {
         elements.animeList.replaceChildren();
         AT.PopupState.lastRenderedListMarkup = "";
+        AnimeCardRenderer.pruneEpisodeOverflow?.(elements.animeList);
+        AT.LibraryCoverLoader?.observe(elements.animeList);
+        AT.AiringCountdown?.refresh?.();
       }
       if (filter) {
         if (elements.searchEmptyQuery) elements.searchEmptyQuery.textContent = `“${filter}”`;
@@ -508,6 +613,8 @@
       if (elements.animeList.querySelector(".ip-card")) {
         _ipPatch(AT.PopupState.videoProgress || {});
       }
+      AT.LibraryCoverLoader?.observe(elements.animeList);
+      AT.AiringCountdown?.refresh?.();
       return;
     }
 
@@ -519,9 +626,11 @@
     const range = document.createRange();
     range.selectNodeContents(elements.animeList);
     const fragment = range.createContextualFragment(combinedHtml);
-    reuseImages(fragment, harvestImages(elements.animeList));
-    elements.animeList.replaceChildren(fragment);
+    for (const node of fragment.querySelectorAll(LIST_UNITS)) renderedNodeMarkup.set(node, stableRenderedMarkup(node));
+    reconcileListChildren(elements.animeList, fragment);
     AT.PopupState.lastRenderedListMarkup = combinedHtml;
+    AnimeCardRenderer.pruneEpisodeOverflow?.(elements.animeList);
+    AT.LibraryCoverLoader?.observe(elements.animeList);
 
     const savedCompact = compactExpansionStates.get(AT.PopupState.currentCompactStatus);
     if (savedCompact) {
@@ -539,6 +648,7 @@
     }
 
     setupCardEventListeners();
+    AT.AiringCountdown?.refresh?.();
 
     if (elements.animeList.querySelector(".ip-card")) {
       _ipPatch(AT.PopupState.videoProgress || {});
@@ -612,6 +722,7 @@
         e.stopPropagation();
         const hidden = moreFillers.previousElementSibling;
         if (hidden?.classList.contains("hidden-fillers")) {
+          AT.AnimeCardRenderer.hydrateEpisodeOverflow?.(hidden);
           const isExpanded = hidden.classList.toggle("expanded");
           moreFillers.textContent = isExpanded ? moreFillers.dataset.lessText : moreFillers.dataset.moreText;
         }
@@ -622,6 +733,7 @@
         e.stopPropagation();
         const hidden = moreEps.previousElementSibling;
         if (hidden?.classList.contains("hidden-episodes")) {
+          AT.AnimeCardRenderer.hydrateEpisodeOverflow?.(hidden);
           const isExpanded = hidden.classList.toggle("expanded");
           moreEps.textContent = isExpanded ? moreEps.dataset.lessText : moreEps.dataset.moreText;
         }

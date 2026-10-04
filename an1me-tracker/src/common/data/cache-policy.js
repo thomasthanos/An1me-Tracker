@@ -28,6 +28,8 @@
   // does not see it.
   const INFO_SCHEMA_VERSION = 5;
   const EPISODE_TYPES_SCHEMA_VERSION = 3;
+  // 1 also stamped timeouts/circuit-open as absence. Only new confirmed misses use 2.
+  const FILLER_NEGATIVE_CACHE_VERSION = 2;
 
   const toMs = globalThis.AnimeTrackerUtils.toMillisOrNaN;
 
@@ -108,7 +110,7 @@
     // the backoff window is measured from retryAt, mirroring infoRefreshAt.
     const at = toMs(filler?.retryable ? filler?.retryAt || filler?.cachedAt : filler?.cachedAt) || 0;
     if (!at) return 0;
-    if (filler.retryable) return at + RETRYABLE_TTL;
+    if (filler.retryable) return Math.max(at + RETRYABLE_TTL, toMs(filler.retryAfterAt) || 0);
     if (filler.notFound) return at + NOT_FOUND_TTL;
     if (info && info.status === "RELEASING") return at + EPISODE_TYPES_TTL;
     return at + FILLER_FINISHED_TTL;
@@ -118,7 +120,7 @@
     if (!filler || !filler.cachedAt) return false;
     if (Number(filler.schemaVersion || 0) < EPISODE_TYPES_SCHEMA_VERSION) return false;
     // Older negative entries could be HTTP/network failures. Keep valid data warm.
-    if (filler.notFound && !filler.retryable && filler.negativeCacheVersion !== 1) return false;
+    if (filler.notFound && !filler.retryable && filler.negativeCacheVersion !== FILLER_NEGATIVE_CACHE_VERSION) return false;
     return Date.now() < fillerRefreshAt(filler, info);
   }
 
@@ -176,6 +178,7 @@
     RETRYABLE_TTL,
     INFO_SCHEMA_VERSION,
     EPISODE_TYPES_SCHEMA_VERSION,
+    FILLER_NEGATIVE_CACHE_VERSION,
     infoRefreshAt,
     isInfoFresh,
     isInfoAuthoritative,

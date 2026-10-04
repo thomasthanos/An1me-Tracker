@@ -3752,38 +3752,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return handler ? handler(message, sender, sendResponse) === true : false;
 });
 
-async function sanitizeDiscontinuedJikanCaches() {
-  try {
-    const all = await bgStorageGet(null);
-    const updates = {};
-    for (const [key, val] of Object.entries(all || {})) {
-      if (key.startsWith("episodeTypes_") && val?.retryable === true) {
-        const err = String(val.retryError || val.error || "");
-        if (/jikan|504|timeout/i.test(err)) {
-          updates[key] = {
-            notFound: true,
-            negativeCacheVersion: 1,
-            schemaVersion: self.AnimeTrackerCachePolicy?.EPISODE_TYPES_SCHEMA_VERSION || 3,
-            cachedAt: Date.now(),
-          };
-        }
-      }
-    }
-    if (all?.metadataRepairState?.status === "running" || all?.metadataRepairState?.failed > 0) {
-      const logs = all.metadataRepairState.logs || [];
-      const hasJikanFailures = logs.some((l) => /jikan|timeout/i.test(String(l?.detail || "")));
-      if (hasJikanFailures || all.metadataRepairState.status === "running") {
-        updates.metadataRepairState = null;
-      }
-    }
-    if (Object.keys(updates).length > 0) {
-      await bgStorageSet(updates);
-    }
-  } catch (e) {
-    console.warn("[BG] Failed to sanitize discontinued Jikan caches:", e);
-  }
-}
-
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
     // Re-registering/restoring an extension can leave existing storage in place.
@@ -3806,7 +3774,6 @@ chrome.runtime.onInstalled.addListener((details) => {
     ].join(";");
     dlog(`%c🎬 Anime Tracker v${chrome.runtime.getManifest().version}`, style);
     migrateFromSyncToLocal();
-    if (typeof sanitizeDiscontinuedJikanCaches === "function") sanitizeDiscontinuedJikanCaches().catch(() => {});
 
     if (details.previousVersion === chrome.runtime.getManifest().version) return;
 
@@ -3840,19 +3807,20 @@ chrome.runtime.onInstalled.addListener((details) => {
     const fromVersion = details.previousVersion || null;
     const toVersion = chrome.runtime.getManifest().version || null;
 
-    bgStorageGet(["postUpdateFetchTriggeredAt"])
+    bgStorageGet(["postUpdateFetchTriggeredAt", "metadataRepairState"])
       .then((existing) => {
         // pendingRepairSlugs is left alone: resetting it to [] here wiped slugs already queued for a
         // targeted repair, and the full sweep this flag asks for is usually deferred by the 6h gate anyway.
-        const payload = {
-          pendingBackgroundMetadataRepair: true,
-        };
+        // The persisted queue resumes on boot. Do not ask for a second sweep while it is running.
+        const payload = existing.metadataRepairState?.status === "running"
+          ? {}
+          : { pendingBackgroundMetadataRepair: true };
         if (!existing.postUpdateFetchTriggeredAt) {
           payload.postUpdateFetchTriggeredAt = Date.now();
           payload.postUpdateFetchFromVersion = fromVersion;
           payload.postUpdateFetchToVersion = toVersion;
         }
-        return bgStorageSet(payload);
+        return Object.keys(payload).length ? bgStorageSet(payload) : undefined;
       })
       .catch((e) => console.warn("[BG] Post-update flag write failed:", e));
   }
@@ -3861,7 +3829,6 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(() => {
   dlog("[Anime Tracker] Extension started");
   migrateFromSyncToLocal();
-  if (typeof sanitizeDiscontinuedJikanCaches === "function") sanitizeDiscontinuedJikanCaches().catch(() => {});
   reconcileSmartNotificationAlarm().catch((error) => {
     console.warn("[BG] Smart notification startup reconciliation failed:", error?.message || error);
   });

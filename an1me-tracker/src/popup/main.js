@@ -1256,10 +1256,11 @@
         const safe = sanitize(groupImgs[key]);
         if (safe) urls.push(safe);
       }
-      await CoverCache.warm(urls);
-      // Reclaim covers no library entry points at any more. Runs after warming so the set we
-      // keep is exactly what was just requested.
-      const removed = await CoverCache.prune(new Set(urls));
+      // Keep artwork for the entire library across updates. The viewport loader warms only
+      // mounted covers close to the user, after rendering, through the bounded cache queue.
+      const validUrls = new Set(urls);
+      CoverCache.retain(validUrls);
+      const removed = await CoverCache.prune(validUrls);
       if (removed > 0) PopupLogger.debug("CoverCache", `pruned ${removed} unreferenced cover(s)`);
     } catch (e) {
       PopupLogger.debug("CoverCache", "warm failed:", e?.message || e);

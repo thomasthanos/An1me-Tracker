@@ -209,8 +209,13 @@ const UIHelpers = {
     const cls = `at-cover at-cover--${size}${extraClass ? " " + extraClass : ""}`;
 
     if (safeUrl) {
-      const src = window.AnimeTracker?.CoverCache?.resolve?.(safeUrl) || safeUrl;
-      return `<img class="${cls}" src="${this.escapeHtml(src)}" alt="${safeTitle}" loading="eager" decoding="async" fetchpriority="low">`;
+      const resolved = window.AnimeTracker?.CoverCache?.resolve?.(safeUrl) || safeUrl;
+      // The library loader supplies near-viewport images through its bounded cache
+      // queue. Starting a native request here as well would duplicate cold transfers.
+      const src = resolved === safeUrl && window.AnimeTracker?.LibraryCoverLoader
+        ? "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+        : resolved;
+      return `<img class="${cls}" src="${this.escapeHtml(src)}" data-at-cover-url="${this.escapeHtml(safeUrl)}" alt="${safeTitle}" loading="lazy" decoding="async" fetchpriority="low">`;
     }
 
     const letter = (title || "").trim().charAt(0).toUpperCase();

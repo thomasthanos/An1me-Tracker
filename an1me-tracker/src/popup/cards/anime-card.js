@@ -1,6 +1,63 @@
 // anime-card.js — anime card renderers (merged): base AnimeCardRenderer plus the
 // in-progress and grouped-card extensions.
+// Overflow tags stay out of the DOM until their existing +more control is opened. Records contain
+// scalar episode numbers only; the list renderer prunes discarded records after committing its
+// next DOM, so reused cards retain their token and expanded state across unrelated refreshes.
+const EpisodeOverflow = (() => {
+  const records = new Map();
+  const latestByList = new Map();
+  let nextToken = 0;
+
+  function render(slug, numbers, { context, filler = false, title = true, offset = 0 }) {
+    if (numbers.length === 0) return "";
+    const { FillerService } = window.AnimeTracker;
+    const ranges = filler ? null : FillerService.KNOWN_FILLERS[FillerService.getNormalizedFillerSlug(slug)] || null;
+    const key = JSON.stringify([slug, context, filler, title, offset, ranges]);
+    let token = latestByList.get(key);
+    const previous = records.get(token);
+    if (!previous || previous.numbers.length !== numbers.length || previous.numbers.some((number, index) => number !== numbers[index])) {
+      token = String(++nextToken);
+      records.set(token, { key, slug, numbers: numbers.slice(), filler, title, offset });
+      latestByList.set(key, token);
+    }
+    const hiddenClass = filler ? "hidden-fillers" : "hidden-episodes";
+    const buttonClass = filler ? "episode-tag filler show-more-fillers" : "episode-tag show-more-episodes";
+    return `<div class="${hiddenClass}" data-episode-overflow="${token}"></div><span class="${buttonClass}" data-more-text="+${numbers.length} more" data-less-text="Show less">+${numbers.length} more</span>`;
+  }
+
+  function hydrate(node) {
+    if (!node || node.childElementCount > 0) return false;
+    const record = records.get(node.dataset?.episodeOverflow);
+    if (!record) return false;
+    const { slug, numbers, filler, title, offset } = record;
+    const { FillerService } = window.AnimeTracker;
+    node.innerHTML = numbers.map((number) => {
+      const isFiller = filler || FillerService.isFillerEpisode(slug, number);
+      const fillerClass = filler ? " filler unwatched-filler" : isFiller ? " filler watched-filler" : "";
+      const tagTitle = title ? ` title="${filler ? "Filler Episode (Not watched)" : isFiller ? "Filler Episode (Watched)" : ""}"` : "";
+      const displayNumber = offset ? Number(number) + offset : number;
+      return `<span class="episode-tag${fillerClass}"${tagTitle}>Ep ${displayNumber}</span>`;
+    }).join("");
+    return true;
+  }
+
+  function prune(root = document) {
+    const retained = new Set(Array.from(root.querySelectorAll("[data-episode-overflow]"), (node) => node.dataset.episodeOverflow));
+    for (const [token, record] of records) {
+      if (retained.has(token)) continue;
+      records.delete(token);
+    }
+    latestByList.clear();
+    for (const [token, record] of records) latestByList.set(record.key, token);
+  }
+
+  return { render, hydrate, prune };
+})();
+
 const AnimeCardRenderer = {
+  hydrateEpisodeOverflow: EpisodeOverflow.hydrate,
+  pruneEpisodeOverflow: EpisodeOverflow.prune,
+
   createAnimeCard(slug, anime, videoProgress = {}) {
     const { UIHelpers } = window.AnimeTracker;
     const { FillerService } = window.AnimeTracker;
@@ -92,17 +149,7 @@ const AnimeCardRenderer = {
         })
         .join("") || "";
 
-    const hiddenEpisodeTags = hiddenEpisodes
-      .map((ep) => {
-        const isFiller = FillerService.isFillerEpisode(slug, ep.number);
-        return `<span class="episode-tag${isFiller ? " filler watched-filler" : ""}" title="${isFiller ? "Filler Episode (Watched)" : ""}">Ep ${ep.number}</span>`;
-      })
-      .join("");
-
-    const moreEpisodes =
-      hiddenEpisodes.length > 0
-        ? `<div class="hidden-episodes">${hiddenEpisodeTags}</div><span class="episode-tag show-more-episodes" data-more-text="+${hiddenEpisodes.length} more" data-less-text="Show less">+${hiddenEpisodes.length} more</span>`
-        : "";
+    const moreEpisodes = EpisodeOverflow.render(slug, hiddenEpisodes.map((ep) => ep.number), { context: "card" });
 
     const unwatchedFillers = FillerService.getUnwatchedFillers(slug, anime.episodes, fillerEpisodeBound).slice().reverse();
     const visibleFillers = unwatchedFillers.slice(0, CONFIG.VISIBLE_FILLERS_LIMIT);
@@ -112,14 +159,7 @@ const AnimeCardRenderer = {
       .map((epNum) => `<span class="episode-tag filler unwatched-filler" title="Filler Episode (Not watched)">Ep ${epNum}</span>`)
       .join("");
 
-    const hiddenFillerTags = hiddenFillers
-      .map((epNum) => `<span class="episode-tag filler unwatched-filler" title="Filler Episode (Not watched)">Ep ${epNum}</span>`)
-      .join("");
-
-    const showMoreFillers =
-      hiddenFillers.length > 0
-        ? `<div class="hidden-fillers">${hiddenFillerTags}</div><span class="episode-tag filler show-more-fillers" data-more-text="+${hiddenFillers.length} more" data-less-text="Show less">+${hiddenFillers.length} more</span>`
-        : "";
+    const showMoreFillers = EpisodeOverflow.render(slug, hiddenFillers, { context: "card", filler: true });
 
     const fillerInfo = FillerService.getFillerInfo(slug, anime.episodes, anime);
 
@@ -467,17 +507,7 @@ const AnimeCardRenderer = {
           })
           .join("");
 
-        const hiddenEpisodeTags = hiddenEps
-          .map((epNum) => {
-            const isFiller = FillerService.isFillerEpisode(slug, epNum);
-            return `<span class="episode-tag${isFiller ? " filler watched-filler" : ""}">Ep ${epNum}</span>`;
-          })
-          .join("");
-
-        const moreEpisodes =
-          hiddenEps.length > 0
-            ? `<div class="hidden-episodes">${hiddenEpisodeTags}</div><span class="episode-tag show-more-episodes" data-more-text="+${hiddenEps.length} more" data-less-text="Show less">+${hiddenEps.length} more</span>`
-            : "";
+        const moreEpisodes = EpisodeOverflow.render(slug, hiddenEps, { context: `part:${part.start}:${part.end}`, title: false });
 
         return `
                 <div class="part-item ${statusClass}" data-part-start="${part.start}" data-part-end="${part.end}">
@@ -930,16 +960,10 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
                 return `<span class="episode-tag${isFiller ? " filler watched-filler" : ""}">Ep ${toDisplayEpisodeNumber(ep.number)}</span>`;
               })
               .join("");
-            const partHiddenTags = hiddenPartEps
-              .map((ep) => {
-                const isFiller = FillerService.isFillerEpisode(slug, ep.number);
-                return `<span class="episode-tag${isFiller ? " filler watched-filler" : ""}">Ep ${toDisplayEpisodeNumber(ep.number)}</span>`;
-              })
-              .join("");
-            const partMoreEps =
-              hiddenPartEps.length > 0
-                ? `<div class="hidden-episodes">${partHiddenTags}</div><span class="episode-tag show-more-episodes" data-more-text="+${hiddenPartEps.length} more" data-less-text="Show less">+${hiddenPartEps.length} more</span>`
-                : "";
+            const partMoreEps = EpisodeOverflow.render(slug, hiddenPartEps.map((ep) => ep.number), {
+              context: `season-part:${partConfig.start}:${partConfig.end}`, title: false,
+              offset: Number.isFinite(partConfig.displayStart) ? displayStart - partConfig.start : 0,
+            });
 
             episodesHTML =
               watchedInPart > 0
@@ -1034,17 +1058,7 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
               })
               .join("");
 
-            const hiddenEpisodeTags = hiddenEpisodes
-              .map((ep) => {
-                const isFiller = FillerService.isFillerEpisode(slug, ep.number);
-                return `<span class="episode-tag${isFiller ? " filler watched-filler" : ""}" title="${isFiller ? "Filler Episode (Watched)" : ""}">Ep ${ep.number}</span>`;
-              })
-              .join("");
-
-            const moreEpisodes =
-              hiddenEpisodes.length > 0
-                ? `<div class="hidden-episodes">${hiddenEpisodeTags}</div><span class="episode-tag show-more-episodes" data-more-text="+${hiddenEpisodes.length} more" data-less-text="Show less">+${hiddenEpisodes.length} more</span>`
-                : "";
+            const moreEpisodes = EpisodeOverflow.render(slug, hiddenEpisodes.map((ep) => ep.number), { context: "season" });
 
             const unwatchedFillers = FillerService.getUnwatchedFillers(slug, anime.episodes, fillerEpisodeBound).slice().reverse();
             const visibleUFillers = unwatchedFillers.slice(0, CONFIG.VISIBLE_FILLERS_LIMIT);
@@ -1052,13 +1066,7 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
             const unwatchedFillerTags = visibleUFillers
               .map((epNum) => `<span class="episode-tag filler unwatched-filler" title="Filler Episode (Not watched)">Ep ${epNum}</span>`)
               .join("");
-            const hiddenFillerTags = hiddenUFillers
-              .map((epNum) => `<span class="episode-tag filler unwatched-filler" title="Filler Episode (Not watched)">Ep ${epNum}</span>`)
-              .join("");
-            const showMoreFillers =
-              hiddenUFillers.length > 0
-                ? `<div class="hidden-fillers">${hiddenFillerTags}</div><span class="episode-tag filler show-more-fillers" data-more-text="+${hiddenUFillers.length} more" data-less-text="Show less">+${hiddenUFillers.length} more</span>`
-                : "";
+            const showMoreFillers = EpisodeOverflow.render(slug, hiddenUFillers, { context: "season", filler: true });
             const unwatchedFillersSection =
               unwatchedFillers.length > 0
                 ? `<div class="unwatched-fillers-section"><span class="unwatched-fillers-label">Unwatched Fillers <span class="filler-count">${unwatchedFillers.length}</span></span><div class="episode-list">${unwatchedFillerTags}${showMoreFillers}</div></div>`

@@ -7,6 +7,30 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [8.0.3] — 2026-10-04
+
+### Fixed
+
+- Keep interrupted metadata fetch queues and usable filler caches across startup and updates.
+  Updates resume the existing queue without scheduling a second full sweep.
+- Treat Jikan timeouts and an open circuit as temporary failures with retry backoff,
+  preserving previous filler data. Recheck legacy uncertain negative entries without
+  deleting valid metadata or watched/playback progress.
+- Enforce mobile 4K selection off even when an older enabled preference is stored.
+  Desktop playback settings and mobile AniList restrictions remain intact.
+- Refresh airing countdowns when returning from Settings, Stats or Goals, while stopping
+  countdown timers when no visible schedule needs them.
+
+### Changed
+
+- Load library covers near the scroll viewport with at most three cache transfers at once,
+  including disk reads and writes. Cancel pending work when hidden and release obsolete
+  image blobs safely after their cards leave the DOM.
+- Reuse unchanged cards, images and franchise members during metadata updates, preserving
+  open cards, expanded episode lists, keyboard focus and scroll position.
+- Create overflow episode/filler tags only when their existing more control is opened.
+  Card styling, progress labels and watched/resume data formats are unchanged.
+
 ## [8.0.2] — 2026-10-03
 
 ### Fixed

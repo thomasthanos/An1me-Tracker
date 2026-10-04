@@ -64,6 +64,7 @@ function createMetadataRepairRunId() {
 
 
 function isRetryableMetadataRepairError(error) {
+  if (error?.deferRetry === true) return false;
   const message = String(error?.message || "").toLowerCase();
   if (!message) return true;
 
@@ -545,6 +546,7 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
             // 15-minute backoff never engages (unlike isInfoFresh, which checks retryable first).
             schemaVersion: self.AnimeTrackerCachePolicy.EPISODE_TYPES_SCHEMA_VERSION,
           };
+    if (Number(error?.retryAfterMs) > 0) backoffEntry.retryAfterAt = Date.now() + Number(error.retryAfterMs);
     await bgStorageSet({ [key]: backoffEntry });
     // Let the resolver perform its bounded retry and retain usable data on final failure.
     // Returning a failed result here bypassed retries and discarded the original HTTP status.
@@ -573,7 +575,7 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
 
     const notFoundEntry = {
       notFound: true,
-      negativeCacheVersion: 1,
+      negativeCacheVersion: self.AnimeTrackerCachePolicy.FILLER_NEGATIVE_CACHE_VERSION,
       schemaVersion: self.AnimeTrackerCachePolicy.EPISODE_TYPES_SCHEMA_VERSION,
       cachedAt: Date.now(),
     };

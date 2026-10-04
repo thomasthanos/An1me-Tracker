@@ -47,7 +47,7 @@ async function test(name, fn) {
     assert.equal(mobileUtils.isMobileDevice(), true);
     assert.equal(mobileUtils.auto4kEnabled(undefined), false, "Auto4K default must be false on mobile");
     assert.equal(mobileUtils.auto4kEnabled(false), false);
-    assert.equal(mobileUtils.auto4kEnabled(true), true);
+    assert.equal(mobileUtils.auto4kEnabled(true), false, "Saved desktop 4K must not enable the mobile player");
     assert.equal(mobileUtils.copyGuardEnabled(undefined), false, "CopyGuard default must be false on mobile");
     assert.equal(mobileUtils.copyGuardEnabled(false), false);
     assert.equal(mobileUtils.copyGuardEnabled(true), true);

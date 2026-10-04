@@ -408,9 +408,13 @@ function rebaseEpisodeTypes(episodeTypes, offset, seasonLength) {
 }
 
 async function fetchJikanEpisodes(title, options = {}) {
+  const unavailable = (message) => Object.assign(new Error(message), {
+    deferRetry: true,
+    retryAfterMs: Math.max(1000, (globalThis.__jikanCircuitBrokenUntil || 0) - Date.now()),
+  });
   try {
     if (globalThis.__jikanCircuitBroken && Date.now() < (globalThis.__jikanCircuitBrokenUntil || 0)) {
-      return null;
+      throw unavailable("jikan_circuit_open");
     }
 
     let malId = Number(options.malId) || 0;
@@ -428,7 +432,7 @@ async function fetchJikanEpisodes(title, options = {}) {
           globalThis.__jikanCircuitBroken = true;
           globalThis.__jikanCircuitBrokenUntil = Date.now() + (60 * 60 * 1000);
           (typeof dlog === "function" ? dlog : () => {})("[AnimeTracker] Jikan search timed out — opening circuit breaker");
-          return null;
+          throw unavailable("jikan_search_timeout");
         }
         const err = new Error(fetchErr?.message || "jikan_fetch_failed");
         err.rateLimited = true;
@@ -478,7 +482,7 @@ async function fetchJikanEpisodes(title, options = {}) {
         if (epErr?.name === "AbortError") {
           globalThis.__jikanCircuitBroken = true;
           globalThis.__jikanCircuitBrokenUntil = Date.now() + (60 * 60 * 1000);
-          return null;
+          throw unavailable("jikan_episodes_timeout");
         }
         throw epErr;
       } finally {
