@@ -33,7 +33,7 @@ jobs:
   ipa:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Test
         run: for t in dev/test/*.test.js; do node "$t" > /dev/null || { node "$t"; exit 1; }; done
@@ -106,13 +106,13 @@ jobs:
           plutil -convert json -o build/app-info.json "$app/Info.plist"
           node dev/scripts/sidestore-source.js build/app-info.json "${{ steps.ipa.outputs.file }}" "$GITHUB_REPOSITORY" > build/source.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.ipa.outputs.name }}
           path: ${{ steps.ipa.outputs.file }}
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SideStore-Source
           path: build/source.json
