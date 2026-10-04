@@ -118,6 +118,8 @@ const AnimeCardRenderer = {
 
     const highestInProgressEp = episodesWithProgress.length > 0 ? Math.max(...episodesWithProgress.map((ep) => ep.number)) : 0;
     const currentEpisode = Math.max(highestCompletedEp, highestInProgressEp);
+    // The furthest episode is unfinished: it is the one being watched, not one already seen.
+    const watchingNow = highestInProgressEp > highestCompletedEp ? episodesWithProgress.find((ep) => ep.number === highestInProgressEp) : null;
 
     const fillerSiteInfo = StatusService?.getAuthoritativeSiteInfo?.(slug, anime);
     const fillerReleaseStatus = fillerSiteInfo
@@ -163,7 +165,8 @@ const AnimeCardRenderer = {
 
     const fillerInfo = FillerService.getFillerInfo(slug, anime.episodes, anime);
 
-    const currentEpText = currentEpisode > 0 ? `Ep ${currentEpisode}` : "";
+    const currentEpText = watchingNow ? `Ep ${currentEpisode} · ${watchingNow.timeStr}` : currentEpisode > 0 ? `Ep ${currentEpisode}` : "";
+    const progressIcon = `<span class="icon-inline">${UIHelpers.createIcon(watchingNow ? "play" : "canon")}</span>`;
     const unknownTotal = progressData.total == null;
 
     const AnilistService = window.AnimeTracker?.AnilistService;
@@ -204,11 +207,11 @@ const AnimeCardRenderer = {
 
     const progressInfoText = unknownTotal
       ? anilistStatusForProgress === "FINISHED"
-        ? `<span><span class="icon-inline">${UIHelpers.createIcon("canon")}</span> ${currentEpText} · Watched ${episodeCount} eps</span>`
-        : `<span><span class="icon-inline">${UIHelpers.createIcon("canon")}</span> ${currentEpText}${availableInfo} · Airing</span>`
+        ? `<span>${progressIcon} ${currentEpText} · Watched ${episodeCount} eps</span>`
+        : `<span>${progressIcon} ${currentEpText}${availableInfo} · Airing</span>`
       : hasFillerData
-        ? `<span title="Canon: ${canonWatched}/${totalCanonDisplay}"><span class="icon-inline">${UIHelpers.createIcon("canon")}</span> ${currentEpText}${availableInfo} · Canon ${canonWatched}/${totalCanonDisplay}</span>`
-        : `<span><span class="icon-inline">${UIHelpers.createIcon("canon")}</span> ${currentEpText}${availableInfo} · Total ${episodeCount}/${totalDisplay}</span>`;
+        ? `<span title="Canon: ${canonWatched}/${totalCanonDisplay}">${progressIcon} ${currentEpText}${availableInfo} · Canon ${canonWatched}/${totalCanonDisplay}</span>`
+        : `<span>${progressIcon} ${currentEpText}${availableInfo} · Watched ${episodeCount}/${totalDisplay}</span>`;
 
     const watchedFillers = fillerInfo?.watched || 0;
     const totalFillers = fillerInfo?.total || 0;
@@ -276,7 +279,7 @@ const AnimeCardRenderer = {
     );
     const progressBadge =
       !isCardComplete && !isDropped && !isOnHold && episodeProgressText
-        ? `<span class="meta-badge meta-badge-progress">${episodeProgressText}</span>`
+        ? `<span class="meta-badge meta-badge-progress"${watchingNow ? ' title="Watching now"' : ""}>${watchingNow ? UIHelpers.createIcon("play") : ""}${episodeProgressText}</span>`
         : "";
     const completedTypeBadge = "";
     const statusBadgeClass = isDropped
@@ -1002,9 +1005,14 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
                 currentEp = Math.max(...validNumbers);
               }
             }
-            if (inProgressEps.length > 0) {
-              currentEp = Math.max(currentEp, Math.max(...inProgressEps.map((ep) => ep.number)));
-            }
+            // Finishing a season depends on watched episodes only; a half-watched last episode used
+            // to mark it complete. The unfinished furthest episode is the one being watched.
+            const highestWatchedEp = currentEp;
+            const inProgressMax = inProgressEps.length > 0 ? Math.max(...inProgressEps.map((ep) => ep.number)) : 0;
+            const watchingNow = inProgressMax > highestWatchedEp ? inProgressEps.find((ep) => ep.number === inProgressMax) : null;
+            currentEp = Math.max(currentEp, inProgressMax);
+            const seasonEpText = watchingNow ? `Ep ${currentEp} · ${watchingNow.timeStr}` : `Ep ${currentEp > 0 ? currentEp : episodeCount}`;
+            const seasonProgressIcon = `<span class="icon-inline">${UIHelpers.createIcon(watchingNow ? "play" : "canon")}</span>`;
 
             const _sInfo = window.AnimeTracker.StatusService?.getAuthoritativeSiteInfo?.(slug, anime);
             const anilistSt = _sInfo ? _sInfo.status || anime.releaseStatus || null : anime.releaseStatus || AnilistService?.getStatus(slug);
@@ -1019,7 +1027,7 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
               isComplete = progressData.progress >= 100 && !_sPartial;
               if (!isComplete && !_sPartial && anime.episodes?.length > 0) {
                 const totalEps = FillerService.getTotalEpisodes(slug, anime);
-                if (totalEps && currentEp >= totalEps) isComplete = true;
+                if (totalEps && highestWatchedEp >= totalEps) isComplete = true;
               }
               hasProgress = progressPercent > 0 || episodeCount > 0;
             }
@@ -1121,11 +1129,11 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
 
             const progressInfoText = unknownTotalSeason
               ? anilistSt === "FINISHED"
-                ? `<span><span class="icon-inline">${UIHelpers.createIcon("canon")}</span> Ep ${currentEp > 0 ? currentEp : episodeCount} · Watched ${episodeCount} eps</span>`
-                : `<span><span class="icon-inline">${UIHelpers.createIcon("canon")}</span> Ep ${currentEp > 0 ? currentEp : episodeCount}${availableText} · Airing</span>`
+                ? `<span>${seasonProgressIcon} ${seasonEpText} · Watched ${episodeCount} eps</span>`
+                : `<span>${seasonProgressIcon} ${seasonEpText}${availableText} · Airing</span>`
               : hasFillerData
-                ? `<span title="Canon: ${canonWatched}/${totalCanonDisplay}"><span class="icon-inline">${UIHelpers.createIcon("canon")}</span> Ep ${currentEp > 0 ? currentEp : episodeCount}${availableText} · Canon ${canonWatched}/${totalCanonDisplay}</span>`
-                : `<span>Ep ${currentEp > 0 ? currentEp : episodeCount}${availableText} · Total ${episodeCount}/${totalDisplay}</span>`;
+                ? `<span title="Canon: ${canonWatched}/${totalCanonDisplay}">${seasonProgressIcon} ${seasonEpText}${availableText} · Canon ${canonWatched}/${totalCanonDisplay}</span>`
+                : `<span>${seasonProgressIcon} ${seasonEpText}${availableText} · Watched ${episodeCount}/${totalDisplay}</span>`;
 
             progressInfoHTML = `
                         <div class="progress-info">

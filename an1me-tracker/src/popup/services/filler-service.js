@@ -256,7 +256,24 @@ const FillerService = {
     return Math.max(0, totalEpisodes - boundedFillers.size);
   },
 
+  // A show that is still airing gains episodes after its total was recorded, so a total below an
+  // episode that is already out (or watched) is stale: it used to cap progress at "10/9 · 100%" with
+  // episode 11 released. Finished shows keep their recorded total.
   getTotalEpisodes(slug, anime = null) {
+    const recorded = this.getRecordedTotalEpisodes(slug, anime);
+    if (!recorded) return recorded;
+    const normalizedSlug = slug.toLowerCase();
+    const anilistService = window.AnimeTracker?.AnilistService;
+    const siteInfo = anilistService?.getAuthoritativeInfo?.(normalizedSlug) || null;
+    const siteInfoCompatible = !siteInfo || !anime || anilistService?.isInfoCompatibleWithEntry?.(anime, siteInfo) !== false;
+    const status = (siteInfoCompatible && siteInfo?.status) || anime?.releaseStatus || anilistService?.getStatus?.(normalizedSlug);
+    if (status !== "RELEASING") return recorded;
+    const latestReleased = siteInfoCompatible ? Number(anilistService?.getLatestEpisode?.(normalizedSlug)) || 0 : 0;
+    const highestWatched = globalThis.AnimeTrackerEntryState?.getEpisodeProgress?.(anime).highest || 0;
+    return Math.max(recorded, latestReleased, highestWatched);
+  },
+
+  getRecordedTotalEpisodes(slug, anime = null) {
     const normalizedSlug = slug.toLowerCase();
     const anilistService = window.AnimeTracker?.AnilistService;
     const siteInfo = anilistService?.getAuthoritativeInfo?.(normalizedSlug) || null;
