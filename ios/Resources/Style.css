@@ -1,0 +1,523 @@
+/* ───────────────────────────────────────────────────────────
+   An1me Tracker — iOS companion view
+   Liquid Glass surfaces, grouped-inset layout, SF type ramp.
+   ─────────────────────────────────────────────────────────── */
+
+* {
+  margin: 0;
+  padding: 0;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  cursor: default;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg: #07080d;
+  --surface: rgba(255, 255, 255, 0.055);
+  --surface-raised: rgba(255, 255, 255, 0.085);
+  --hairline: rgba(255, 255, 255, 0.09);
+  --hairline-strong: rgba(255, 255, 255, 0.14);
+  --specular: rgba(255, 255, 255, 0.28);
+
+  /* Text */
+  --text: #f5f6fa;
+  --text-2: rgba(235, 238, 248, 0.68);
+  --text-3: rgba(235, 238, 248, 0.42);
+
+  /* Tints */
+  --cyan: #32d8ff;
+  --violet: #bf8cff;
+  --green: #4ade80;
+  --amber: #ffb340;
+
+  /* Radii — continuous-corner feel */
+  --r-card: 22px;
+  --r-row: 16px;
+  --r-tile: 12px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 22px)
+    18px
+    calc(env(safe-area-inset-bottom, 0px) + 28px);
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Ambient background — two soft, low-opacity light sources */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 42% at 12% -6%, rgba(50, 216, 255, 0.16) 0%, transparent 68%),
+    radial-gradient(52% 38% at 96% 8%, rgba(150, 110, 255, 0.14) 0%, transparent 70%),
+    radial-gradient(70% 50% at 50% 108%, rgba(90, 140, 255, 0.10) 0%, transparent 72%);
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+  /* Small enough that an iPhone-width viewport still keeps a real
+     side gutter instead of letting cards run to the screen edge. */
+  max-width: 398px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ─── Hero ───────────────────────────────────────────────── */
+
+.hero {
+  text-align: center;
+  padding: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.app-mark {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 16px;
+}
+
+.app-icon {
+  display: block;
+  border-radius: 21px;
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 12px 28px -8px rgba(0, 0, 0, 0.66),
+    0 2px 0 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+.version-badge {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  min-width: 44px;
+  padding: 3px 8px 4px;
+  border-radius: 999px;
+  background: rgba(18, 20, 28, 0.72);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  backdrop-filter: blur(18px) saturate(180%);
+  border: 0.5px solid var(--hairline-strong);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.032em;
+  line-height: 1.15;
+}
+
+.tagline {
+  margin-top: 6px;
+  max-width: 300px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 6px 13px 6px 11px;
+  border-radius: 999px;
+  background: rgba(52, 199, 89, 0.10);
+  border: 0.5px solid rgba(74, 222, 128, 0.28);
+  color: rgba(150, 240, 180, 0.95);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.16);
+  animation: pulse 2.6s var(--ease) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* ─── Shared glass surface ───────────────────────────────── */
+
+.card,
+.action,
+.row {
+  position: relative;
+  background: var(--surface);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+  border: 0.5px solid var(--hairline);
+  box-shadow:
+    0 1px 0 0 var(--specular) inset,
+    0 10px 26px -14px rgba(0, 0, 0, 0.75);
+}
+
+button,
+.action,
+.row {
+  touch-action: manipulation;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Solid-ish fallback where backdrop-filter is unavailable */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .card, .action, .row { background: rgba(28, 31, 42, 0.72); }
+}
+
+/* ─── Primary actions ────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.action {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 14px;
+  border-radius: var(--r-card);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  transition: transform 0.22s var(--ease), background-color 0.22s var(--ease);
+}
+
+.action:active {
+  transform: scale(0.975);
+  background: var(--surface-raised);
+}
+
+.action-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-tile);
+  border: 0.5px solid currentColor;
+}
+
+.action-icon svg { width: 21px; height: 21px; }
+
+.action-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.action-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.action-sub {
+  font-size: 12.5px;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+.chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+  opacity: 0.85;
+}
+
+/* ─── Tints ──────────────────────────────────────────────── */
+
+.tint-cyan   { color: var(--cyan);   background: rgba(50, 216, 255, 0.13); }
+.tint-violet { color: var(--violet); background: rgba(160, 120, 255, 0.14); }
+.tint-green  { color: var(--green);  background: rgba(74, 222, 128, 0.13); }
+.tint-amber  { color: var(--amber);  background: rgba(255, 179, 64, 0.13); }
+
+/* ─── Cards & section headers ────────────────────────────── */
+
+.card {
+  border-radius: var(--r-card);
+  padding: 16px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0;
+}
+
+.card-meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid var(--hairline);
+}
+
+/* ─── Activation steps ───────────────────────────────────── */
+
+.steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step {
+  display: flex;
+  gap: 12px;
+  padding: 12px 2px;
+}
+
+.step + .step {
+  border-top: 0.5px solid var(--hairline);
+}
+
+.step-num {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(50, 216, 255, 0.12);
+  border: 0.5px solid rgba(50, 216, 255, 0.32);
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.step-body { min-width: 0; }
+
+.step-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+.step-text {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+.kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 0.5px solid var(--hairline-strong);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* ─── Features ───────────────────────────────────────────── */
+
+.features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 2px;
+}
+
+.feature + .feature {
+  border-top: 0.5px solid var(--hairline);
+}
+
+.feature-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+}
+
+.feature-icon svg { width: 17px; height: 17px; }
+
+.feature-body { min-width: 0; }
+
+.feature-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.feature-text {
+  font-size: 12px;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+/* ─── Link rows ──────────────────────────────────────────── */
+
+.card-list {
+  padding: 4px;
+}
+
+.row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  border-radius: var(--r-row);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  transition: background-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+
+.row + .row {
+  border-top: 0.5px solid var(--hairline);
+  border-radius: var(--r-row);
+}
+
+.row:active {
+  background: rgba(255, 255, 255, 0.07);
+  transform: scale(0.985);
+}
+
+.row-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.row-icon svg { width: 17px; height: 17px; }
+
+.row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Footer ─────────────────────────────────────────────── */
+
+.footer {
+  text-align: center;
+  padding: 4px 0 6px;
+}
+
+.footer-main {
+  font-size: 11.5px;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+.footer-sub {
+  margin-top: 3px;
+  font-size: 11px;
+  color: rgba(235, 238, 248, 0.26);
+  letter-spacing: 0;
+}
+
+/* ─── Entrance ───────────────────────────────────────────── */
+
+/* Transform-only on purpose. Animating opacity here would mean the
+   content is faint (or, with `backwards` fill and a suppressed
+   animation, invisible) during the stagger — unacceptable for a view
+   the user opens repeatedly. A short slide keeps the motion without
+   ever hiding anything. */
+
+@keyframes rise {
+  from { transform: translateY(10px); }
+  to   { transform: none; }
+}
+
+.hero,
+.actions,
+section,
+.footer {
+  animation: rise 0.6s var(--ease) backwards;
+}
+
+/* Stagger by position among the sibling <section> elements
+   (.actions is one, then the three cards). */
+.hero       { animation-delay: 0.02s; }
+.actions    { animation-delay: 0.08s; }
+section     { animation-delay: 0.14s; }
+section + section { animation-delay: 0.20s; }
+section + section + section { animation-delay: 0.26s; }
+.footer     { animation-delay: 0.32s; }

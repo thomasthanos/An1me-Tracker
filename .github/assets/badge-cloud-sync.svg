@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="168" height="28" viewBox="0 0 168 28" overflow="hidden" role="img" aria-label="Cloud Sync Optional">
+  <defs>
+    <linearGradient id="c-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#11253a"/>
+      <stop offset="100%" stop-color="#0a1725"/>
+    </linearGradient>
+    <linearGradient id="c-border" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38648c" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#1e3a54" stop-opacity="0.5"/>
+    </linearGradient>
+    <filter id="c-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    @keyframes pulseCoral {
+      0%, 100% { r: 3px; opacity: 0.8; }
+      50% { r: 4.5px; opacity: 1; }
+    }
+    .dot-c { animation: pulseCoral 2.5s ease-in-out infinite 1.4s; }
+    @media (prefers-reduced-motion: reduce) { .dot-c { animation: none; } }
+  </style>
+
+  <!-- Badge Pill -->
+  <rect x="0.8" y="0.8" width="166.4" height="26.4" rx="13.2" fill="url(#c-bg)" stroke="url(#c-border)" stroke-width="1.2"/>
+
+  <!-- Glowing Beacon -->
+  <circle cx="15" cy="14" r="5" fill="#ff7b92" opacity="0.25" filter="url(#c-glow)"/>
+  <circle cx="15" cy="14" r="3.2" fill="#ff7b92" class="dot-c"/>
+
+  <!-- Label & Value -->
+  <text x="27" y="17.8" fill="#88a9c7" font-size="10.5" font-weight="700" letter-spacing="0.8">CLOUD SYNC</text>
+  <line x1="102" y1="8" x2="102" y2="20" stroke="#25425f" stroke-width="1.2"/>
+  <text x="111" y="18" fill="#ff8fab" font-size="11" font-weight="700" letter-spacing="0.4">OPTIONAL</text>
+</svg>

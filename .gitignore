@@ -1,10 +1,10 @@
-an1me-tracker/backend/serviceAccountKey.json
+backend/serviceAccountKey.json
 **/.env
 **/.env.*
 !**/.env.example
 
-an1me-tracker/dist/
-/an1me-tracker/dist
+/dist/
+/build/
 *.zip
-/an1me-tracker/.agents
-/an1me-tracker/_metadata
+/.agents/
+/_metadata/

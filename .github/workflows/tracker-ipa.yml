@@ -6,7 +6,13 @@ on:
   push:
     branches: [main]
     paths:
-      - "an1me-tracker/**"
+      - "manifest.json"
+      - "background.js"
+      - "popup.html"
+      - "src/**"
+      - "scripts/**"
+      - "test/**"
+      - "ios/**"
       - ".github/workflows/tracker-ipa.yml"
   workflow_dispatch:
 
@@ -26,9 +32,6 @@ env:
 jobs:
   ipa:
     runs-on: macos-26
-    defaults:
-      run:
-        working-directory: an1me-tracker
     steps:
       - uses: actions/checkout@v5
 
@@ -106,13 +109,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.ipa.outputs.name }}
-          path: an1me-tracker/${{ steps.ipa.outputs.file }}
+          path: ${{ steps.ipa.outputs.file }}
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
           name: SideStore-Source
-          path: an1me-tracker/build/source.json
+          path: build/source.json
           if-no-files-found: error
 
       - name: Attach to the release for this version
@@ -128,7 +131,7 @@ jobs:
             gh release create "$tag" "${{ steps.ipa.outputs.file }}" \
               --target "$GITHUB_SHA" \
               --title "An1me.to Tracker $VERSION — iPhone (SideStore)" \
-              --notes "Unsigned iOS app with the Safari extension. Install it with SideStore, which signs it with your Apple ID — see [IOS.md](https://github.com/${{ github.repository }}/blob/main/an1me-tracker/IOS.md). Changes: [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/an1me-tracker/CHANGELOG.md)."
+              --notes "Unsigned iOS app with the Safari extension. Install it with SideStore, which signs it with your Apple ID — see [IOS.md](https://github.com/${{ github.repository }}/blob/main/IOS.md). Changes: [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)."
           fi
 
       # Publish the feed only after its IPA is available. This URL stays the same across versions.

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="12" viewBox="0 0 1100 12" overflow="hidden" fill="none" role="img" aria-hidden="true">
+  <defs>
+    <linearGradient id="div-base" x1="0" y1="0" x2="1100" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#20394f" stop-opacity="0"/>
+      <stop offset="15%" stop-color="#20394f" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#33597a" stop-opacity="1"/>
+      <stop offset="85%" stop-color="#20394f" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#20394f" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="div-glow" x1="0" y1="0" x2="260" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#57d6ff" stop-opacity="0"/>
+      <stop offset="45%" stop-color="#63e0c7" stop-opacity="0.85"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="55%" stop-color="#57d6ff" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#4b8cff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="div-dot" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="35%" stop-color="#57d6ff" stop-opacity="0.9"/>
+      <stop offset="70%" stop-color="#63e0c7" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#63e0c7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <style>
+    @keyframes div-scan {
+      0% { transform: translateX(-260px); }
+      50% { transform: translateX(1100px); }
+      100% { transform: translateX(-260px); }
+    }
+    @keyframes div-pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    .scanner {
+      animation: div-scan 7s ease-in-out infinite;
+    }
+    .pulse-line {
+      animation: div-pulse 4s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .scanner { animation: none; transform: translateX(420px); }
+      .pulse-line { animation: none; }
+    }
+  </style>
+
+  <!-- Static ambient track -->
+  <line x1="40" y1="6" x2="1060" y2="6" stroke="url(#div-base)" stroke-width="1.5" stroke-linecap="round" class="pulse-line"/>
+
+  <!-- Scanning energy streak -->
+  <g class="scanner">
+    <line x1="0" y1="6" x2="260" y2="6" stroke="url(#div-glow)" stroke-width="2.5" stroke-linecap="round"/>
+    <ellipse cx="130" cy="6" rx="14" ry="4" fill="url(#div-dot)"/>
+    <circle cx="130" cy="6" r="2" fill="#ffffff"/>
+  </g>
+</svg>
