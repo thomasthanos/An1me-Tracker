@@ -7,6 +7,27 @@ The version in `manifest.json` is the single source of truth.
 
 ---
 
+## [8.1.0] — 2026-10-04
+
+### Fixed
+
+- Show saved playback positions in Resume even when legacy records have no valid percentage.
+  Derive the display percentage from the saved time and duration without rewriting stored progress.
+- Show retained partial movie positions even when the movie is marked watched or completed;
+  its watched history and completed list state remain intact. Completed series stay excluded.
+- Keep live Resume labels, progress, links, tooltips, start dates and delete actions on the same
+  most recently saved episode, including multipart site links. Display finite times for legacy imports.
+
+### Changed
+
+- Redesign iOS icons around the recognisable T and anime portrait with consistent light, dark,
+  glass and monochrome tint artwork. Add a native Icon Composer source for system-rendered
+  Liquid Glass/Clear and tint appearances, retaining the adaptive PNG catalog for catalog-only builds.
+- Let Xcode generate correctly sized app icons instead of replacing them with a fixed dark image.
+- Exclude native host icon sources and previews from the extension bundle, saving about 8 MB.
+- Preserve existing mobile battery optimisations, interrupted fetch queues, metadata caches,
+  watched episodes and playback positions across the update.
+
 ## [8.0.3] — 2026-10-04
 
 ### Fixed

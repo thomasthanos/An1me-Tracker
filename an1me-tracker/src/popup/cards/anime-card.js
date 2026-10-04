@@ -564,7 +564,9 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
     createInProgressItem(anime) {
       const { UIHelpers, CONFIG } = window.AnimeTracker;
 
-      const activeEpisodes = anime.episodes.filter((ep) => ep.percentage < CONFIG.COMPLETED_PERCENTAGE);
+      const activeEpisodes = anime.episodes
+        .map((ep) => ({ ...ep, percentage: globalThis.AnimeTrackerUtils.getProgressPercentage(ep) }))
+        .filter((ep) => ep.percentage < CONFIG.COMPLETED_PERCENTAGE);
       if (activeEpisodes.length === 0) return "";
 
       const latestEp = [...activeEpisodes].sort((a, b) => {
@@ -572,14 +574,16 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
         const bTime = b.savedAt ? new Date(b.savedAt).getTime() : 0;
         return bTime - aTime || b.number - a.number;
       })[0];
-      const currentMin = Math.floor(latestEp.currentTime / 60);
-      const currentSec = Math.floor(latestEp.currentTime % 60);
+      const currentTime = Number.isFinite(Number(latestEp.currentTime)) ? Math.max(0, Number(latestEp.currentTime)) : 0;
+      const duration = Number.isFinite(Number(latestEp.duration)) ? Math.max(0, Number(latestEp.duration)) : 0;
+      const currentMin = Math.floor(currentTime / 60);
+      const currentSec = Math.floor(currentTime % 60);
       const currentTimeStr = `${currentMin}:${currentSec.toString().padStart(2, "0")}`;
 
-      const durationMin = Math.floor((latestEp.duration || 0) / 60);
+      const durationMin = Math.floor(duration / 60);
       const durationStr = durationMin > 0 ? `${durationMin}m` : "?";
 
-      const remainingTime = Math.max(0, (latestEp.duration || 0) - latestEp.currentTime);
+      const remainingTime = Math.max(0, duration - currentTime);
       const remainingMin = Math.ceil(remainingTime / 60);
       const remainingStr = remainingMin > 0 ? `${remainingMin}m left` : "Done";
 
@@ -596,7 +600,7 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
 
       const watchedDate = latestEp.watchedAt ? new Date(latestEp.watchedAt) : null;
       let watchedDateStr = "";
-      if (watchedDate) {
+      if (watchedDate && Number.isFinite(watchedDate.getTime())) {
         watchedDateStr = watchedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
       }
 

@@ -35,7 +35,13 @@ function toSafariManifest(manifest) {
 function copyEntry(relPath) {
   const from = path.join(ROOT, relPath);
   if (!fs.existsSync(from)) throw new Error(`Runtime entry missing: ${relPath}`);
-  fs.cpSync(from, path.join(OUT, relPath), { recursive: true });
+  // Native host artwork is consumed by setup-ios-icons/UI from the repository,
+  // not by the extension. Keep several MB of previews and Composer sources out of its bundle.
+  const nativeIcons = path.join(ROOT, "src/icons/ios");
+  fs.cpSync(from, path.join(OUT, relPath), {
+    recursive: true,
+    filter: source => source !== nativeIcons && !source.startsWith(nativeIcons + path.sep),
+  });
 }
 
 function manifestReferences(manifest) {

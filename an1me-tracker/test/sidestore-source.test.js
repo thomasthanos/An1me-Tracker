@@ -40,9 +40,9 @@ test("source describes the built app and its release download", () => {
 
   const versionReleaseNotes =
     "v9.3.1 (Build 77):\n" +
-    "• Reduced library work with viewport cover loading, bounded transfers and unchanged-card reuse.\n" +
-    "• Preserved interrupted fetch queues, usable caches and watched/playback progress across updates.\n" +
-    "• Fixed metadata timeout handling and returning countdowns; mobile AniList and automatic 4K stay disabled.";
+    "• Fixed missing Resume for legacy saved progress and partial movies; live actions follow the displayed episode.\n" +
+    "• Redesigned T/anime iOS icons with light, dark, native glass and user-selected tint appearances.\n" +
+    "• Preserved watched/playback progress, caches, interrupted fetch queues and mobile battery optimisations.";
 
   assert.deepEqual(source.apps[0], {
     name: "Example Tracker",

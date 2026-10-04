@@ -191,13 +191,15 @@ const ProgressManager = {
 
       if (isNaN(episodeNum) || episodeNum <= 0) continue;
       if (!progress || progress.deleted) continue;
-      if ((Number(progress.percentage) || 0) >= completedPercentage) continue;
+      const percentage = globalThis.AnimeTrackerUtils.getProgressPercentage(progress);
+      if (percentage >= completedPercentage) continue;
 
       const trackedAnime = animeData?.[animeSlug];
+      const isMovie = !!trackedAnime && !!window.AnimeTracker.SeasonGrouping?.isMovie?.(animeSlug, trackedAnime);
 
       const listState =
         globalThis.AnimeTrackerEntryState?.getResolvedListState?.(trackedAnime) || String(trackedAnime?.listState || "").toLowerCase();
-      if (["completed", "dropped", "on_hold"].includes(listState)) continue;
+      if (["dropped", "on_hold"].includes(listState) || (listState === "completed" && !isMovie)) continue;
       let trackedEpisodeNumbers = trackedEpsBySlug.get(animeSlug);
       if (!trackedEpisodeNumbers) {
         trackedEpisodeNumbers = new Set(
@@ -212,7 +214,7 @@ const ProgressManager = {
         trackedEpsBySlug.set(animeSlug, trackedEpisodeNumbers);
       }
 
-      if (trackedEpisodeNumbers.has(episodeNum)) continue;
+      if (!isMovie && trackedEpisodeNumbers.has(episodeNum)) continue;
       let existing = inProgressMap.get(animeSlug);
       if (!existing) {
         const hasTrackedEpisodes = Array.isArray(trackedAnime?.episodes) && trackedAnime.episodes.length > 0;
@@ -233,7 +235,7 @@ const ProgressManager = {
         number: episodeNum,
         currentTime: progress.currentTime,
         duration: progress.duration,
-        percentage: progress.percentage,
+        percentage,
         savedAt: progress.savedAt,
         watchedAt: progress.watchedAt || progress.savedAt,
         pagePath: progress.pagePath || null,

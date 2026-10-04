@@ -680,8 +680,8 @@
     for (const key of keys) {
       const oldEntry = oldProgress?.[key];
       const newEntry = newProgress?.[key];
-      const oldVisible = !!oldEntry && !oldEntry.deleted && (Number(oldEntry.percentage) || 0) < completedPct;
-      const newVisible = !!newEntry && !newEntry.deleted && (Number(newEntry.percentage) || 0) < completedPct;
+      const oldVisible = !!oldEntry && !oldEntry.deleted && globalThis.AnimeTrackerUtils.getProgressPercentage(oldEntry) < completedPct;
+      const newVisible = !!newEntry && !newEntry.deleted && globalThis.AnimeTrackerUtils.getProgressPercentage(newEntry) < completedPct;
 
       if (oldVisible !== newVisible) {
         return true;
@@ -2738,9 +2738,10 @@
     cards.forEach((card) => {
       const slug = card.dataset.slug;
       if (!slug) return;
+      const isMovie = !!AT.SeasonGrouping?.isMovie?.(slug, animeData?.[slug]);
 
       // Must pick the episode the card was rendered with (progress-manager getInProgressAnime + anime-card
-      // createInProgressItem): skip episodes already tracked as watched, then take the most recently
+      // createInProgressItem): skip series episodes already tracked as watched, then take the most recently
       // saved, higher episode number on a tie. Picking the highest episode number instead swapped a
       // freshly rendered "Ep 4 · 50%" for an older ep 7 on the very next patch, while Resume and the
       // delete button still acted on ep 4.
@@ -2758,9 +2759,9 @@
         if (!key.startsWith(prefix)) continue;
         const p = vp[key];
         if (!p || p.deleted) continue;
-        if (p.percentage >= completedPct) continue;
+        if (globalThis.AnimeTrackerUtils.getProgressPercentage(p) >= completedPct) continue;
         const num = parseInt(key.slice(prefix.length), 10);
-        if (!Number.isFinite(num) || tracked.has(num)) continue;
+        if (!Number.isFinite(num) || (!isMovie && tracked.has(num))) continue;
         const savedAt = p.savedAt ? new Date(p.savedAt).getTime() || 0 : 0;
         if (savedAt > bestSavedAt || (savedAt === bestSavedAt && num > bestNum)) {
           bestSavedAt = savedAt;
@@ -2770,9 +2771,9 @@
       }
       if (!best) return;
 
-      const pct = Math.floor(best.percentage);
-      const ct = best.currentTime || 0;
-      const dur = best.duration || 0;
+      const pct = Math.floor(globalThis.AnimeTrackerUtils.getProgressPercentage(best));
+      const ct = Number.isFinite(Number(best.currentTime)) ? Math.max(0, Number(best.currentTime)) : 0;
+      const dur = Number.isFinite(Number(best.duration)) ? Math.max(0, Number(best.duration)) : 0;
       const mins = Math.floor(ct / 60);
       const secs = Math.floor(ct % 60);
       const timeStr = `${mins}:${String(secs).padStart(2, "0")}`;
@@ -2795,6 +2796,22 @@
 
       const rem = card.querySelector(".ip-remaining");
       if (rem) rem.textContent = remStr;
+      const sitePage = window.AnimeTrackerMultipartMappings?.toSitePage?.(slug, bestNum) || { slug, episode: bestNum };
+      const continuePath = best.pagePath || `${sitePage.slug}-episode-${sitePage.episode}`;
+      const resume = card.querySelector(".ip-continue-btn");
+      if (resume) {
+        resume.href = `https://an1me.to/watch/${continuePath}`;
+        resume.title = `Continue watching Ep ${bestNum}`;
+      }
+      const started = card.querySelector(".ip-meta-time");
+      if (started) {
+        const watchedDate = new Date(best.watchedAt || best.savedAt || "");
+        started.textContent = Number.isFinite(watchedDate.getTime())
+          ? `Started ${watchedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+          : AT.UIHelpers.formatTimeAgo(best.savedAt, 7) || "just now";
+      }
+      const remove = card.querySelector(".ip-delete-btn");
+      if (remove) remove.dataset.episode = String(bestNum);
     });
   }
 

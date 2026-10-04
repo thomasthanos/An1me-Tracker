@@ -397,7 +397,8 @@
         const trackedAnime = AT.PopupState.animeData[anime.slug];
         if (trackedAnime) {
           const status = getAnimeStatus(anime.slug, trackedAnime);
-          if (![AnimeStatus.WATCHING, AnimeStatus.AIRING].includes(status)) return false;
+          const resumableMovie = status === AnimeStatus.COMPLETED && SeasonGrouping.isMovie(anime.slug, trackedAnime);
+          if (![AnimeStatus.WATCHING, AnimeStatus.AIRING].includes(status) && !resumableMovie) return false;
         }
         const categoryAnime = trackedAnime || anime;
         const matchesCategory = categoryFilter(anime.slug || "", categoryAnime);

@@ -74,6 +74,8 @@ function loadCoordinator(withNotifications) {
   );
   check("Safari manifest keeps every other permission", packaged.permissions, source.permissions.filter((p) => !["identity", "notifications", "sidePanel"].includes(p)));
   check("Safari manifest keeps the content scripts and version", [packaged.content_scripts, packaged.version], [source.content_scripts, source.version]);
+  check("native host icon artwork stays out of the extension bundle", fs.existsSync(path.join(REPO, "dist/an1me-tracker-safari/src/icons/ios")), false);
+  check("runtime extension icons remain packaged", fs.existsSync(path.join(REPO, "dist/an1me-tracker-safari/src/icons/icon128.png")), true);
 
   console.log(failures === 0 ? "\nPASS" : `\nFAIL (${failures})`);
   process.exit(failures === 0 ? 0 : 1);

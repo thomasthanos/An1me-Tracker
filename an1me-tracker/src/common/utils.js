@@ -128,6 +128,19 @@
     return typeof value === "boolean" ? value : !isMobileDevice();
   }
 
+  // Older/imported saved positions can contain time and duration without the derived
+  // percentage. Use the same read-only fallback for resume selection, rendering and patches.
+  function getProgressPercentage(progress) {
+    const stored = progress?.percentage;
+    const explicit = stored !== undefined && stored !== null && stored !== "" ? Number(stored) : NaN;
+    if (Number.isFinite(explicit)) return Math.max(0, Math.min(100, explicit));
+    const time = Number(progress?.currentTime), duration = Number(progress?.duration);
+    if (Number.isFinite(time) && time >= 0 && Number.isFinite(duration) && duration > 0) {
+      return Math.max(0, Math.min(100, Math.floor((time / duration) * 100)));
+    }
+    return 0;
+  }
+
   function copyGuardEnabled(value) {
     return typeof value === "boolean" ? value : !isMobileDevice();
   }
@@ -151,6 +164,7 @@
     storage,
     isMobileDevice,
     auto4kEnabled,
+    getProgressPercentage,
     copyGuardEnabled,
     skiptimeHelperEnabled,
   });

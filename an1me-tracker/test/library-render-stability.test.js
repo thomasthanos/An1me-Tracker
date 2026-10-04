@@ -51,6 +51,26 @@ function runInBrowser() {
     AT.RenderList.renderAnimeList();
   }
   const card = slug => list.querySelector(`.anime-card[data-slug="${slug}"]`);
+  test("saved positions without percentage render Resume and a finite progress bar", () => {
+    const progress = { "audit-series__episode-25": { currentTime: 600, duration: 1200, savedAt: "2026-10-04T09:00:00Z" } };
+    const before = JSON.stringify(progress);
+    reset({ "audit-series": entry("Audit Series") }, progress);
+    const resume = list.querySelector('.ip-card[data-slug="audit-series"]');
+    equal(!!resume, true, "Resume card exists");
+    equal(resume.querySelector(".ip-pct-badge").textContent, "50%", "derived percentage");
+    equal(resume.querySelector(".ip-fill").style.width, "50%", "finite progress bar");
+    equal(resume.querySelector(".ip-continue-btn").href, "https://an1me.to/watch/audit-series-episode-25", "Resume URL");
+    equal(JSON.stringify(progress), before, "stored position is unchanged");
+  });
+  test("a completed movie with a retained partial position also appears in Resume", () => {
+    reset({ "standalone-movie": entry("Standalone Movie", { mediaType: "MOVIE", listState: "completed", totalEpisodes: 1,
+      episodes: [{ number: 1, duration: 6000, durationSource: "video" }] }) },
+      { "standalone-movie__episode-1": { currentTime: 1800, duration: 6000, percentage: 30, savedAt: "2026-10-04T09:00:00Z" } });
+    const resume = list.querySelector('.ip-card[data-slug="standalone-movie"]');
+    equal(!!resume, true, "completed movie Resume survives status filter");
+    equal(resume.querySelector(".ip-continue-btn").href, "https://an1me.to/watch/standalone-movie-episode-1", "movie Resume URL");
+    equal(AT.PopupState.animeData["standalone-movie"].listState, "completed", "completed list state retained");
+  });
   // Catches replacing the whole list after a single metadata update. Real cards/images and
   // delegated expansion handlers are used so retaining a renderer mock cannot satisfy it.
   test("one entry update keeps the other 118 cards and their images attached", () => {
