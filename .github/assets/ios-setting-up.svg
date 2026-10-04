@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="566" viewBox="0 0 1100 566" role="img" aria-labelledby="ios-title ios-description">
+  <title id="ios-title">An1me.to Tracker on iPhone — Safari extension inside a SideStore app</title>
+  <desc id="ios-description">An iPhone in Safari shows the extension control in the address bar with the An1me.to Tracker extension switched on. SideStore delivers and signs the app with a free Apple ID, so no Mac and no paid developer account are needed. Tracking, resume, the library, speed control and optional cloud sync run on the phone, while AniList and alerts stay on desktop. Reduced-motion preferences show the final, static state.</desc>
+  <defs>
+    <linearGradient id="io-surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c2033"/>
+      <stop offset="0.62" stop-color="#071320"/>
+      <stop offset="1" stop-color="#0c1b2d"/>
+    </linearGradient>
+    <linearGradient id="io-ink" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#57d6ff"/>
+      <stop offset="1" stop-color="#4b8cff"/>
+    </linearGradient>
+    <linearGradient id="io-mint" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#7bead2"/>
+      <stop offset="1" stop-color="#7fb2ff"/>
+    </linearGradient>
+    <linearGradient id="io-frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1d3d5c"/>
+      <stop offset="1" stop-color="#0f2132"/>
+    </linearGradient>
+    <linearGradient id="io-screen" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#0a1c2c"/>
+      <stop offset="1" stop-color="#071523"/>
+    </linearGradient>
+    <linearGradient id="io-hero" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#ffffff"/>
+      <stop offset="0.5" stop-color="#b9f2e4"/>
+      <stop offset="1" stop-color="#8fbcff"/>
+    </linearGradient>
+    <radialGradient id="io-pool" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#57d6ff" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#57d6ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="io-pool2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#63e0c7" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#63e0c7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
+    .io-kicker { fill: #63e0c7; font-size: 12.5px; font-weight: 700; letter-spacing: 2.6px; }
+    .io-h1 { font-size: 52px; font-weight: 800; letter-spacing: -1.4px; }
+    .io-sub { fill: #a8b6cb; font-size: 18px; }
+    .io-card-title { fill: #e6eefb; font-size: 16px; font-weight: 600; }
+    .io-card-txt { fill: #9fb2c7; font-size: 13.5px; }
+    .io-tiny { fill: #7d94ad; font-size: 12.5px; }
+    .io-label { fill: #93a9c1; font-size: 11.5px; font-weight: 700; letter-spacing: 1.4px; }
+    /* Row icons live in one 24x24 cell centred on x=314. */
+    .io-icon { fill: none; stroke: url(#io-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .io-solid { fill: url(#io-ink); }
+    .io-mint-stroke { fill: none; stroke: url(#io-mint); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .io-absent { fill: none; stroke: #3c556b; stroke-width: 1.8; stroke-linecap: round; }
+    .io-hair { stroke: #1b3448; stroke-width: 1.4; }
+
+    /* Transform-only and opacity-from-1: an entrance that fades from 0 would leave the
+       card invisible wherever animations are paused or suppressed. */
+    .io-slide-in { animation: io-slide-in 5.6s cubic-bezier(.33,1,.68,1) infinite; }
+    .io-toggle { animation: io-slide 5.6s cubic-bezier(.4,0,.2,1) infinite; }
+    .io-pulse { animation: io-ring 5.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+    .io-bob { animation: io-bob 7s ease-in-out infinite; }
+    .io-bob-slow { animation: io-bob 8.5s ease-in-out .6s infinite; }
+    .io-draw { stroke-dasharray: 90; animation: io-dash 5.6s ease-in-out infinite; }
+    .io-breathe { animation: io-breathe 4.4s ease-in-out infinite; }
+    .io-live { animation: io-breathe 4.4s ease-in-out .7s infinite; }
+
+    @keyframes io-slide-in { 0%, 6% { transform: translateY(12px); } 30%, 100% { transform: translateY(0); } }
+    @keyframes io-slide { 0%, 6% { transform: translateX(0); } 30%, 100% { transform: translateX(24px); } }
+    @keyframes io-ring { 0%, 6% { opacity: 0; transform: scale(0.6); } 26% { opacity: 0.9; } 48%, 100% { opacity: 0; transform: scale(2.1); } }
+    @keyframes io-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+    @keyframes io-dash { 0%, 10% { stroke-dashoffset: 90; } 34%, 100% { stroke-dashoffset: 0; } }
+    @keyframes io-breathe { 0%, 100% { r: 3.2; opacity: 0.65; } 50% { r: 4.8; opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .io-slide-in, .io-bob, .io-bob-slow, .io-breathe, .io-live { animation: none; }
+      .io-toggle { animation: none; transform: translateX(24px); }
+      .io-draw { animation: none; stroke-dashoffset: 0; }
+      .io-pulse { animation: none; opacity: 0; }
+    }
+  </style>
+
+  <rect x="1" y="1" width="1098" height="564" rx="24" fill="url(#io-surface)" stroke="#20394f" stroke-width="2"/>
+  <ellipse cx="180" cy="400" rx="230" ry="140" fill="url(#io-pool)"/>
+  <ellipse cx="900" cy="130" rx="300" ry="150" fill="url(#io-pool2)"/>
+
+  <!-- Zone 1: headline -->
+  <rect x="56" y="44" width="44" height="3.2" rx="1.6" fill="url(#io-ink)" class="io-breathe"/>
+  <text x="56" y="80" class="io-kicker">SAFARI EXTENSION · IPHONE</text>
+  <text x="54" y="144" class="io-h1" fill="url(#io-hero)">An1me.to Tracker</text>
+  <text x="56" y="184" class="io-sub">Your library and watch progress, on the phone.</text>
+  <text x="56" y="210" class="io-sub">Signed by SideStore with your own free Apple ID.</text>
+
+  <!-- Zone 2: iPhone running Safari -->
+  <g class="io-bob">
+    <rect x="64" y="240" width="140" height="256" rx="24" fill="url(#io-frame)"/>
+    <rect x="66.6" y="242.6" width="134.8" height="250.8" rx="21.6" fill="none" stroke="#2b465e" stroke-width="1.5"/>
+    <rect x="104" y="240" width="60" height="14" rx="7" fill="#08131f"/>
+    <rect x="128" y="244.5" width="12" height="2.4" rx="1.2" fill="#26445c"/>
+    <rect x="75" y="260" width="118" height="206" rx="13" fill="url(#io-screen)"/>
+
+    <!-- Safari chrome with the extension control -->
+    <rect x="82" y="268" width="104" height="21" rx="10.5" fill="#0d2233" stroke="#2b465e" stroke-width="1"/>
+    <circle cx="93" cy="278.5" r="4" fill="none" stroke="#4a6b86" stroke-width="1.3"/>
+    <path d="M93 274.5V282.5M89 278.5H97" stroke="#4a6b86" stroke-width="1.1"/>
+    <text x="103" y="282.4" class="io-tiny" style="font-size:10.5px">an1me.to</text>
+    <circle cx="166" cy="278.5" r="7" fill="none" stroke="#63e0c7" stroke-width="1.6" class="io-pulse"/>
+    <path d="M162.5 274.5H165V277M169.5 282.5H167V280" class="io-mint-stroke" style="stroke-width:1.5"/>
+    <rect x="174" y="274" width="22" height="10" rx="5" fill="#0f2b3d" stroke="#2b465e" stroke-width="1"/>
+    <g class="io-toggle"><circle cx="178.5" cy="279" r="3.6" fill="url(#io-mint)"/></g>
+
+    <!-- Saved progress -->
+    <rect x="82" y="296" width="104" height="84" rx="8" fill="#0f2537" stroke="#24435c" stroke-width="1"/>
+    <rect x="90" y="305" width="88" height="32" rx="5" fill="#15384f"/>
+    <path d="M127 313L138 321L127 329Z" class="io-solid"/>
+    <rect x="90" y="343" width="88" height="4.5" rx="2.2" fill="#223449"/>
+    <rect x="90" y="343" width="58" height="4.5" rx="2.2" fill="url(#io-ink)"/>
+    <text x="90" y="368" class="io-card-title" style="font-size:12.5px">Ep 07 · 12:48</text>
+
+    <!-- Library rows -->
+    <rect x="82" y="384" width="104" height="32" rx="6" fill="#0d2131"/>
+    <rect x="89" y="392" width="16" height="16" rx="4" fill="#15384f"/>
+    <path d="M93 397L99.5 400L93 403Z" class="io-solid"/>
+    <rect x="112" y="393" width="48" height="3.6" rx="1.8" fill="#2d4a63"/>
+    <rect x="112" y="401" width="30" height="3" rx="1.5" fill="#223449"/>
+    <rect x="82" y="422" width="104" height="32" rx="6" fill="#0d2131"/>
+    <rect x="89" y="430" width="16" height="16" rx="4" fill="#15384f"/>
+    <path d="M93 435L99.5 438L93 441Z" class="io-solid"/>
+    <rect x="112" y="431" width="42" height="3.6" rx="1.8" fill="#2d4a63"/>
+    <rect x="112" y="439" width="26" height="3" rx="1.5" fill="#223449"/>
+    <rect x="116" y="478" width="36" height="3" rx="1.5" fill="#38536b"/>
+  </g>
+
+  <!-- Zone 3: delivery chain -->
+  <path d="M206 365H280" class="io-hair" stroke-dasharray="5 6"/>
+  <path d="M206 365H280" style="fill:none;stroke:url(#io-ink);stroke-width:2.2;stroke-linecap:round" class="io-draw"/>
+  <path d="M274 360L281 365L274 370" class="io-mint-stroke"/>
+
+  <!-- Card: SideStore signs the app -->
+  <g class="io-slide-in">
+    <rect x="292" y="286" width="238" height="160" rx="16" fill="#0b1d2c" stroke="#24435c" stroke-width="1.4"/>
+    <text x="312" y="316" class="io-label">SIDESTORE</text>
+    <rect x="312" y="328" width="40" height="40" rx="12" fill="#0f2b3d" stroke="#2b465e" stroke-width="1.2"/>
+    <path d="M326 338L337 344L326 350Z" class="io-solid"/>
+    <path d="M326 355H339" class="io-mint-stroke" style="stroke-width:2.2"/>
+    <text x="366" y="344" class="io-card-title">An1me Tracker</text>
+    <text x="366" y="364" class="io-card-txt">unsigned IPA</text>
+    <path d="M312 386H510" class="io-hair"/>
+    <text x="312" y="409" class="io-card-txt">Signed on the phone with a</text>
+    <text x="312" y="428" class="io-card-txt">free Apple ID.</text>
+  </g>
+
+  <!-- Card: what runs on the phone, and what does not -->
+  <g class="io-slide-in">
+    <rect x="560" y="286" width="484" height="160" rx="16" fill="#0b1d2c" stroke="#24435c" stroke-width="1.4"/>
+    <text x="582" y="316" class="io-label">ON THE PHONE</text>
+
+    <!-- Left column: available -->
+    <path d="M582 342L591 353L609 329" class="io-icon"/>
+    <text x="624" y="338" class="io-card-title">Tracking, Resume</text>
+    <text x="624" y="356" class="io-card-txt">episode progress and</text>
+    <text x="624" y="373" class="io-card-txt">playback positions</text>
+
+    <path d="M582 418A11 11 0 0 1 604 418" class="io-icon"/>
+    <path d="M593 418L600 409" class="io-icon"/>
+    <circle cx="593" cy="418" r="2.2" class="io-solid"/>
+    <text x="624" y="406" class="io-card-title">Speed Control</text>
+    <text x="624" y="424" class="io-card-txt">and the outro skip</text>
+    <text x="624" y="441" class="io-card-txt">button</text>
+
+    <!-- Right column: desktop only -->
+    <path d="M828 342V441" class="io-hair"/>
+    <path d="M852 341H868" class="io-absent"/>
+    <text x="884" y="338" class="io-card-title">AniList</text>
+    <text x="884" y="356" class="io-card-txt">stays on desktop, off</text>
+    <text x="884" y="373" class="io-card-txt">on mobile for battery</text>
+
+    <path d="M852 421H868" class="io-absent"/>
+    <text x="884" y="406" class="io-card-title">Alerts</text>
+    <text x="884" y="424" class="io-card-txt">Safari extensions</text>
+    <text x="884" y="441" class="io-card-txt">cannot notify</text>
+  </g>
+
+  <!-- Zone 4: chips, aligned with the phone column -->
+  <g class="io-bob-slow">
+    <rect x="64" y="514" width="110" height="26" rx="13" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.13" stroke-width="1"/>
+    <text x="119" y="532" text-anchor="middle" fill="#c9d6e8" style="font-size:12.5px;font-weight:700">iOS 18+</text>
+    <rect x="184" y="514" width="150" height="26" rx="13" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.13" stroke-width="1"/>
+    <text x="259" y="532" text-anchor="middle" fill="#c9d6e8" style="font-size:12.5px;font-weight:700">No Mac needed</text>
+    <rect x="344" y="514" width="164" height="26" rx="13" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.13" stroke-width="1"/>
+    <text x="426" y="532" text-anchor="middle" fill="#c9d6e8" style="font-size:12.5px;font-weight:700">Free Apple ID</text>
+  </g>
+
+  <!-- Signing seal, clear of the headline block -->
+  <g class="io-bob">
+    <circle cx="1006" cy="108" r="26" fill="#0f2b3d" stroke="#63e0c7" stroke-opacity="0.45" stroke-width="1.4"/>
+    <path d="M1006 94l11 4.6v11c0 7-4.6 12.4-11 14.6-6.4-2.2-11-7.6-11-14.6v-11z" class="io-mint-stroke"/>
+    <path d="M1000.5 109l4.1 4.1 7.3-8.2" class="io-mint-stroke"/>
+  </g>
+  <text x="1006" y="155" text-anchor="middle" class="io-tiny">signed for you</text>
+</svg>

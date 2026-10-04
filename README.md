@@ -2,20 +2,26 @@
 
 <img src=".github/assets/hero-animated.svg" width="100%" alt="An1me Tracker — Never lose your episode">
 
-[![Version 8.2.0](.github/assets/badge-v-tracker.svg)](CHANGELOG.md)
-[![Manifest V3](.github/assets/badge-manifest.svg)](manifest.json)
-[![Cloud Sync](.github/assets/badge-cloud-sync.svg)](PRIVACY.md)
-
-**Instant resume, automated tracking, and cross-device sync for anime lovers.**  
-<sub>Built for Chrome, Edge, and Safari on iPhone (via SideStore)</sub>
+<br>
 
 <p align="center">
-  <a href="#-quick-install"><b>⚡ Install</b></a> &nbsp;•&nbsp;
-  <a href="#-features"><b>✨ Features</b></a> &nbsp;•&nbsp;
-  <a href="#-speed-controls"><b>🚀 Speed Boost</b></a> &nbsp;•&nbsp;
-  <a href="#-platforms"><b>📱 Platforms</b></a> &nbsp;•&nbsp;
-  <a href="IOS.md"><b>🍏 iPhone Setup</b></a> &nbsp;•&nbsp;
-  <a href="CHANGELOG.md"><b>📜 Changelog</b></a>
+  <a href="CHANGELOG.md"><img src=".github/assets/badge-v-tracker.svg" alt="Version 8.2.0"></a>&nbsp;&nbsp;
+  <a href="manifest.json"><img src=".github/assets/badge-manifest.svg" alt="Manifest V3"></a>&nbsp;&nbsp;
+  <a href="PRIVACY.md"><img src=".github/assets/badge-cloud-sync.svg" alt="Cloud Sync Optional"></a>
+</p>
+
+### Never lose your place. Watch, resume, and sync seamlessly.
+<sub>Lightweight playback tracker &amp; library companion for Chrome, Edge, and Safari on iPhone</sub>
+
+<br>
+
+<p align="center">
+  <a href="#install"><img src=".github/assets/btn-install.svg" alt="Install"></a>&nbsp;
+  <a href="#features"><img src=".github/assets/btn-features.svg" alt="Features"></a>&nbsp;
+  <a href="#speed-controls"><img src=".github/assets/btn-speed.svg" alt="Speed Boost"></a>&nbsp;
+  <a href="#platforms"><img src=".github/assets/btn-platforms.svg" alt="Platforms"></a>&nbsp;
+  <a href="IOS.md"><img src=".github/assets/btn-ios.svg" alt="iPhone Setup"></a>&nbsp;
+  <a href="CHANGELOG.md"><img src=".github/assets/btn-changelog.svg" alt="Changelog"></a>
 </p>
 
 </div>
@@ -24,6 +30,7 @@
 
 <br>
 
+<a id="features"></a>
 <div align="center">
 
 ## ✨ Features
@@ -47,6 +54,7 @@
 
 <br>
 
+<a id="platforms"></a>
 <div align="center">
 
 ## 📱 Platforms
@@ -61,6 +69,7 @@
 
 <br>
 
+<a id="install"></a>
 <div align="center">
 
 ## ⚡ Quick Install
@@ -101,6 +110,7 @@ For step-by-step instructions with screenshots, read the **[iPhone Setup Guide (
 
 <br>
 
+<a id="speed-controls"></a>
 <div align="center">
 
 ## 🚀 Speed Controls
@@ -161,21 +171,25 @@ Get-ChildItem test -Filter '*.test.js' | ForEach-Object { node $_.FullName }
 
 <br>
 
+<a id="privacy"></a>
 <div align="center">
 
 ## 🔒 Privacy & Permissions
 
-**No telemetry. No tracking pixels. No ad SDKs.**
+<img src=".github/assets/privacy-card.svg" width="100%" alt="Privacy and Permissions">
 
-- Works entirely offline with local storage by default.
-- Cloud sync is completely optional and strictly scoped to your Firebase user record (`users/{uid}`).
-- Full permission audit breakdown in **[PRIVACY.md](PRIVACY.md)**.
+<br><br>
+
+<p align="center">
+  <a href="PRIVACY.md"><img src=".github/assets/btn-privacy-detail.svg" alt="Privacy Policy"></a>&nbsp;&nbsp;
+  <a href="LICENSE"><img src=".github/assets/btn-licence-read.svg" alt="View License"></a>
+</p>
 
 <br>
 
 <sub>
 <b>Source-available project</b> · Personal use and code review permitted under the <a href="LICENSE">License</a>.<br>
-Not affiliated with an1me.to, AniList, MyAnimeList, or Google.
+Independent extension not affiliated with an1me.to, AniList, MyAnimeList, or Google.
 </sub>
 
 </div>

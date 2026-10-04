@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="118" height="34" viewBox="0 0 118 34" role="img" aria-label="Platforms">
+  <defs>
+    <linearGradient id="btn-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#122438"/>
+      <stop offset="100%" stop-color="#091522"/>
+    </linearGradient>
+    <linearGradient id="btn-border" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3d6c99" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#1b364f" stop-opacity="0.4"/>
+    </linearGradient>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    @keyframes pulsePlatform { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+    .btn-icon { animation: pulsePlatform 3s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .btn-icon { animation: none; } }
+  </style>
+
+  <rect x="0.8" y="0.8" width="116.4" height="32.4" rx="16.2" fill="url(#btn-bg)" stroke="url(#btn-border)" stroke-width="1.2"/>
+  
+  <!-- Devices Icon -->
+  <g class="btn-icon" transform="translate(13, 9)" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="0" y="1" width="14" height="9" rx="1.5"/>
+    <line x1="7" y1="10" x2="7" y2="13"/>
+    <line x1="3" y1="13" x2="11" y2="13"/>
+    <rect x="11" y="5" width="5" height="9" rx="1" fill="#122438"/>
+  </g>
+  
+  <text x="35" y="21.5" fill="#edf3ff" font-size="12.5" font-weight="700" letter-spacing="0.2">Platforms</text>
+</svg>
