@@ -66,6 +66,24 @@ function page(url = "https://an1me.to/watch/naruto-episode-1") {
     assert.equal(saved.length, 1); assert.equal(saved[0][1], 110); assert.equal(saved[0][4], true);
     assert.equal(h.messages.filter(m => m.type === "SYNC_PROGRESS_ONLY").length, 0);
   });
+  // iPhone Safari keeps pages in its back-forward cache: going back to the episode restores the page without
+  // reloading it. The pagehide that preceded it tore tracking down, so without a fresh start on pageshow the
+  // restored episode would play with nothing saving its progress.
+  await test("a watch page restored from the back-forward cache starts tracking again", async () => {
+    const h = page(); h.load("src/content/main.js"); await h.init(); assert.equal(h.starts(), 1);
+    const before = h.stops();
+    h.win.dispatchEvent(new Event("pagehide"));
+    assert.ok(h.stops() > before, "leaving tears tracking down");
+    const restored = new Event("pageshow"); restored.persisted = true;
+    h.win.dispatchEvent(restored);
+    for (let i = 0; i < 20 && h.starts() < 2; i++) await new Promise(setImmediate);
+    assert.equal(h.starts(), 2, "and the restored page watches its video again");
+    // Control: an ordinary first load (not from the cache) does not start a second time.
+    const fresh = new Event("pageshow"); fresh.persisted = false;
+    h.win.dispatchEvent(fresh);
+    for (let i = 0; i < 20; i++) await new Promise(setImmediate);
+    assert.equal(h.starts(), 2);
+  });
   await test("leaving a watch route immediately releases player, page timers and observers", async () => {
     const h = page(); h.load("src/content/main.js"); await h.init(); assert.equal(h.starts(), 1);
     const before = h.stops(); h.navigate("/anime/naruto/");

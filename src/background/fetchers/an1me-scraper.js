@@ -53,7 +53,8 @@ function buildAnimeInfoSlugCandidates(slug) {
   return out;
 }
 
-const SCRAPER_TIMEOUT_MS = AnimeTrackerUtils.isMobileDevice() ? 6000 : 8000;
+// Asked per request: an iPad is only known as mobile in the worker once the runtime reports the platform.
+const scraperTimeoutMs = () => (AnimeTrackerUtils.isMobileDevice() ? 6000 : 8000);
 
 function cleanScrapedTitle(raw) {
   const text = AnimeTrackerUtils.decodeHtmlEntities(String(raw || "").replace(/<[^>]+>/g, " "))
@@ -202,12 +203,12 @@ async function fetchAnimePageInfo(slug) {
 
   let resolvedSlug = candidates[0];
   let url = `https://an1me.to/anime/${resolvedSlug}/`;
-  let response = await fetchAn1mePage(url, SCRAPER_TIMEOUT_MS);
+  let response = await fetchAn1mePage(url, scraperTimeoutMs());
 
   if (!response.ok && response.status === 404 && candidates.length > 1) {
     for (const candidateSlug of candidates.slice(1)) {
       try {
-        const candidateResponse = await fetchAn1mePage(`https://an1me.to/anime/${candidateSlug}/`, SCRAPER_TIMEOUT_MS);
+        const candidateResponse = await fetchAn1mePage(`https://an1me.to/anime/${candidateSlug}/`, scraperTimeoutMs());
         if (candidateResponse.ok) {
           response = candidateResponse;
           resolvedSlug = candidateSlug;

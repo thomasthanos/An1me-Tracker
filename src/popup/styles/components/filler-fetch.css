@@ -286,13 +286,38 @@
     padding: 3px 6px;
   }
   .ffui-log-name {
-    min-width: 65px;
+    /* A zero basis keeps a long title on the icon's line, cut with an ellipsis, now that rows wrap. */
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  /* The popup is narrow on every device (420px on desktop, the phone's width on iOS), and a detail
+     squeezed beside the title was cut to "info cached • filler site unr…", which hid the one part that
+     says what to do. The detail gets its own line under the title instead, wrapping if it must. */
+  .ffui-log-row {
+    flex-wrap: wrap;
+    row-gap: 1px;
+  }
+  .ffui-log-row::after {
+    content: "";
+    flex-basis: 100%;
+    order: 2;
   }
   .ffui-log-detail {
-    max-width: 48%;
+    order: 3;
+    max-width: calc(100% - 19px);
+    margin-left: 19px;
     font-size: 9.5px;
     padding: 1px 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    border-radius: 8px;
   }
+}
+
+/* Two-line rows need more room, and a phone has it: show about seven rows instead of three. The desktop
+   popup is only 600px tall, so it keeps the shorter feed. */
+@media (max-width: 600px) and (min-height: 700px) {
+  .ffui-log { max-height: 300px; }
 }
 
 @media (hover: none) and (pointer: coarse) {

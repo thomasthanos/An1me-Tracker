@@ -17,8 +17,10 @@ const METADATA_REPAIR_MODAL_FETCH_THRESHOLD = 8;
 // "from scratch" rather than a top-up.
 const METADATA_REPAIR_MODAL_FETCH_RATIO = 0.6;
 const METADATA_REPAIR_ORIGINS = new Set(["manual", "sign-in", "targeted", "background"]);
-const isMobileUA = AnimeTrackerUtils.isMobileDevice();
-const METADATA_REPAIR_MAX_ATTEMPTS = isMobileUA ? 1 : 2;
+// Asked at each use rather than once at load: in the worker an iPad is only known as mobile once the runtime
+// has reported the platform (see AnimeTrackerUtils.rememberPlatformOs).
+const isMobileUA = () => AnimeTrackerUtils.isMobileDevice();
+const metadataRepairMaxAttempts = () => (isMobileUA() ? 1 : 2);
 const METADATA_REPAIR_RETRY_BASE_DELAY_MS = 1500;
 
 function normalizeMetadataRepairOrigin(value, isTargeted = false, isAuto = null) {
@@ -85,7 +87,7 @@ function isRetryableMetadataRepairError(error) {
 
 async function runMetadataRepairWithRetry(task, options = {}) {
   const {
-    attempts = METADATA_REPAIR_MAX_ATTEMPTS,
+    attempts = metadataRepairMaxAttempts(),
     baseDelayMs = METADATA_REPAIR_RETRY_BASE_DELAY_MS,
     shouldRetry = isRetryableMetadataRepairError,
   } = options;
@@ -227,7 +229,7 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
   const forceInfoRefresh = options.forceInfoRefresh === true;
   const forceFillerRefresh = options.forceFillerRefresh === true;
   const retryFailures = options.retryFailures === true;
-  const isMobile = options.isMobile === true || isMobileUA;
+  const isMobile = options.isMobile === true || isMobileUA();
   const onlySlugs = Array.isArray(options.onlySlugs) && options.onlySlugs.length ? new Set(options.onlySlugs) : null;
   const prioritySlugs = new Set(Array.isArray(options.prioritySlugs) ? options.prioritySlugs : []);
   const entries = Object.entries(animeData || {})
@@ -872,7 +874,7 @@ async function runMetadataRepairBatch(options = {}) {
       }
 
       await setMetadataRepairState(state);
-      await AnimeTrackerUtils.sleep(gentle ? METADATA_REPAIR_PLAYBACK_DELAY_MS : isMobileUA ? 1500 : METADATA_REPAIR_INTER_ITEM_DELAY_MS);
+      await AnimeTrackerUtils.sleep(gentle ? METADATA_REPAIR_PLAYBACK_DELAY_MS : isMobileUA() ? 1500 : METADATA_REPAIR_INTER_ITEM_DELAY_MS);
     }
   } catch (error) {
     console.error("[BG] Library repair failed:", error);

@@ -346,6 +346,7 @@ const FillerFetchUI = {
     if (detail) {
       const detailSpan = document.createElement("span");
       detailSpan.className = "ffui-log-detail";
+      detailSpan.setAttribute("title", detail);
       detailSpan.textContent = detail;
       row.appendChild(detailSpan);
     }

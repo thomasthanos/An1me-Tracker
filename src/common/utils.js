@@ -115,8 +115,18 @@
     remove: (keys) => storageCall("remove", keys, "Local storage remove failed").then(() => undefined),
   });
 
+  // An extension worker has no navigator.maxTouchPoints, and Safari on an iPad reports itself as a Mac, so
+  // in the worker an iPad used to count as a desktop: hidden an1me.to tabs it would watch open, AniList on,
+  // desktop timeouts. The extension runtime knows the OS, so the worker asks once at start and keeps the
+  // answer here; null until it arrives, which is long before any network work needs it.
+  let platformOs = null;
+  function rememberPlatformOs(os) {
+    platformOs = typeof os === "string" && os ? os : null;
+  }
+
   // Phones get gentler background work: the OS suspends the worker sooner and the network is slower.
   function isMobileDevice() {
+    if (platformOs === "ios" || platformOs === "android") return true;
     return typeof navigator !== "undefined" && (
       /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "") ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
@@ -151,6 +161,18 @@
 
   if (typeof document !== "undefined" && document.documentElement?.classList?.add) {
     document.documentElement.classList.add(isMobileDevice() ? "is-mobile" : "is-desktop");
+  }
+
+  // Only the worker needs it (pages have maxTouchPoints), and content scripts have no getPlatformInfo.
+  if (typeof document === "undefined") {
+    try {
+      const runtime = root.chrome?.runtime;
+      if (typeof runtime?.getPlatformInfo === "function") {
+        const remember = (info) => rememberPlatformOs(info?.os);
+        const pending = runtime.getPlatformInfo(remember);
+        if (pending && typeof pending.then === "function") pending.then(remember, () => {});
+      }
+    } catch {}
   }
 
   root.AnimeTrackerUtils = Object.freeze({
