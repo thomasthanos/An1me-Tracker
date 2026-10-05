@@ -1,3 +1,9 @@
+<p align="center">
+  <img src=".github/assets/header-security.svg" width="880" alt="An1me Tracker — Security policy">
+</p>
+
+<p align="center"><a href="README.md">Overview</a> · <a href="IOS.md">iPhone</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="PRIVACY.md">Privacy</a></p>
+
 # Security Policy
 
 ## Reporting a vulnerability
@@ -21,6 +27,9 @@ Update to the latest desktop package or SideStore build before testing a suspect
 Older releases and the retired standalone Speed Control extension do not receive separate fixes.
 The available tracker builds are listed in [Releases](https://github.com/thomasthanos/An1me-Tracker/releases).
 
+<details>
+<summary><b>System and scope</b></summary>
+
 ## System and scope
 
 An1me Tracker is a Chrome/Edge extension and an iOS Safari extension packaged in a small native
@@ -32,6 +41,11 @@ This policy covers the extension entry points (`manifest.json`, `background.js`,
 workflows that build and publish desktop/Safari resources, IPAs and SideStore metadata.
 Credentials, private library data, playback positions, account identity and release integrity are
 the principal assets.
+
+</details>
+
+<details>
+<summary><b>Trust boundaries and security requirements</b></summary>
 
 ## Trust boundaries and security requirements
 
@@ -59,6 +73,11 @@ These are required properties for review, not a claim that every deployed contro
   pull requests must not be able to execute with release credentials or replace published IPA
   artifacts and SideStore download/integrity metadata.
 
+</details>
+
+<details>
+<summary><b>Findings and review context</b></summary>
+
 ## Findings and review context
 
 Report a broken trust boundary with realistic reachability and impact. Examples include account
@@ -81,6 +100,11 @@ demonstrated unauthorized access or API abuse. See
 There are no blanket scanner suppressions or owner-approved security-risk exceptions in this
 policy. Changes to exclusions or accepted risks require a separate maintainer decision.
 
+</details>
+
+<details>
+<summary><b>Automated checks and limitations</b></summary>
+
 ## Automated checks and limitations
 
 - GitHub CodeQL scans JavaScript/TypeScript and GitHub Actions with the extended query suite and
@@ -97,3 +121,5 @@ policy. Changes to exclusions or accepted risks require a separate maintainer de
 Automated checks do not constitute a guarantee that the product has no vulnerabilities. This
 policy documents required boundaries and the reporting process; it does not authorize testing
 other users' data or third-party infrastructure.
+
+</details>

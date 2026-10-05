@@ -1,3 +1,9 @@
+<p align="center">
+  <img src=".github/assets/header-privacy.svg" width="880" alt="An1me Tracker — Privacy">
+</p>
+
+<p align="center"><a href="README.md">Overview</a> · <a href="IOS.md">iPhone</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="SECURITY.md">Security</a></p>
+
 # Privacy policy - An1me.to Tracker
 
 **Last updated:** 6 September 2026  
@@ -33,3 +39,4 @@ Metadata lookups may send a series title or ID to AniList, Jikan/MyAnimeList, An
 The `identity` permission is used only for Google sign-in. It does not grant access to Gmail, Drive, Contacts, or other Google account data.
 
 Material changes to this policy will be reflected in its update date and in the public commit history.
+

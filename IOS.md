@@ -1,12 +1,14 @@
-<div align="center">
+<p align="center">
+  <img src=".github/assets/ios-setting-up.svg" width="880" alt="An1me Tracker on iPhone — Safari extension through SideStore">
+</p>
 
-<img src=".github/assets/ios-setting-up.svg" width="1100" alt="An1me.to Tracker on iPhone: the Safari extension switched on in the address bar, delivered and signed through SideStore with a free Apple ID.">
+<p align="center"><a href="README.md">Overview</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="PRIVACY.md">Privacy</a> · <a href="SECURITY.md">Security</a></p>
 
-[![Version 8.2.1](.github/assets/badge-v-tracker.svg)](CHANGELOG.md)
+[![Version 8.2.1](.github/assets/badge-v-tracker.svg)](CHANGELOG.md) · **iOS 18+** · **Free Apple ID**
 
-**iOS 18+** · **No Mac needed** · **Free Apple ID**
+# iPhone setup
 
-</div>
+[SideStore](#1-install-sidestore) · [Install tracker](#2-install-an1me-tracker) · [Enable Safari](#3-turn-the-extension-on) · [Sign in](#4-sign-in) · [Troubleshooting](#troubleshooting)
 
 The tracker runs on iPhone as a Safari extension inside a small app. It is not on the App Store: each
 release attaches an unsigned `An1meTracker-<version>.ipa`, and **SideStore** signs it with your own
@@ -17,7 +19,7 @@ free Apple ID and keeps it signed.
 > Windows, macOS or Linux computer once — or none at all on iOS 27, where **SideInstaller** installs
 > SideStore on the device.
 
-## <img src=".github/assets/icon-install.svg" width="24" height="29" alt="" align="top"> 1. Install SideStore
+## 1. Install SideStore
 
 Follow the official guide at [docs.sidestore.io](https://docs.sidestore.io); the steps change between
 versions. In short, from a Windows PC:
@@ -30,7 +32,7 @@ versions. In short, from a Windows PC:
    app; then **Settings → Privacy & Security → Developer Mode** → on, and restart.
 5. Open SideStore, connect LocalDevVPN, and sign in with the same Apple ID.
 
-## <img src=".github/assets/icon-play.svg" width="24" height="29" alt="" align="top"> 2. Install An1me Tracker
+## 2. Install An1me Tracker
 
 1. In SideStore, open **Sources → +** and paste this source URL:
 
@@ -47,7 +49,7 @@ versions. In short, from a Windows PC:
 > `An1meTracker-<version>.ipa` from the [releases page](https://github.com/thomasthanos/An1me-Tracker/releases)
 > and use **My Apps → +**. An IPA download URL cannot be added as a Source.
 
-## <img src=".github/assets/icon-sparkle.svg" width="24" height="29" alt="" align="top"> 3. Turn the extension on
+## 3. Turn the extension on
 
 1. **Settings → Apps → Safari → Extensions → An1me.to Tracker** → turn it on.
 2. On the same screen, set **All Websites** to **Allow**.
@@ -57,7 +59,7 @@ versions. In short, from a Windows PC:
 > Without **Allow**, Safari blocks the extension's cloud sync and metadata lookups. It can still only
 > reach the sites it declares — an1me.to and the sync, AniList and metadata services.
 
-## <img src=".github/assets/icon-key.svg" width="24" height="29" alt="" align="top"> 4. Sign in
+## 4. Sign in
 
 Google and AniList sign-in need Chrome's identity API, which Safari does not have.
 
@@ -68,7 +70,10 @@ Google and AniList sign-in need Chrome's identity API, which Safari does not hav
   extension updates AniList. Existing credentials and cached data are kept.
 - **New-episode alerts are not available on iPhone** — Safari extensions cannot show notifications.
 
-## <img src=".github/assets/icon-play.svg" width="24" height="29" alt="" align="top"> Speed Control
+## Speed Control
+
+<details>
+<summary><b>Player controls, fullscreen &amp; local preferences</b></summary>
 
 On the page player, tap the speed button to choose **1×, 1.25×, 1.5× or 2×**. Hold it for temporary
 **2×**; releasing, cancelling the gesture or leaving the page restores your previous speed. The button
@@ -92,7 +97,9 @@ the integrated feature. Update over your existing tracker installation to keep p
 Automated tests cover speed/gesture state, preference writes and Resume/cloud timestamps; audio,
 native fullscreen behaviour and device temperature still need a check on a physical iPhone.
 
-## <img src=".github/assets/icon-shield.svg" width="24" height="29" alt="" align="top"> Updating and staying signed
+</details>
+
+## Updating and staying signed
 
 | | |
 |---|---|
@@ -102,40 +109,70 @@ native fullscreen behaviour and device temperature still need a check on a physi
 | **Manual installs** | Add the source. If SideStore does not link the installed app to it, install from the source over the existing app — do not uninstall first. The bundle ID is unchanged, so updates keep your data. |
 | **Apple ID limits** | A free Apple ID allows **3 apps** at a time (SideStore is one) and **10 App IDs per 7 days**. This app uses **2**: the app and its Safari extension. |
 
-## <img src=".github/assets/icon-help.svg" width="24" height="29" alt="" align="top"> Troubleshooting
+## Troubleshooting
 
-**Desktop Resume shows an earlier phone position** — update the phone and desktop extension to
+<details>
+<summary><b>Desktop Resume shows an earlier phone position</b></summary>
+
+update the phone and desktop extension to
 8.1.1 or later. Pause and hidden-page saves use a bounded 30-second checkpoint interval, and desktop
 polls check the remote revision before reusing their cache. Page-exit saves request an immediate
 flush, but iOS suspension or a failed request can still defer an upload. The local position and
 pending retry remain saved. Open Safari again with a working connection, then use the PC's cloud
 refresh if needed; the sync must finish on the phone before the PC can receive its position.
 
-**Saved progress exists but Resume is missing** — update to 8.1.0 or later. Legacy positions without
+</details>
+
+<details>
+<summary><b>Saved progress exists but Resume is missing</b></summary>
+
+update to 8.1.0 or later. Legacy positions without
 a percentage use their saved time and duration, and partial movie positions remain available even if
 the movie is marked completed. Watched series episodes, completed series, dropped and on-hold titles
 stay excluded. Updating does not reset progress or usable caches.
 
-**The phone warms up when opening a large library** — update to 8.0.3 or later. Covers load near the
+</details>
+
+<details>
+<summary><b>The phone warms up when opening a large library</b></summary>
+
+update to 8.0.3 or later. Covers load near the
 viewport through a bounded queue, unchanged cards stay mounted during fetch, and overflow episode
 tags load when you open their more control. Hidden popup work pauses. AniList and automatic 4K
 selection are disabled on mobile, including older enabled preferences. These changes reduce
 unnecessary work; temperature still needs checking on the device.
 
-**Fetch was interrupted by an update or a metadata service timeout** — the saved queue resumes
+</details>
+
+<details>
+<summary><b>Fetch was interrupted by an update or a metadata service timeout</b></summary>
+
+the saved queue resumes
 automatically. Usable metadata and filler caches remain available, while failed lookups wait for
 retry. Updates preserve watched episodes and playback positions; do not uninstall to update.
 
-**SideStore shows a small icon beside the app name** — this is its source badge. In 8.1.1 the source
+</details>
+
+<details>
+<summary><b>SideStore shows a small icon beside the app name</b></summary>
+
+this is its source badge. In 8.1.1 the source
 and app listing use the same light artwork at a new release-specific URL. SideStore owns this layout;
 native Home Screen icon appearances remain available through iOS.
 
-**Choose an icon appearance** — use the Home Screen's Edit → Customise controls for Light, Dark,
+</details>
+
+<details>
+<summary><b>Choose an icon appearance</b></summary>
+
+use the Home Screen's Edit → Customise controls for Light, Dark,
 Tinted or Clear where your iOS version supports them. The native icon keeps the T and anime portrait;
 iOS supplies the glass rendering and your selected tint. Older iOS versions receive flat icons
 generated by Xcode from the same native artwork; catalog-only builds retain the PNG variants.
 [Apple's Home Screen guide](https://support.apple.com/guide/iphone/iph385473442/ios) and
 [icon assets and design](src/icons/ios/DESIGN.md).
+
+</details>
 
 ### Short answers
 
@@ -145,4 +182,3 @@ generated by Xcode from the same native artwork; catalog-only builds retain the 
 | "Unable to verify app", or the app will not open | Open SideStore and refresh it, with LocalDevVPN on. |
 | Cloud sync never finishes | Set **All Websites** to **Allow** for the extension. |
 
-<img src=".github/assets/divider.svg" width="100%" alt="">
