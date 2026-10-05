@@ -306,8 +306,9 @@
         { success: true },
       );
     } catch (err) {
-      PopupLogger.warn("Firebase", `Password reset request failed: ${err?.message}`);
-      setEmailFormError(err?.message || "Couldn't send the reset email. Please try again.");
+      if (err?.code !== 'SITE_ACCESS_REQUIRED') PopupLogger.warn("Firebase", `Password reset request failed: ${err?.message}`);
+      setEmailFormError(err?.code === 'SITE_ACCESS_REQUIRED' ? 'Password reset is paused. Allow website access above, then try again.' :
+        err?.message || "Couldn't send the reset email. Please try again.");
     }
 
     if (forgotBtn) {

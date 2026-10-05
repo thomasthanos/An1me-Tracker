@@ -563,6 +563,7 @@ const FirebaseLib = (function () {
       PopupLogger.log("Firebase", `Password reset email sent to ${email}`);
       return { ok: true, message: genericMessage };
     } catch (err) {
+      if (err?.code === 'SITE_ACCESS_REQUIRED') throw err;
       const mapped = mapIdentityToolkitError(err?.message);
       if (mapped.suppressError) {
         // Unknown email — stay generic so the form can't be used to enumerate accounts.

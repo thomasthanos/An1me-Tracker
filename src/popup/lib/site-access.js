@@ -187,7 +187,7 @@
       button.disabled = true;
       button.textContent = phone ? "Waiting for Safari…" : "Waiting for browser…";
       button.setAttribute("aria-busy", "true");
-      request(phone ? declaredOptionalOrigins() : blocked, (granted) => {
+      request(phone ? declaredOptionalOrigins() : blocked, async (granted) => {
         if (setupGenerations.get(container) !== token || !container.isConnected) return;
         button.disabled = false;
         button.textContent = "Allow access";
@@ -195,6 +195,14 @@
         if (!granted) {
           fallback.hidden = false;
           return;
+        }
+        if (globalThis.AnimeTrackerWebsiteAccess?.enabled) {
+          await globalThis.AnimeTrackerWebsiteAccess.refresh();
+          if (setupGenerations.get(container) !== token || !container.isConnected) return;
+          if (globalThis.AnimeTrackerWebsiteAccess.isPaused()) {
+            await render(container, { onGranted, knownBlockedOrigins: globalThis.AnimeTrackerWebsiteAccess.getState().blockedOrigins });
+            return;
+          }
         }
         container.hidden = true;
         if (typeof onGranted === "function") onGranted();

@@ -78,7 +78,8 @@
         }
         reply({ ok: res.ok, status: res.status, finalUrl: res.url, text: await res.text() });
       })
-      .catch((error) => reply({ ok: false, status: 0, error: error?.message || String(error) }))
+      .catch((error) => reply({ ok: false, status: 0, paused: error?.code === 'SITE_ACCESS_REQUIRED',
+        error: error?.code === 'SITE_ACCESS_REQUIRED' ? error.code : error?.message || String(error) }))
       .finally(() => clearTimeout(timer));
 
     return true;

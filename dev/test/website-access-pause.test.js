@@ -108,8 +108,7 @@ test('a gateway denied mid-request cannot retry or open a fallback tab', async (
   h = cloudWorker(seed(), {}, { safariDenied: [], beforeRequest: async () => {
     h.revokeWebsiteAccess(CLOUD); throw h.context.AnimeTrackerWebsiteAccess.deniedError();
   } });
-  h.context.chrome.tabs.query = async () => [];
-  h.context.chrome.tabs.create = async () => { tabs++; return { id: 12 }; };
+  h.context.chrome.tabs = { query: async () => [], create: async () => { tabs++; return { id: 12 }; } };
   await settle();
   await assert.rejects(h.call('an1meFetch', 'https://an1me.to/anime/bleach/'), { code: 'SITE_ACCESS_REQUIRED' });
   assert.equal(tabs, 0); assert.equal(h.requests.length, 1);
@@ -129,8 +128,8 @@ test('paused watchlist deletes are durable across worker restart and applied aft
   assert.equal(h.store.pendingWebsiteWatchlist?.['42']?.type, 'remove');
   h = cloudWorker(h.store, {}, { safariDenied: [CLOUD] }); await settle();
   const sent = [];
-  h.context.chrome.tabs.query = async () => [{ id: 1 }];
-  h.context.chrome.tabs.sendMessage = (_id, message, callback) => { sent.push(message); callback({ success: true }); };
+  h.context.chrome.tabs = { query: async () => [{ id: 1 }],
+    sendMessage: (_id, message, callback) => { sent.push(message); callback({ success: true }); } };
   h.grantWebsiteAccess(); await settle();
   assert.equal(sent.length, 1); assert.equal(sent[0].watchlistType, 'remove');
   assert.deepEqual(h.store.pendingWebsiteWatchlist || {}, {});

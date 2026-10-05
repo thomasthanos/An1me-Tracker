@@ -49,18 +49,25 @@ const state = {
   },
 };
 
-async function layoutOf(browser, markup, { lateShare = false } = {}) {
+async function layoutOf(browser, markup, { lateShare = false, accessPaused = false } = {}) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
     userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1",
   });
   try {
     const page = await context.newPage();
+    let coverRequests = 0;
+    await page.route('https://cdn.myanimelist.net/**', route => {
+      coverRequests++;
+      return route.fulfill({ contentType: 'image/gif', body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64') });
+    });
     await page.route("https://an1me.to/**", (route) => route.fulfill({
       contentType: "text/html",
       body: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#1a1a2e;font-family:sans-serif}*{box-sizing:border-box}</style></head><body>${markup}</body></html>`,
     }));
-    await page.addInitScript((snapshot) => {
+    const snapshot = structuredClone(state);
+    if (accessPaused) for (const [slug, anime] of Object.entries(snapshot.animeData)) anime.coverImage = `https://cdn.myanimelist.net/${slug}.jpg`;
+    await page.addInitScript(({ snapshot, accessPaused }) => {
       window.chrome = {
         runtime: { id: "test", lastError: null, sendMessage: (message, callback) => callback && callback({}), onMessage: { addListener() {} } },
         storage: {
@@ -68,7 +75,13 @@ async function layoutOf(browser, markup, { lateShare = false } = {}) {
           onChanged: { addListener() {}, removeListener() {} },
         },
       };
-    }, state);
+      if (accessPaused) {
+        let paused = true; const callbacks = new Set();
+        window.AnimeTrackerWebsiteAccess = { isPaused: () => paused,
+          subscribe(fn) { callbacks.add(fn); fn({ allowed: !paused }); return () => callbacks.delete(fn); } };
+        window.__grantAccess = () => { paused = false; callbacks.forEach(fn => fn({ allowed: true })); };
+      }
+    }, { snapshot, accessPaused });
     await page.goto("https://an1me.to/");
     for (const content of scripts) await page.addScriptTag({ content });
     await page.waitForSelector("#at-continue-watching", { timeout: 3000 });
@@ -76,6 +89,14 @@ async function layoutOf(browser, markup, { lateShare = false } = {}) {
       await page.evaluate(() => { document.getElementById("slot").outerHTML = '<div id="mainShare" style="background:#222;color:#aaa;padding:8px;width:150px">Share this site</div>'; });
     }
     await page.waitForTimeout(400);
+    if (accessPaused) {
+      assert.equal(coverRequests, 0, 'Continue Watching must not start native image requests during a pause');
+      const before = await page.locator('.at-cw-resume').first().getAttribute('href');
+      await page.evaluate(() => window.__grantAccess());
+      await page.waitForTimeout(400);
+      assert.equal(coverRequests, 2, 'covers resume once per card after access returns');
+      assert.equal(await page.locator('.at-cw-resume').first().getAttribute('href'), before, 'the local Resume link stays intact');
+    }
     return await page.evaluate(() => {
       const shelf = document.getElementById("at-continue-watching");
       const spotlight = document.querySelector(".spotlight").getBoundingClientRect();
@@ -96,6 +117,10 @@ async function layoutOf(browser, markup, { lateShare = false } = {}) {
   const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
   let failures = 0;
   try {
+    try {
+      await layoutOf(browser, layouts['everything in normal block flow'], { accessPaused: true });
+      console.log('PASS Continue Watching pauses image requests while retaining local Resume');
+    } catch (error) { failures++; console.error('FAIL Continue Watching permission pause: ' + error.message); }
     for (const [name, markup] of Object.entries(layouts)) {
       try {
         const box = await layoutOf(browser, markup, { lateShare: name.includes("adds after") });

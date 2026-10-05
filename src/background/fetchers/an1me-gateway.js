@@ -492,11 +492,13 @@ async function an1meTabFetch(url, req, timeoutMs, deadline) {
   try {
     if (self.AnimeTrackerWebsiteAccess?.isPaused()) throw self.AnimeTrackerWebsiteAccess.deniedError();
     let reply = await sendToAn1meTab(tabId, payload, timeoutMs + AN1ME_SEND_TIMEOUT_PAD_MS);
+    if (reply?.paused || reply?.error === 'SITE_ACCESS_REQUIRED') throw self.AnimeTrackerWebsiteAccess.deniedError();
 
     if (an1meTabReplyIsRetryable(reply, req.as) && Date.now() + AN1ME_CHALLENGE_RETRY_MS < deadline) {
       await AnimeTrackerUtils.sleep(AN1ME_CHALLENGE_RETRY_MS);
       if (self.AnimeTrackerWebsiteAccess?.isPaused()) throw self.AnimeTrackerWebsiteAccess.deniedError();
       const retry = await sendToAn1meTab(tabId, payload, timeoutMs + AN1ME_SEND_TIMEOUT_PAD_MS);
+      if (retry?.paused || retry?.error === 'SITE_ACCESS_REQUIRED') throw self.AnimeTrackerWebsiteAccess.deniedError();
       if (retry) reply = retry;
     }
 

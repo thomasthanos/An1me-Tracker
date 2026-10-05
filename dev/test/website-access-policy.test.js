@@ -64,6 +64,16 @@ test('revocation cancels an unfinished response body after headers have arrived'
   const body = response.text(); p.remove([B]);
   assert.equal(signal.aborted, true); await assert.rejects(body);
 });
+test('stream wrapping preserves response metadata and cloned JSON body consumers', async () => {
+  const p = policy({ fetchImpl: async () => {
+    const response = new Response('{"progress":360}', { headers: { 'content-type': 'application/json' } });
+    Object.defineProperty(response, 'url', { value: 'https://api.jikan.moe/final' }); return response;
+  } });
+  await p.api.canRun(); const response = await p.context.fetch(A), clone = response.clone();
+  assert.equal(response.url, 'https://api.jikan.moe/final');
+  assert.equal(response.headers.get('content-type'), 'application/json');
+  assert.deepEqual(await response.json(), { progress: 360 }); assert.deepEqual(await clone.json(), { progress: 360 });
+});
 test('unknown permission APIs fail closed and content scripts use a bounded worker check', async () => {
   const context = vm.createContext({ console, setTimeout, clearTimeout, document: {},
     chrome: { runtime: { getManifest: () => ({ version: 'test', optional_host_permissions: [A] }),

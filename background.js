@@ -3803,7 +3803,9 @@ const messageHandlers = {
   AN1ME_GATEWAY_FETCH(message, _sender, sendResponse) {
     an1meFetch(String(message.url || ""), { as: message.as, timeoutMs: message.timeoutMs })
       .then((result) => sendResponse(result))
-      .catch((error) => sendResponse({ ok: false, status: 0, unreachable: true, error: error?.message || String(error) }));
+      .catch((error) => sendResponse(error?.code === 'SITE_ACCESS_REQUIRED' ?
+        { ok: false, status: 0, paused: true, error: error.code } :
+        { ok: false, status: 0, unreachable: true, error: error?.message || String(error) }));
     return true;
   },
 
@@ -4105,13 +4107,13 @@ self.AnimeTrackerWebsiteAccess.subscribe(state => {
     await Promise.all([ensureLibraryAutoRefreshAlarm(), ensureAiringScheduleAlarm(),
       getFirebaseUser().then(user => user ? ensureFullSyncPeriodicAlarm() : undefined),
       reconcileSmartNotificationAlarm(), self.AnimeTrackerAniListSync?.resumeAfterAccess?.()]);
-    await resumeLibraryRepair({ checkAccess: true });
-    await maybeStartPendingMetadataRepair();
     const stored = await bgStorageGet([PENDING_SYNC_KEY, PENDING_PROGRESS_SYNC_KEY, PENDING_SIDECAR_SYNC_KEY]);
     if (stored[PENDING_SYNC_KEY]) await syncToFirebase("access:resume");
     else if (stored[PENDING_PROGRESS_SYNC_KEY]) await syncProgressOnly("access:resume");
     if (stored[PENDING_SIDECAR_SYNC_KEY]) await flushPendingSidecarSyncs();
     await flushPendingWebsiteWatchlist();
+    await resumeLibraryRepair({ checkAccess: true });
+    await maybeStartPendingMetadataRepair();
   }).catch(error => dlog("[BG] Access pause/resume failed", error?.message));
 });
 
