@@ -6,6 +6,8 @@
 // sends no CORS headers, so it can only be read with Allow, and every filler lookup fails as "no site access"
 // until then. Jikan is asked for too: with Allow its real errors (a 429, a 5xx) come through instead of a bare
 // "Load failed". Chrome grants hosts at install but lets the user withhold them per site; the check covers it.
+// Safari shows its own prompt for hosts the manifest declares optional (the Safari build declares these two that
+// way, see dev/scripts/package.js) once the extension requests them; for required hosts it shows nothing.
 (function () {
   "use strict";
 
@@ -72,10 +74,33 @@
     }
   }
 
-  // Safari on iPhone and iPad changes a host from Ask to Allow only in its settings: asking from the extension
-  // changed nothing there and left the notice up. The steps are the whole answer on a phone.
-  function canAskInPlace() {
-    return !globalThis.AnimeTrackerUtils?.isMobileDevice?.();
+  // The filler origins this build declares optional, which Safari will prompt for when requested.
+  function optionalOrigins() {
+    let declared = [];
+    try {
+      declared = globalThis.chrome?.runtime?.getManifest?.()?.optional_host_permissions || [];
+    } catch {}
+    return GROUPS.flatMap((group) => group.origins).filter((origin) => declared.includes(origin));
+  }
+
+  // A desktop browser shows its prompt for any host the user withheld. Safari on iPhone and iPad prompts only for
+  // optional hosts: asking for required ones changed nothing there and left the notice up.
+  function canAskInPlace(blocked) {
+    if (!globalThis.AnimeTrackerUtils?.isMobileDevice?.()) return true;
+    const optional = optionalOrigins();
+    return blocked.length > 0 && blocked.every((origin) => optional.includes(origin));
+  }
+
+  // Asks for the optional filler sites straight from a tap that is about to need them (Fetch & Import): Safari
+  // shows its prompt only for those not granted yet, and answers at once for the rest. Calls back once, with
+  // true when everything asked for is allowed; at once with true where nothing is optional (Chrome).
+  function askIfOptional(callback) {
+    const origins = optionalOrigins();
+    if (!origins.length) {
+      callback(true);
+      return;
+    }
+    request(origins, callback);
   }
 
   // Fills `container` with which filler sites are blocked and how to allow them, or hides it when none are.
@@ -103,15 +128,21 @@
 
     container.append(el("p", "site-access-text", "The browser is keeping the extension off the filler sites, so filler data cannot be fetched."));
 
-    if (!canAskInPlace()) {
-      const steps = el("ol", "site-access-steps");
-      steps.append(el("li", null, `Open ${SETTINGS_PATH} (the Safari Settings button in the An1me Tracker app opens it).`));
+    const phone = !!globalThis.AnimeTrackerUtils?.isMobileDevice?.();
+    // Where the settings are the only way (on a phone), the steps; elsewhere, where to look if the prompt is refused.
+    const fallback = phone ? el("ol", "site-access-steps") : el("p", "site-access-path",
+      `If no prompt appears, allow ${hosts.join(" and ")} in the extension's site access settings.`);
+    if (phone) {
+      fallback.append(el("li", null, `Open ${SETTINGS_PATH} (the Safari Settings button in the An1me Tracker app opens it).`));
       const allow = el("li");
       allow.append(doc.createTextNode("Under Permissions, tap "));
       strongHosts(allow);
       allow.append(doc.createTextNode(" and choose Allow for each."));
-      steps.append(allow, el("li", null, "Come back and run Fetch & Import again."));
-      container.append(steps);
+      fallback.append(allow, el("li", null, "Come back and run Fetch & Import again."));
+    }
+
+    if (!canAskInPlace(blocked)) {
+      container.append(fallback);
       return blocked;
     }
 
@@ -123,14 +154,13 @@
     const button = el("button", "site-access-btn", "Allow access");
     button.type = "button";
     container.append(button);
-    const path = el("p", "site-access-path", `If no prompt appears, allow ${hosts.join(" and ")} in the extension's site access settings.`);
-    path.hidden = true;
-    container.append(path);
+    fallback.hidden = true;
+    container.append(fallback);
 
     button.addEventListener("click", () => {
       request(blocked, (granted) => {
         if (!granted) {
-          path.hidden = false;
+          fallback.hidden = false;
           return;
         }
         container.hidden = true;
@@ -141,5 +171,5 @@
   }
 
   window.AnimeTracker = window.AnimeTracker || {};
-  window.AnimeTracker.SiteAccess = Object.freeze({ GROUPS, SETTINGS_PATH, hostLabel, blockedOrigins, request, render });
+  window.AnimeTracker.SiteAccess = Object.freeze({ GROUPS, SETTINGS_PATH, hostLabel, blockedOrigins, request, askIfOptional, render });
 })();

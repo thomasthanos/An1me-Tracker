@@ -3824,6 +3824,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.runtime.onInstalled.addListener((details) => {
+  // Safari: put its prompt for the filler sites in front of the user now, rather than at the first failed lookup.
+  if ((details.reason === "install" || details.reason === "update") && typeof requestFillerSiteAccess === "function") {
+    requestFillerSiteAccess().catch(() => {});
+  }
   if (details.reason === "install") {
     // Re-registering/restoring an extension can leave existing storage in place.
     // Initialize missing keys only; an install event must never reset user data.

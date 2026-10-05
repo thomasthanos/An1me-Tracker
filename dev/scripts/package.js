@@ -26,9 +26,18 @@ const RUNTIME_ENTRIES = ["manifest.json", "background.js", "popup.html", "src"];
 // Safari has no identity (Google / AniList OAuth), notifications or side panel APIs.
 const SAFARI_UNSUPPORTED_PERMISSIONS = ["identity", "notifications", "sidePanel"];
 
+// Safari leaves every declared host on Ask until the user agrees, and it shows its own prompt for hosts the
+// extension declares as optional and then requests (permissions.request). The filler sites need that prompt:
+// AnimeFillerList sends no CORS headers, so it cannot be read while on Ask, and without the prompt the only way
+// to allow it was to find each site in Safari's settings. The other hosts answer on Ask and stay required.
+// Chrome grants every host at install, so its manifest keeps them all required.
+const SAFARI_OPTIONAL_HOSTS = ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"];
+
 function toSafariManifest(manifest) {
   const safari = { ...manifest, permissions: (manifest.permissions || []).filter((p) => !SAFARI_UNSUPPORTED_PERMISSIONS.includes(p)) };
   delete safari.side_panel;
+  safari.host_permissions = (manifest.host_permissions || []).filter((host) => !SAFARI_OPTIONAL_HOSTS.includes(host));
+  safari.optional_host_permissions = [...new Set([...(manifest.optional_host_permissions || []), ...SAFARI_OPTIONAL_HOSTS])];
   return safari;
 }
 
