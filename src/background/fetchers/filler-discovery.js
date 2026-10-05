@@ -463,6 +463,9 @@ async function fetchJikanEpisodes(title, options = {}) {
     deferRetry: true,
     retryAfterMs: Math.max(1000, (globalThis.__jikanCircuitBrokenUntil || 0) - Date.now()),
   });
+  // A timeout that ends with the browser offline was the connection's fault, not Jikan's, so it must not close
+  // Jikan for an hour: the connection usually comes back long before that.
+  const jikanTimeoutWasOffline = () => typeof navigator !== "undefined" && navigator.onLine === false;
   try {
     if (globalThis.__jikanCircuitBroken && Date.now() < (globalThis.__jikanCircuitBrokenUntil || 0)) {
       throw unavailable("jikan_circuit_open");
@@ -480,6 +483,7 @@ async function fetchJikanEpisodes(title, options = {}) {
       } catch (fetchErr) {
         const isAbort = fetchErr?.name === "AbortError";
         if (isAbort) {
+          if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
           globalThis.__jikanCircuitBroken = true;
           globalThis.__jikanCircuitBrokenUntil = Date.now() + (60 * 60 * 1000);
           (typeof dlog === "function" ? dlog : () => {})("[AnimeTracker] Jikan search timed out — opening circuit breaker");
@@ -531,6 +535,7 @@ async function fetchJikanEpisodes(title, options = {}) {
         epRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, { signal: epCtrl.signal });
       } catch (epErr) {
         if (epErr?.name === "AbortError") {
+          if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
           globalThis.__jikanCircuitBroken = true;
           globalThis.__jikanCircuitBrokenUntil = Date.now() + (60 * 60 * 1000);
           throw unavailable("jikan_episodes_timeout");

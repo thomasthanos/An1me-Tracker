@@ -24,7 +24,7 @@ const prior = () => ({ canon: [1, 3, 4], filler: [2, 5], mixed: [], anime_canon:
 
 // One isolated worker per case: the Jikan circuit and the slug cache live in the global scope.
 function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {} } = {}) {
-  const store = structuredClone(seed), calls = { aflIndex: 0, aflShow: 0, jikan: 0, offline: 0 }, timers = [], alarms = [];
+  const store = structuredClone(seed), calls = { aflIndex: 0, aflShow: 0, jikan: 0, offline: 0 }, timers = [], alarms = [], listeners = {};
   const mode = { afl, jikan };
   // The browser's own connectivity flag, which the worker reads as navigator.onLine. Flip it to cut the connection.
   const nav = { userAgent: ua, platform: ua, onLine: true };
@@ -34,6 +34,7 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {} } = {}) {
   const c = vm.createContext({
     Date: Clock, console: { log() {}, warn() {}, error() {}, info() {}, debug() {} }, AbortController, Response,
     navigator: nav,
+    addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
     setTimeout(fn, ms) { timers.push(ms); return setTimeout(fn, 0); }, clearTimeout,
     bgStorageGet: async (keys) => structuredClone(keys === null ? store : Object.fromEntries(keys.filter((k) => k in store).map((k) => [k, store[k]]))),
     // A loop that keeps rewriting storage would starve every timer; stop it so a regression fails instead of hanging.
@@ -67,7 +68,9 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {} } = {}) {
   vm.runInContext("const isLikelyMovieSlug = AnimeTrackerMergeUtils.isLikelyMovieSlug;", c);
   for (const file of ["src/background/fetchers/filler-discovery.js", "src/background/jobs/metadata-repair.js", "src/background/anime-resolver.js"]) vm.runInContext(read(file), c);
   const resolve = (slug, options = {}) => c.AnimeTrackerAnimeResolver.resolve(slug, { title: Object.fromEntries(SHOWS)[slug] || slug, includeEpisodeTypes: true, ...options });
-  return { c, store, calls, timers, mode, nav, alarms, resolve, writes: () => writes, runaway: () => runaway, advance: (ms) => { time += ms; } };
+  // The connection comes back: the flag flips and the worker gets the same online event a browser sends.
+  const goOnline = () => { nav.onLine = true; for (const fn of listeners.online || []) fn(); };
+  return { c, store, calls, timers, mode, nav, alarms, resolve, goOnline, writes: () => writes, runaway: () => runaway, advance: (ms) => { time += ms; } };
 }
 
 let failures = 0;
@@ -297,6 +300,94 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.equal(h.calls.aflIndex + h.calls.aflShow + h.calls.jikan + h.calls.offline, 0, "no request is attempted");
     const after = Object.fromEntries(Object.entries(h.store).filter(([key]) => key.startsWith("animeinfo_") || key.startsWith("episodeTypes_")));
     assert.deepEqual(after, before, "every cached entry is exactly as it was");
+  });
+
+  await test("a Jikan request that hangs while the connection drops does not close Jikan for an hour", async () => {
+    const circuit = (h) => vm.runInContext("globalThis.__jikanCircuitBroken === true", h.c);
+    // The connection dies while the search is waiting for an answer, so the timeout fires with the browser offline.
+    const dropped = worker({ jikan: "hang" });
+    const realFetch = dropped.c.fetch;
+    dropped.c.fetch = (url, options) => { const answer = realFetch(url, options); if (url.startsWith("https://api.jikan.moe/")) dropped.nav.onLine = false; return answer; };
+    const result = await dropped.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(result.fillerResult.status, "failed");
+    assert.equal(circuit(dropped), false, "the circuit stays closed");
+    assert.equal(dropped.store["episodeTypes_totally-unlisted-show"], undefined, "and nothing is cached for the show");
+    // Control: the same hang with the connection up is Jikan's own slowness and still opens the circuit.
+    const slow = worker({ jikan: "hang" });
+    await slow.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(circuit(slow), true);
+  });
+
+  await test("failures are not retried while offline, and still are when online", async () => {
+    const attemptsWith = async (onLine) => {
+      const h = worker({ ua: "Mozilla/5.0 (Windows NT 10.0) Chrome/130" });
+      h.nav.onLine = onLine;
+      let attempts = 0;
+      await assert.rejects(h.c.runMetadataRepairWithRetry(async () => { attempts++; throw new Error("Load failed"); }, { attempts: 3, baseDelayMs: 1 }));
+      return attempts;
+    };
+    assert.equal(await attemptsWith(false), 1, "offline: one attempt, no waiting between retries");
+    assert.equal(await attemptsWith(true), 3);
+  });
+
+  // The phone loses signal: requests first hang (the Jikan circuit opens, the AnimeFillerList failure is
+  // remembered), then the browser reports offline and the run pauses. When the signal is back, neither
+  // memory may hold the run back, whichever way the worker finds out.
+  const outage = async ({ online }) => {
+    const h = worker({ afl: "down", seed: { animeData: library() } });
+    // A show outside the library, so the failure is remembered without stamping a retry on a queued show.
+    await h.resolve("one-piece");
+    assert.equal(h.calls.aflIndex, 1);
+    vm.runInContext("globalThis.__jikanCircuitBroken = true; globalThis.__jikanCircuitBrokenUntil = Date.now() + 3600000;", h.c);
+    h.nav.onLine = false;
+    await h.c.startLibraryRepair({ origin: "auto", auto: true });
+    await until(async () => (await h.c.getMetadataRepairState())?.waitingForNetwork === true);
+    await settle();
+    h.mode.afl = "ok";
+    await online(h);
+    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
+    return { h, state: await h.c.getMetadataRepairState() };
+  };
+
+  await test("coming back online forgets failures from the outage and finishes the run straight away", async () => {
+    const { h, state } = await outage({ online: async (h) => h.goOnline() });
+    assert.deepEqual([state.status, state.processed, state.fetched, state.failed], ["completed", 4, 4, 0]);
+    assert.equal(vm.runInContext("globalThis.__jikanCircuitBroken", h.c), false, "the Jikan circuit is closed");
+    assert.deepEqual(missEntries(h.store), []);
+  });
+
+  await test("the same happens when the online event never reaches the worker and the alarm resumes the run", async () => {
+    const { h, state } = await outage({ online: async (h) => { h.nav.onLine = true; await h.c.runMetadataRepairBatch(); } });
+    assert.deepEqual([state.status, state.processed, state.fetched, state.failed], ["completed", 4, 4, 0]);
+    assert.equal(vm.runInContext("globalThis.__jikanCircuitBroken", h.c), false);
+  });
+
+  await test("the online event alone closes a circuit opened during the outage, with no run in progress", async () => {
+    // A lookup from the watch page, not from Fetch & Import, hung on the dying connection before it went offline.
+    const h = worker({ jikan: "hang" });
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(vm.runInContext("globalThis.__jikanCircuitBroken", h.c), true);
+    h.nav.onLine = false;
+    h.mode.jikan = "ok";
+    h.goOnline();
+    await settle();
+    assert.equal(vm.runInContext("globalThis.__jikanCircuitBroken", h.c), false);
+    const retried = await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show", forceFillerRefresh: true });
+    assert.equal(retried.fillerResult.status, "nofill", "the next lookup reaches Jikan again");
+  });
+
+  await test("a run that never waited for the connection leaves an open circuit alone", async () => {
+    const h = worker({ seed: { animeData: library() } });
+    vm.runInContext("globalThis.__jikanCircuitBroken = true; globalThis.__jikanCircuitBrokenUntil = Date.now() + 3600000;", h.c);
+    await h.c.startLibraryRepair({ origin: "auto", auto: true });
+    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
+    assert.equal(vm.runInContext("globalThis.__jikanCircuitBroken", h.c), true);
+  });
+
+  await test("a Jikan failure that slips through while offline is labelled as such", async () => {
+    const h = worker();
+    const detail = vm.runInContext("formatMetadataRepairDetail", h.c)({ status: "cached" }, { status: "failed", error: "jikan_offline" });
+    assert.equal(detail, "info cached • filler offline, retry later");
   });
 
   process.exitCode = failures ? 1 : 0;

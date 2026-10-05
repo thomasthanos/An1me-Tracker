@@ -12,7 +12,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
-## [Unreleased]
+## [8.2.3] — 2026-10-05
 
 ### Fixed
 
@@ -23,6 +23,15 @@ The version in `manifest.json` is the single source of truth.
   were fetched before the drop are not fetched again.
 - The popup says "Waiting for connection…" while the run is paused offline, in place of a show title that
   looks stuck.
+- Coming back online no longer leaves filler lookups blocked for an hour. A Jikan request that hung while
+  the connection was dropping used to open the one-hour Jikan circuit; a timeout that ends with the browser
+  offline no longer does, and the circuit and the AnimeFillerList failure memory are cleared when the
+  connection returns, including when the phone suspended the worker and the alarm resumes the run.
+- No retries while offline. A failed lookup is not retried after a wait that can only fail the same way;
+  the queue pauses instead.
+- Skip Outro keeps working with an expired cache. A MAL id that had been confirmed is no longer replaced
+  by a miss when its 30-day re-check fails or finds no match, phones keep using it (they cannot re-check),
+  and an expired outro time is used when AniSkip cannot be reached. A 404 is still a confirmed miss.
 
 ## [8.2.2] — 2026-10-05
 

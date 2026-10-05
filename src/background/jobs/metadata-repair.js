@@ -97,7 +97,8 @@ async function runMetadataRepairWithRetry(task, options = {}) {
       return await task(attempt);
     } catch (error) {
       lastError = error;
-      if (attempt >= attempts || !shouldRetry(error)) {
+      // Offline, a retry can only fail the same way after a wasted wait. The queue pauses instead.
+      if (attempt >= attempts || isBrowserOffline() || !shouldRetry(error)) {
         throw error;
       }
 
@@ -165,6 +166,8 @@ function formatMetadataRepairDetail(infoResult, fillerResult) {
       parts.push(withShortReason("filler site unreachable", rawErr.replace(/^.*afl_index_unavailable:?\s*/i, "")));
     } else if (/jikan_circuit_open/i.test(rawErr)) {
       parts.push("filler paused, retry later");
+    } else if (/jikan_offline/i.test(rawErr)) {
+      parts.push("filler offline, retry later");
     } else if (/504|timeout/i.test(rawErr)) {
       parts.push("filler timed out");
     } else if (/429|rate_limited|busy/i.test(rawErr)) {
@@ -714,6 +717,9 @@ async function runMetadataRepairBatch(options = {}) {
         return false;
       }
       if (state.waitingForNetwork === true) {
+        // Back from a pause for the connection, which also covers the case where the online event never reached
+        // this worker (iOS suspends it). See forgetFailuresFromOutage.
+        forgetFailuresFromOutage();
         state = { ...state, waitingForNetwork: false };
         await setMetadataRepairState(state);
       }
@@ -1003,9 +1009,17 @@ async function resumeLibraryRepair() {
   return state;
 }
 
+// Failures recorded while the connection was going down say nothing about the sites: a request that hung
+// on a dying connection opens the Jikan circuit for an hour, and an unreachable AnimeFillerList is
+// remembered for two minutes. Once the connection is back, both are forgotten so the run can use them.
+function forgetFailuresFromOutage() {
+  if (typeof resetFillerFetchBreakers === "function") resetFillerFetchBreakers();
+}
+
 // Back online: continue a run that paused for lack of a connection right away rather than waiting for the alarm.
 try {
   self.addEventListener?.("online", () => {
+    forgetFailuresFromOutage();
     resumeLibraryRepair().catch(() => {});
   });
 } catch {}
