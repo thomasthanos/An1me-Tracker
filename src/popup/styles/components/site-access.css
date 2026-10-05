@@ -1,4 +1,4 @@
-/* The notice for sites the browser keeps the extension off (SiteAccess), in Fetch & Import and in Settings. */
+/* The notice for filler sites the browser keeps the extension off (SiteAccess), in Fetch & Import and Settings. */
 .site-access {
   display: flex;
   flex-direction: column;
@@ -12,8 +12,9 @@
 .site-access-text, .site-access-path { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--t1); }
 .site-access-path { color: var(--t2); font-size: 11px; overflow-wrap: anywhere; }
 .site-access-path[hidden] { display: none; }
-.site-access-list { margin: 0; padding-left: 18px; font-size: 11.5px; line-height: 1.5; color: var(--t2); overflow-wrap: anywhere; }
-.site-access-list strong { color: var(--t1); font-weight: 600; }
+.site-access-steps { margin: 0; padding-left: 20px; font-size: 11.5px; line-height: 1.5; color: var(--t2); overflow-wrap: anywhere; }
+.site-access-steps li + li { margin-top: 4px; }
+.site-access strong { color: var(--t1); font-weight: 600; }
 .site-access-btn {
   align-self: flex-start;
   min-height: 36px;

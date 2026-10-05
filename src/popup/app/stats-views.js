@@ -213,9 +213,9 @@
       needsReauth,
     });
     await AT.refreshSmartNotificationStatus?.();
-    // Sites the browser keeps the extension off (on an iPhone, each one left on Ask): say which, and ask.
+    // Filler sites the browser keeps the extension off (on an iPhone, left on Ask): say which, and how to allow them.
     void AT.SiteAccess?.render(document.getElementById("settingsSiteAccess"), {
-      onGranted: () => AT.UIHelpers?.showToast?.("Access allowed: sync, filler data and Skip Outro can reach their sites", { type: "success", duration: 2600 }),
+      onGranted: () => AT.UIHelpers?.showToast?.("Access allowed: Fetch & Import can reach the filler sites", { type: "success", duration: 2600 }),
     });
 
     container.scrollTop = 0;
