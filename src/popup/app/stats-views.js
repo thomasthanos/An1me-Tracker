@@ -213,6 +213,10 @@
       needsReauth,
     });
     await AT.refreshSmartNotificationStatus?.();
+    // Sites the browser keeps the extension off (on an iPhone, each one left on Ask): say which, and ask.
+    void AT.SiteAccess?.render(document.getElementById("settingsSiteAccess"), {
+      onGranted: () => AT.UIHelpers?.showToast?.("Access allowed: sync, filler data and Skip Outro can reach their sites", { type: "success", duration: 2600 }),
+    });
 
     container.scrollTop = 0;
     if (mainContent) mainContent.scrollTop = 0;

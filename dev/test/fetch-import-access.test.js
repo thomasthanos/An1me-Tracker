@@ -2,10 +2,12 @@
 //
 //   node dev/test/fetch-import-access.test.js
 //
-// On an iPhone, Safari let the extension reach an1me.to but not AnimeFillerList or Jikan, and every show
-// ended as "filler site unreachable (no site access)" with nothing the user could do from the panel. The
-// panel now says so and offers Allow access, which must ask the browser from the tap itself (permission
-// prompts need a user gesture), restart the import once allowed, and fall back to the Settings path.
+// On an iPhone, Safari let the extension reach an1me.to but kept every other host it needs on "Ask": the filler
+// sites, so every show ended as "filler site unreachable (no site access)", and the sync hosts too. iOS has no
+// "All Websites" switch for an extension that names its hosts, so the old advice could not be followed. The
+// panel (and Settings) now list exactly which sites are blocked and offer Allow access, which must ask the
+// browser from the tap itself (permission prompts need a user gesture), restart the import once allowed, and
+// fall back to the Settings path naming each site.
 // AT_TEST_BROWSER selects Chromium; NODE_PATH can expose a bundled Playwright install.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -26,12 +28,15 @@ const candidates = [process.env.AT_TEST_BROWSER,
 const executablePath = candidates.find((file) => fs.existsSync(file));
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const css = [...read("popup.html").matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((match) => read(match[1])).join("\n");
-const scripts = ["src/common/utils.js", "src/popup/lib/filler-fetch-ui.js"].map(read);
+const scripts = ["src/common/utils.js", "src/popup/lib/site-access.js", "src/popup/lib/filler-fetch-ui.js"].map(read);
+const NEEDED = ["https://firestore.googleapis.com/*", "https://identitytoolkit.googleapis.com/*", "https://securetoken.googleapis.com/*",
+  "https://www.animefillerlist.com/*", "https://api.jikan.moe/*", "https://api.aniskip.com/*"];
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2,
   userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1" };
 const DESKTOP = { viewport: { width: 420, height: 600 } };
 
-// `access`: what permissions.contains answers (null: no permissions API). `grant`: what request answers.
+// `access`: what permissions.contains answers: true, false, a list of the allowed origins, or null for no
+// permissions API. `grant`: what request answers.
 async function panel(browser, device, { access, grant = true }) {
   const context = await browser.newContext(device);
   const page = await context.newPage();
@@ -41,7 +46,7 @@ async function panel(browser, device, { access, grant = true }) {
     window.__granted = 0;
     window.chrome = access === null ? {} : {
       permissions: {
-        contains: (request, callback) => setTimeout(() => callback(access)),
+        contains: (request, callback) => setTimeout(() => callback(Array.isArray(access) ? request.origins.every((o) => access.includes(o)) : access)),
         // Answers through both the callback and a promise, as Safari can.
         request: (request, callback) => {
           window.__requests.push({ origins: request.origins, gesture: navigator.userActivation?.isActive === true });
@@ -62,7 +67,8 @@ async function panel(browser, device, { access, grant = true }) {
   const view = () => page.evaluate(() => {
     const banner = document.querySelector(".ffui-access");
     const visible = (el) => !!el && !el.hidden && el.getClientRects().length > 0;
-    return { banner: visible(banner), path: visible(banner.querySelector(".ffui-access-path")), requests: window.__requests, granted: window.__granted };
+    return { banner: visible(banner), path: visible(banner.querySelector(".site-access-path")), pathText: banner.querySelector(".site-access-path")?.textContent || "",
+      groups: [...banner.querySelectorAll(".site-access-list li")].map((li) => li.textContent), requests: window.__requests, granted: window.__granted };
   });
   return { page, context, view };
 }
@@ -80,16 +86,33 @@ async function panel(browser, device, { access, grant = true }) {
       const state = await p.view();
       assert.equal(state.banner, true);
       assert.equal(state.path, true);
+      assert.deepEqual(state.groups, [
+        "Cloud sync and sign-in (firestore.googleapis.com, identitytoolkit.googleapis.com, securetoken.googleapis.com)",
+        "Filler data (animefillerlist.com, api.jikan.moe)",
+        "Skip Outro (api.aniskip.com)",
+      ]);
+      assert.match(state.pathText, /Settings → Apps → Safari → Extensions → An1me\.to Tracker, set each of these to Allow: firestore\.googleapis\.com, .*animefillerlist\.com, api\.jikan\.moe, api\.aniskip\.com\./);
+      assert.doesNotMatch(state.pathText, /All Websites/, "there is no such switch for this extension");
       await p.context.close();
     });
 
-    await test("Allow access asks for both filler sites from the tap, then restarts the import", async () => {
+    await test("only the sites still blocked are listed and asked for", async () => {
+      const allowed = NEEDED.filter((origin) => !/animefillerlist|jikan/.test(origin));
+      const p = await panel(browser, PHONE, { access: allowed, grant: true });
+      assert.deepEqual((await p.view()).groups, ["Filler data (animefillerlist.com, api.jikan.moe)"]);
+      await p.page.click(".site-access-btn");
+      await p.page.waitForTimeout(100);
+      assert.deepEqual((await p.view()).requests[0].origins, ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"]);
+      await p.context.close();
+    });
+
+    await test("Allow access asks for every blocked site from the tap, then restarts the import", async () => {
       const p = await panel(browser, PHONE, { access: false, grant: true });
-      await p.page.click(".ffui-access-btn");
+      await p.page.click(".site-access-btn");
       await p.page.waitForTimeout(100);
       const state = await p.view();
       assert.equal(state.requests.length, 1);
-      assert.deepEqual(state.requests[0].origins, ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"]);
+      assert.deepEqual(state.requests[0].origins, NEEDED);
       assert.equal(state.requests[0].gesture, true, "asked while the tap still counts as a user gesture");
       assert.equal(state.granted, 1, "the import is started again, once");
       assert.equal(state.banner, false);
@@ -99,7 +122,7 @@ async function panel(browser, device, { access, grant = true }) {
     await test("a refused prompt keeps the notice and shows the Settings path, on desktop too", async () => {
       const p = await panel(browser, DESKTOP, { access: false, grant: false });
       assert.equal((await p.view()).path, false, "desktop does not start with the iPhone path");
-      await p.page.click(".ffui-access-btn");
+      await p.page.click(".site-access-btn");
       await p.page.waitForTimeout(100);
       const state = await p.view();
       assert.equal(state.banner, true);
@@ -121,7 +144,9 @@ async function panel(browser, device, { access, grant = true }) {
         status: "running", total: 3, processed: 1, queueIndex: 1, failed: 1,
         logs: [{ at: 1, type: "retry", slug: "noragami", name: "Noragami", detail: "info cached • filler site unreachable (no site access)" }],
       }));
-      assert.equal((await p.view()).banner, true);
+      const state = await p.view();
+      assert.equal(state.banner, true);
+      assert.match(state.pathText, /set each of these to Allow: animefillerlist\.com, api\.jikan\.moe\./);
       await p.context.close();
     });
   } finally {

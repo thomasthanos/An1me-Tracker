@@ -16,14 +16,20 @@ The version in `manifest.json` is the single source of truth.
 
 ### Fixed
 
-- Fetch & Import can now fix "no site access" by itself. On an iPhone, Safari can let the extension reach
-  an1me.to but not AnimeFillerList or Jikan, and every show then ended as "filler site unreachable (no site
-  access)" with nothing to do from the panel. The panel now says so and offers **Allow access**, which asks
-  the browser for both sites straight from the tap and runs the import again once allowed. If the prompt is
-  refused or not offered, it shows the Settings path (All Websites → Allow).
-- A show that failed for lack of access is no longer stamped "retry later", so it is fetched the moment access
-  is granted instead of up to 15 minutes later; granting access also clears the remembered failure for
-  automatic runs.
+- The extension now asks for the sites it needs instead of leaving them blocked. On an iPhone, Safari lists
+  every host the extension uses with its own Allow / Ask / Deny, and there is no "All Websites" switch for
+  an extension that names its hosts, so the earlier advice could not be followed. Everything but an1me.to
+  sat on Ask: filler lookups failed as "no site access", and cloud sync and sign-in were blocked too.
+  Settings and the Fetch & Import panel now list each blocked site by what it serves (cloud sync and
+  sign-in, filler data, Skip Outro) and offer **Allow access**, which asks Safari for all of them from the
+  tap and runs Fetch & Import again once allowed. If the prompt is refused or not offered, they name each
+  site to set to Allow, with the exact Settings path.
+- A show that failed for lack of access is no longer stamped "retry later", so it is fetched the moment
+  access is granted instead of up to 15 minutes later; granting access also clears the remembered failure
+  for automatic runs.
+- The iPhone app's **Safari Settings** button opens Safari's extension settings rather than the app's own
+  empty settings page: it no longer gates the link on a check iOS always answers no to, and tries the
+  iOS 18 and older addresses in turn. Its setup guide names every site to set to Allow.
 
 ## [8.2.4] — 2026-10-05
 
@@ -37,7 +43,7 @@ The version in `manifest.json` is the single source of truth.
   again after three days so it moves back to AnimeFillerList once that answers. A show page that cannot be
   read falls back the same way.
 - Fetch & Import rows say why AnimeFillerList failed: **no site access** when the browser does not let the
-  extension reach it (on iPhone: set All Websites to Allow), **blocked by Cloudflare** for a challenge, or
+  extension reach it, **blocked by Cloudflare** for a challenge, or
   the HTTP status or network error.
 - Jikan requests are spaced about a second apart, under Jikan's rate limit, so a sweep that leans on it is
   not answered with 429s.
