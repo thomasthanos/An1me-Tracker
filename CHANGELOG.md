@@ -1,3 +1,9 @@
+<p align="center">
+  <img src=".github/assets/header-changelog.svg" width="880" alt="An1me Tracker — Release notes">
+</p>
+
+<p align="center"><a href="README.md">Overview</a> · <a href="IOS.md">iPhone</a> · <a href="PRIVACY.md">Privacy</a> · <a href="SECURITY.md">Security</a></p>
+
 # Changelog
 
 All notable changes to **An1me.to Tracker**.
@@ -5,7 +11,6 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
----
 
 ## [8.2.2] — 2026-10-05
 
@@ -64,6 +69,13 @@ The version in `manifest.json` is the single source of truth.
 - `dev/test/release-version.test.js` pins the README and IOS.md badges, the badge and hero SVGs,
   the IPA download link and the newest changelog entry to `manifest.json`.
 
+## Earlier releases
+
+Expand a version to read its complete notes.
+
+<details>
+<summary><b>[8.2.0] — 2026-10-04</b></summary>
+
 ## [8.2.0] — 2026-10-04
 
 ### Added
@@ -92,6 +104,11 @@ The version in `manifest.json` is the single source of truth.
 - Install the update over the existing app. Physical iPhone audio, native fullscreen and temperature
   checks are separate from the automated suite and have not been verified on a device.
 
+</details>
+
+<details>
+<summary><b>[8.1.1] — 2026-10-04</b></summary>
+
 ## [8.1.1] — 2026-10-04
 
 ### Fixed
@@ -117,6 +134,11 @@ The version in `manifest.json` is the single source of truth.
   and compact Airing summaries retain the complete duration and due/delayed status.
 - Keep native adaptive icons, watched history, playback progress and usable metadata caches.
 
+</details>
+
+<details>
+<summary><b>[8.1.0] — 2026-10-04</b></summary>
+
 ## [8.1.0] — 2026-10-04
 
 ### Fixed
@@ -137,6 +159,11 @@ The version in `manifest.json` is the single source of truth.
 - Exclude native host icon sources and previews from the extension bundle, saving about 8 MB.
 - Preserve existing mobile battery optimisations, interrupted fetch queues, metadata caches,
   watched episodes and playback positions across the update.
+
+</details>
+
+<details>
+<summary><b>[8.0.3] — 2026-10-04</b></summary>
 
 ## [8.0.3] — 2026-10-04
 
@@ -162,6 +189,11 @@ The version in `manifest.json` is the single source of truth.
 - Create overflow episode/filler tags only when their existing more control is opened.
   Card styling, progress labels and watched/resume data formats are unchanged.
 
+</details>
+
+<details>
+<summary><b>[8.0.2] — 2026-10-03</b></summary>
+
 ## [8.0.2] — 2026-10-03
 
 ### Fixed
@@ -176,6 +208,11 @@ The version in `manifest.json` is the single source of truth.
 - Add regression coverage for iPhone, iPad desktop user agents, rejected mobile manual
   requests, stale sync state, cache preservation and desktop sync.
 
+</details>
+
+<details>
+<summary><b>[8.0.1] — 2026-10-03</b></summary>
+
 ## [8.0.1] — 2026-10-03
 
 ### Fixed
@@ -186,6 +223,11 @@ The version in `manifest.json` is the single source of truth.
 - Settings detects mobile devices when deciding whether to show the password action,
   including callers that omit the mobile flag. Heavy mobile toggles stay disabled.
 
+</details>
+
+<details>
+<summary><b>[8.0.0] — 2026-10-03</b></summary>
+
 ## [8.0.0] — 2026-10-03
 
 ### Fixed
@@ -195,6 +237,11 @@ The version in `manifest.json` is the single source of truth.
   - Fixed cross-device settings sync bug: mobile sync now caches and preserves desktop values in `cloud_desktop_playback_settings`, preventing mobile from overwriting PC preferences with `false`, and ensuring mobile does not re-enable 4K or Copy Guard from incoming cloud updates.
   - Updated popup settings view with informative mobile indicators ("Disabled on mobile (prevents touch lag)", "Disabled on mobile (prevents overheating)", "Disabled on mobile (desktop only)").
   - Guaranteed shared playback preferences (`smartNotificationsEnabled`, `autoSkipFillers`, `adGuardEnabled`, `autoResumeEnabled`) continue syncing seamlessly between PC and mobile.
+
+</details>
+
+<details>
+<summary><b>[7.5.8] — 2026-10-03</b></summary>
 
 ## [7.5.8] — 2026-10-03
 
@@ -207,6 +254,11 @@ The version in `manifest.json` is the single source of truth.
 - Mobile Settings card clearly reflects the paused status ("Auto-sync paused (mobile) · PC updates AniList"),
   while keeping manual "Sync now" available for explicit on-demand pushes.
 - Preserved all settings preferences and toggles completely intact.
+
+</details>
+
+<details>
+<summary><b>[7.5.7] — 2026-10-03</b></summary>
 
 ## [7.5.7] — 2026-10-03
 
@@ -221,6 +273,11 @@ The version in `manifest.json` is the single source of truth.
   have been checked and are up to date.
 - Promoted manual repair runs to always open and stay in modal mode, preventing accidental
   demotion to status badges when all library titles are already cached.
+
+</details>
+
+<details>
+<summary><b>[7.5.6] — 2026-10-03</b></summary>
 
 ## [7.5.6] — 2026-10-03
 
@@ -237,6 +294,11 @@ The version in `manifest.json` is the single source of truth.
   detection without relying on defunct external scraper endpoints.
 - Added automatic background migration to heal and clear previous stalled Jikan backoff entries.
 
+</details>
+
+<details>
+<summary><b>[7.5.5] — 2026-10-03</b></summary>
+
 ## [7.5.5] — 2026-10-03
 
 ### Fixed
@@ -251,6 +313,11 @@ The version in `manifest.json` is the single source of truth.
   unresolved failures remain visible, and display reconciliation never overwrites a newer job.
 - Install initialization fills only missing storage keys. Existing library, progress, settings
   and metadata caches survive extension re-registration as well as version updates.
+
+</details>
+
+<details>
+<summary><b>[7.5.4] — 2026-10-03</b></summary>
 
 ## [7.5.4] — 2026-10-03
 
@@ -271,6 +338,11 @@ The version in `manifest.json` is the single source of truth.
 - Repeating Fetch during service backoff retains Needs retry counts and original failure
   details. Prior usable metadata remains available, and backoff still prevents request storms.
 
+</details>
+
+<details>
+<summary><b>[7.5.3] — 2026-10-03</b></summary>
+
 ## [7.5.3] — 2026-10-03
 
 ### Fixed
@@ -288,6 +360,11 @@ The version in `manifest.json` is the single source of truth.
   Partial failures appear as "Needs retry" instead of success, and the report stays open with
   a Done button. Mobile fetch overlays also avoid stacked blur filters and permanent animations.
 
+</details>
+
+<details>
+<summary><b>[7.5.2] — 2026-10-03</b></summary>
+
 ## [7.5.2] — 2026-10-03
 
 ### Fixed
@@ -297,6 +374,11 @@ The version in `manifest.json` is the single source of truth.
 - Handled Jikan 504 Gateway Timeouts and rate limits gracefully during background filler discovery so transient network delays never falsely mark anime imports as failed.
 - Fixed squished anime names in the fetch progress log on mobile screens with proper flex bounds.
 - Added iOS Page Lifecycle `freeze` and `webkitendfullscreen` handlers for reliable video progress persistence when leaving or backgrounding Safari.
+
+</details>
+
+<details>
+<summary><b>[7.5.1] — 2026-10-03</b></summary>
 
 ## [7.5.1] — 2026-10-03
 
@@ -324,6 +406,11 @@ The version in `manifest.json` is the single source of truth.
 - Continue Watching disconnects its resize/share observers when dismissed, empty, hidden or left
   through navigation. Late storage callbacks cannot remount an old shelf.
 - Library preference timestamps now use the coordinated storage writer.
+
+</details>
+
+<details>
+<summary><b>[7.5.0] — 2026-10-03</b></summary>
 
 ## [7.5.0] — 2026-10-03
 
@@ -378,6 +465,11 @@ an1me.to watchlist sync, which that work brought to light.
   watchlist request.
 
 ---
+
+</details>
+
+<details>
+<summary><b>[7.4.4] — 2026-09-17</b></summary>
 
 ## [7.4.4] — 2026-09-17
 
@@ -679,6 +771,11 @@ Covers everything since 7.4.0. 7.4.1 to 7.4.3 went out as in-between builds with
 
 ---
 
+</details>
+
+<details>
+<summary><b>[7.4.0] — 2026-09-06</b></summary>
+
 ## [7.4.0] — 2026-09-06
 
 ### Added
@@ -704,3 +801,5 @@ Covers everything since 7.4.0. 7.4.1 to 7.4.3 went out as in-between builds with
   overwrite the final status.
 - The Continue Watching section disconnects its previous `ResizeObserver` when it is rebuilt.
 - The capture-phase click handler injected on the site guards against non-Element event targets.
+
+</details>

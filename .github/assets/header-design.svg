@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="112" viewBox="0 0 880 112" role="img" aria-labelledby="title desc" >
-  <title id="title">Your library. Now on iPhone.</title>
-  <desc id="desc">Safari extension · iOS 18+ · SideStore · Free Apple ID</desc>
+  <title id="title">One icon. Every appearance.</title>
+  <desc id="desc">Native artwork · SideStore export · Design prompts</desc>
   <defs>
     <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#111e32"/><stop offset="1" stop-color="#0a111f"/></linearGradient>
     <linearGradient id="accent"><stop stop-color="#67e8d0"/><stop offset=".5" stop-color="#65ccff"/><stop offset="1" stop-color="#8b9bff"/></linearGradient>
@@ -21,11 +21,11 @@
     <path d="M600 0v112M664 0v112M728 0v112M792 0v112M856 0v112M570 48h310M570 96h310M570 144h310" stroke="#9dbddd" stroke-opacity=".035"/>
     <path d="M32 1h816" stroke="url(#accent)" stroke-opacity=".6"/>
   </g>
-  <text x="28" y="30" class="accent" font-size="10" font-weight="700" letter-spacing="2">AN1ME TRACKER / IPHONE GUIDE</text>
-  <text x="28" y="65" class="ink" font-size="30" font-weight="700" letter-spacing="-.7">Your library. Now on iPhone.</text>
-  <text x="29" y="90" class="muted" font-size="13">Safari extension · iOS 18+ · SideStore · Free Apple ID</text>
+  <text x="28" y="30" class="accent" font-size="10" font-weight="700" letter-spacing="2">AN1ME TRACKER / ICON DESIGN</text>
+  <text x="28" y="65" class="ink" font-size="30" font-weight="700" letter-spacing="-.7">One icon. Every appearance.</text>
+  <text x="29" y="90" class="muted" font-size="13">Native artwork · SideStore export · Design prompts</text>
   <g transform="translate(793 56)" fill="none" stroke="#7bdcff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
     <circle r="34" stroke-opacity=".12"/><circle r="27" stroke-opacity=".25" class="pulse"/>
-    <rect x="-11" y="-20" width="22" height="40" rx="5"/><path d="M-3-15h6M-3 15h6"/><path d="m-4-4 9 5-9 5z" fill="#7bdcff" stroke="none"/>
+    <rect x="-16" y="-16" width="32" height="32" rx="9"/><path d="M-9-7H9M0-7v17" stroke-width="4"/>
   </g>
 </svg>
