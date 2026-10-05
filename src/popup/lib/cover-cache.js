@@ -116,6 +116,7 @@
     } catch {}
     if (!isCurrent(job)) return;
 
+    if (globalThis.AnimeTrackerWebsiteAccess && !(await globalThis.AnimeTrackerWebsiteAccess.canRun())) return;
     const timeoutId = setTimeout(() => job.controller.abort(), 15000);
     try {
       // an1me.to covers use only the challenge-aware gateway.
@@ -162,7 +163,7 @@
   const CoverCache = {
     resolve(url) {
       if (!url) return url;
-      return mem.get(url) || url;
+      return mem.get(url) || globalThis.AnimeTrackerWebsiteAccess?.imageUrl(url) || url;
     },
 
     // Retention follows the entire library; warming follows the viewport. Updating
@@ -249,4 +250,8 @@
   document.addEventListener("visibilitychange", () => {
     if (!canWork()) cancelPending();
   });
+  const releaseAccess = globalThis.AnimeTrackerWebsiteAccess?.subscribe(state => {
+    if (!state.allowed) cancelPending();
+  });
+  window.addEventListener("pagehide", () => releaseAccess?.(), { once: true });
 })();

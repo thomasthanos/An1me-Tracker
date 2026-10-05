@@ -11,6 +11,7 @@
   const CLOUD_REFRESH_DEBOUNCE_MS = 120;
 
   const ACTIVITY_PRIORITIES = Object.freeze({
+    "site-access": 100,
     metadata: 60,
     manual: 70,
   });

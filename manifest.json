@@ -69,6 +69,7 @@
       ],
       "js": [
         "src/common/utils.js",
+        "src/common/website-access.js",
         "src/common/data/library-keys.js",
         "src/common/logger.js",
         "src/content/lib/storage.js",
@@ -88,6 +89,7 @@
       ],
       "js": [
         "src/common/utils.js",
+        "src/common/website-access.js",
         "src/content/lib/page-events.js",
         "src/content/page/copy-guard.js"
       ],
@@ -137,6 +139,7 @@
       ],
       "js": [
         "src/common/utils.js",
+        "src/common/website-access.js",
         "src/common/data/library-keys.js",
         "src/common/data/multipart-mappings.js",
         "src/common/data/anime-identity.js",

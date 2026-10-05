@@ -124,7 +124,8 @@
     if (!container) return [];
     const token = {};
     setupGenerations.set(container, token);
-    const all = GROUPS.flatMap(group => group.origins);
+    const all = [...new Set([...GROUPS.flatMap(group => group.origins), ...declaredOptionalOrigins(),
+      ...(globalThis.AnimeTrackerWebsiteAccess?.origins || [])])];
     const blocked = Array.isArray(knownBlockedOrigins)
       ? all.filter(origin => knownBlockedOrigins.includes(origin)) : await blockedOrigins();
     if (setupGenerations.get(container) !== token || !container.isConnected) return blocked;
@@ -145,7 +146,7 @@
       parent.append(el("strong", null, host));
     });
 
-    container.append(el("p", "site-access-text", "The browser is keeping the extension off the filler sites, so filler data cannot be fetched."));
+    container.append(el("p", "site-access-text", "Online work is paused until the tracker has access to every required website. Local progress and saved data remain available."));
 
     const phone = !!globalThis.AnimeTrackerUtils?.isMobileDevice?.();
     // Where the settings are the only way (on a phone), the steps; elsewhere, where to look if the prompt is refused.
@@ -204,7 +205,8 @@
     const tokens = targets.map(container => {
       const token = {}; setupGenerations.set(container, token); return token;
     });
-    const origins = globalThis.AnimeTrackerUtils?.isMobileDevice?.() ? declaredOptionalOrigins() : [];
+    const origins = globalThis.AnimeTrackerUtils?.isMobileDevice?.()
+      ? globalThis.AnimeTrackerWebsiteAccess?.enabled ? globalThis.AnimeTrackerWebsiteAccess.origins : declaredOptionalOrigins() : [];
     const provider = permissionsApi();
     const granted = provider ? await Promise.all(origins.map(origin => isAllowed(provider, origin, false))) : origins.map(() => false);
     const missing = origins.filter((_origin, index) => !granted[index]);
@@ -218,7 +220,7 @@
         if (text != null) node.textContent = text; return node;
       };
       container.append(element("p", "site-access-title", "Safari website access"),
-        element("p", "site-access-text", "Allow the websites used for metadata, covers, Skip Outro and cloud sync in one setup step."));
+        element("p", "site-access-text", "Online work is paused until all required websites are allowed. Local progress is still saved. Allow metadata, covers, Skip Outro and cloud sync together."));
       const details = element("details", "site-access-hosts");
       details.append(element("summary", null, `${missing.length} websites need access`));
       const list = element("ul");
@@ -237,9 +239,9 @@
           button.disabled = true;
           button.textContent = "Waiting for Safari…";
           button.setAttribute("aria-busy", "true");
-          request(missing, allowed => {
+          request(missing.filter(origin => declaredOptionalOrigins().includes(origin)), allowed => {
             if (setupGenerations.get(container) !== tokens[index] || !container.isConnected) return;
-            if (allowed) { void renderSetup(targets); }
+            if (allowed) { void globalThis.AnimeTrackerWebsiteAccess?.refresh(); void renderSetup(targets); }
             else {
               button.disabled = false; button.textContent = "Allow website access";
               button.removeAttribute("aria-busy"); steps.hidden = false;
@@ -268,6 +270,12 @@
     };
     window.addEventListener("beforeunload", dispose, { once: true });
     refresh();
+    const releaseAccess = globalThis.AnimeTrackerWebsiteAccess?.subscribe(state => {
+      const controller = window.AnimeTracker?.SyncStatusController;
+      if (state.allowed) controller?.clearActivity("site-access");
+      else controller?.setActivity("site-access", { label: "Paused — website access required", tone: "error" });
+    });
+    window.addEventListener("beforeunload", () => releaseAccess?.(), { once: true });
     return dispose;
   }
 

@@ -17,7 +17,10 @@
       record.pending = null;
       if (!active() || epoch !== generation || images.get(img) !== record || !img.isConnected ||
           img.dataset.atCoverUrl !== record.url) return;
-      img.src = AT.CoverCache.resolve(record.url) || record.url;
+      const resolved = AT.CoverCache.resolve(record.url) || record.url;
+      if (globalThis.AnimeTrackerWebsiteAccess?.isPaused() && !/^(?:blob:|data:)/.test(resolved)) return;
+      if (globalThis.AnimeTrackerWebsiteAccess?.isPaused() && resolved.startsWith("data:image/gif;")) return;
+      img.src = resolved;
       record.loaded = true;
       observer?.unobserve(img);
     });
@@ -76,6 +79,12 @@
     if (active() && root) observe(root);
   });
   window.addEventListener("resize", scheduleCheck, { passive: true });
+  const releaseAccess = globalThis.AnimeTrackerWebsiteAccess?.subscribe(state => {
+    generation++;
+    observer?.disconnect();
+    for (const record of images.values()) record.pending = null;
+    if (state.allowed && active() && root) observe(root);
+  });
   window.addEventListener("pagehide", () => {
     closed = true;
     generation++;
@@ -84,6 +93,7 @@
     if (frame !== null) window.cancelAnimationFrame(frame);
     images.clear();
     root = null;
+    releaseAccess?.();
   });
   AT.LibraryCoverLoader = { observe };
 })();

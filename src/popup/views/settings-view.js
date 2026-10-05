@@ -89,7 +89,7 @@
   }
 
   function renderHeader(user, needsReauth = false) {
-    const photo = user?.photoURL ? escapeHtml(user.photoURL) : "src/icons/icon48.png";
+    const photo = user?.photoURL ? escapeHtml(globalThis.AnimeTrackerWebsiteAccess?.imageUrl(user.photoURL, "src/icons/icon48.png") || user.photoURL) : "src/icons/icon48.png";
     const name = escapeHtml(user?.displayName || user?.email?.split("@")[0] || "User");
     const email = escapeHtml(user?.email || "");
     const signedIn = !!user;
@@ -630,7 +630,7 @@
     const localOnlyBadge = container.querySelector('[data-when="signed-out"]');
     const headerEl = container.querySelector(".settings-header");
 
-    if (avatar) avatar.src = user?.photoURL || "src/icons/icon48.png";
+    if (avatar) avatar.src = globalThis.AnimeTrackerWebsiteAccess?.imageUrl(user?.photoURL, "src/icons/icon48.png") || user?.photoURL || "src/icons/icon48.png";
     if (nameEl) nameEl.textContent = user?.displayName || user?.email?.split("@")[0] || "User";
     if (emailEl) emailEl.textContent = user?.email || "";
     if (pill) {

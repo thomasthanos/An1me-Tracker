@@ -784,7 +784,7 @@
     if (user) {
       if (avatar) {
         if (user.photoURL) {
-          avatar.src = user.photoURL;
+          avatar.src = globalThis.AnimeTrackerWebsiteAccess?.imageUrl(user.photoURL, "src/icons/icon48.png") || user.photoURL;
           avatar.onerror = () => {
             avatar.src = "src/icons/icon48.png";
           };

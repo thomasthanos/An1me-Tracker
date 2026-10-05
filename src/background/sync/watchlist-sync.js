@@ -1,6 +1,7 @@
 // watchlist-sync.js — mirrors watchlist changes to an1me.to: forwards to a live
 // tab when one is open, else POSTs to the site's admin-ajax endpoint through the gateway.
 async function syncWatchlistToSite(animeId, type, animeSlug = null) {
+  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return { paused: true, success: false };
   dlog(
     `%c WatchlistSync %c ${type} %c anime #${animeId}`,
     "background:#6366f1;color:#fff;border-radius:3px 0 0 3px;padding:2px 6px;font-weight:700",

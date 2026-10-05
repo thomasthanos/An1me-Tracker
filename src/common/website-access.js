@@ -108,6 +108,9 @@
 
   root.AnimeTrackerWebsiteAccess = Object.freeze({ enabled, origins, canRun, refresh,
     getState: () => state, isPaused: () => enabled && !state.allowed, deniedError,
+    imageUrl(url, fallback = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") {
+      return enabled && !state.allowed && /^https?:/i.test(String(url)) ? fallback : url;
+    },
     subscribe(listener) { listeners.add(listener); listener(state); return () => listeners.delete(listener); } });
   if (enabled) {
     api?.onAdded?.addListener?.(invalidate);

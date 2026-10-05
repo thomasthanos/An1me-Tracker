@@ -24,6 +24,7 @@
   }
 
   function armPushAlarm(delayMinutes) {
+    if (self.AnimeTrackerWebsiteAccess?.isPaused()) return;
     if (isMobile()) return;
     try {
       chrome.alarms.create(PUSH_ALARM, { delayInMinutes: Math.max(1, delayMinutes || 1) });
@@ -44,6 +45,7 @@
   let _pendingRerun = false;
 
   async function runBackgroundPush(reason) {
+    if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return { paused: true };
     if (isMobile()) {
       // All AniList work is desktop-only, including manual and stale-job recovery requests.
       const s = await bgStorageGet([STATUS_KEY]);
@@ -297,7 +299,7 @@
         .get(PUSH_ALARM_PERIODIC)
         .then((existing) => {
           if (existing && Number(existing.periodInMinutes) === 30) return;
-          return chrome.alarms.create(PUSH_ALARM_PERIODIC, { delayInMinutes: 5, periodInMinutes: 30 });
+          if (!self.AnimeTrackerWebsiteAccess?.isPaused()) return chrome.alarms.create(PUSH_ALARM_PERIODIC, { delayInMinutes: 5, periodInMinutes: 30 });
         })
         .catch(() => {});
     } else {
