@@ -4,7 +4,7 @@
 
 <p align="center"><a href="README.md">Overview</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="PRIVACY.md">Privacy</a> · <a href="SECURITY.md">Security</a></p>
 
-[![Version 8.2.7](.github/assets/badge-v-tracker.svg)](CHANGELOG.md) · **iOS 18+** · **Free Apple ID**
+[![Version 8.2.8](.github/assets/badge-v-tracker.svg)](CHANGELOG.md) · **iOS 18+** · **Free Apple ID**
 
 # iPhone setup
 
@@ -52,18 +52,21 @@ versions. In short, from a Windows PC:
 ## 3. Turn the extension on
 
 1. **Settings → Apps → Safari → Extensions → An1me.to Tracker** → turn it on.
-2. Filler data needs **animefillerlist.com** and **api.jikan.moe**. Safari asks for both at once after
-   you install or update, and again when you tap **Fetch & Import** while they are not allowed yet: tap
-   **Allow**. If you dismissed it, tap **Allow access** in the tracker's Settings or Fetch & Import, or set
-   both to **Allow** under **Permissions** on this screen (iOS lists every site separately; there is no
-   "All Websites" switch for this extension). The other sites work while left on **Ask**: sign-in, cloud
-   sync and Jikan answer the extension anyway, but AnimeFillerList can only be read once allowed. The
-   **Safari Settings** button in the An1me Tracker app opens this screen.
-3. Open an1me.to, tap the **puzzle / AA** button in the address bar → **An1me.to Tracker**.
+2. Open **an1me.to** in Safari. Tap the **puzzle / AA** button in the address bar and allow the tracker
+   **Always on This Website** so it can save watch progress.
+3. Open **An1me.to Tracker** from that Safari menu. Tap **Allow website access**, then approve Safari's
+   request. This one tap requests the supporting sites for metadata, filler data, cover images, Skip Outro,
+   sign-in and cloud sync. The button is available before sign-in and in **Tracker → Settings**.
+4. If Safari refuses the request or offers no prompt, the tracker shows the exact Settings path and the
+   sites to set to **Allow**. iOS lists sites separately; the tracker does not request access to every
+   website. The **Safari Settings** button in the An1me Tracker app opens the extension settings.
 
 > [!IMPORTANT]
-> Without **Allow**, Safari blocks the extension's cloud sync and metadata lookups. It can still only
-> reach the sites it declares — an1me.to and the sync, AniList and metadata services.
+> Safari controls permission approval; the tracker cannot silently grant website access at installation.
+> A site left on **Ask** has not been granted access and can block extension requests. Allow the listed
+> sites before fetching or signing in. AniList sync remains disabled on mobile: its API is not requested;
+> its image CDN is still used for covers.
+> [Apple's Safari extension permission documentation](https://developer.apple.com/documentation/safariservices/managing-safari-web-extension-permissions)
 
 ## 4. Sign in
 

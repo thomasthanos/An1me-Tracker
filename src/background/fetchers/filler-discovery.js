@@ -63,7 +63,6 @@ function resetFillerFetchBreakers() {
 }
 
 const AFL_ORIGIN_PATTERN = "https://www.animefillerlist.com/*";
-const FILLER_HOST_PATTERNS = [AFL_ORIGIN_PATTERN, "https://api.jikan.moe/*"];
 
 // False only when the browser says the extension may not reach AnimeFillerList: Safari lets the user
 // limit an extension to some websites, and Chrome to sites they pick. A fetch then fails as a bare

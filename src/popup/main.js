@@ -1910,16 +1910,20 @@
       }
 
       if (e.target.closest("#settingsFetchFillers")) {
-        // Ask for the filler sites from this tap, before anything is awaited: Safari only prompts for them while
-        // the tap still counts as a user gesture, and answers at once when they are already allowed. The import
-        // starts on the answer, or after a moment if the prompt waits on the user; a later grant still reaches it.
-        await new Promise((resolve) => {
-          const timer = setTimeout(resolve, 1500);
-          const done = () => { clearTimeout(timer); resolve(); };
-          if (AT.SiteAccess?.askIfOptional) AT.SiteAccess.askIfOptional(done);
-          else done();
-        });
+        const button = e.target.closest("#settingsFetchFillers");
+        if (button.disabled) return;
+        button.disabled = true;
         try {
+          // Call before the first await to retain the tap's user gesture. A pending or refused native
+          // prompt must not start a fetch or stamp the library with avoidable permission failures.
+          const allowed = await new Promise(resolve => {
+            if (AT.SiteAccess?.askIfOptional) AT.SiteAccess.askIfOptional(resolve);
+            else resolve(true);
+          });
+          if (!allowed) {
+            AT.UIHelpers?.showToast?.("Website access was not granted. Allow the listed sites in Safari settings, then try again.", { type: "warning", duration: 5000 });
+            return;
+          }
           await fetchAllFillers({
             autoStart: true,
             forceInfoRefresh: false,
@@ -1928,6 +1932,8 @@
         } catch (error) {
           PopupLogger.error("RepairAll", "Fetch button failed:", error);
           AT.UIHelpers?.showToast?.(error?.message || "Fetch failed", { type: "error", duration: 3500 });
+        } finally {
+          button.disabled = false;
         }
         return;
       }

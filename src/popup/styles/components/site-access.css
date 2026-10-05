@@ -31,6 +31,14 @@
 .site-access-btn:active { transform: translateY(1px); }
 .settings-view .site-access { margin-bottom: 12px; }
 .site-access-setup { margin-bottom: 12px; text-align: left; }
+.auth-content:has(#authSiteAccess:not([hidden])) {
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#authSiteAccess { flex-shrink: 0; width: 100%; }
+/* Settings renders its own card; keep one visible consent action per view. */
+.app.settings-mode #mobileSiteAccess { display: none; }
 .site-access-title { margin: 0; font-size: 13px; font-weight: 700; color: var(--t1); }
 .site-access-hosts { font-size: 11.5px; color: var(--t2); }
 .site-access-hosts summary { cursor: pointer; min-height: 24px; }

@@ -488,21 +488,17 @@ struct An1meTrackerAppView: View {
                 detail: "Άνοιξε τις «Επεκτάσεις», βρες το An1me Tracker και γύρισε τον διακόπτη σε ON."
             ),
             GuideStep(
-                title: "Δικαιώματα: «Allow» στα sites του filler",
-                detail: "Το Safari ρωτά μόνο του για animefillerlist.com και api.jikan.moe μετά την εγκατάσταση και στο Fetch & Import · πάτα «Allow». Αν το έκλεισες, κάτω από «Permissions» βάλε «Allow» σε: \(neededSites). Τα υπόλοιπα δουλεύουν και στο «Ask»."
+                title: "Μόνιμη πρόσβαση στο an1me.to",
+                detail: "Στα «Δικαιώματα» επίλεξε an1me.to → «Allow», ώστε η επέκταση να αποθηκεύει το progress. Για τα υπόλοιπα sites ακολούθησε το επόμενο βήμα μέσα στο Safari."
             ),
             otherSitesStep
         ]
     }
 
-    /// The hosts that need Allow. iOS lists each one separately. Sign-in, cloud sync and Jikan answer the
-    /// extension on "Ask" too, but AnimeFillerList can only be read with Allow.
-    private let neededSites = "an1me.to, animefillerlist.com, api.jikan.moe"
-
     private var otherSitesStep: GuideStep {
         GuideStep(
-            title: "Έλεγχος από την επέκταση",
-            detail: "Άνοιξε το Tracker στο Safari → Settings. Αν κάποιο site του filler δεν έχει επιτραπεί, θα το δεις εκεί με κουμπί «Allow access» που ρωτά το Safari · το ίδιο υπάρχει και στο Fetch & Import."
+            title: "Όλα τα απαραίτητα sites με ένα πάτημα",
+            detail: "Άνοιξε το Tracker από το μενού επεκτάσεων του Safari και πάτα «Allow website access», έπειτα «Allow» στο αίτημα του Safari. Ζητά μαζί πρόσβαση για metadata, εικόνες, Skip Outro και cloud sync. Το κουμπί υπάρχει και πριν το sign-in και στα Settings. Αν δεν εμφανιστεί αίτημα, ακολούθησε τις οδηγίες για χειροκίνητο «Allow»."
         )
     }
 

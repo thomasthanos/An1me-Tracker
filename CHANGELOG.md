@@ -12,6 +12,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.8] — 2026-10-05
+
+### Fixed
+
+- Safari website access now starts from an explicit popup tap, including before sign-in. **Allow website
+  access** requests the declared metadata, filler, image, Skip Outro and cloud services together. The
+  existing **Allow access** button requests the same services on mobile. Installation and updates no
+  longer attempt to request permission from the background without a user gesture.
+- Access buttons show **Waiting for Safari** while a prompt is pending. A denied, failed or unanswered
+  request restores the button and shows manual Settings instructions. Both promise-only and callback
+  permission APIs are supported, and callback errors are handled.
+- **Fetch & Import** waits for permission approval before starting. Refusing the prompt no longer starts
+  a fetch that would record unnecessary access errors.
+- The iPhone app and setup guide now describe the popup action rather than an automatic install prompt.
+  The pre-sign-in setup card scrolls within a partially expanded Safari sheet instead of clipping its
+  heading or leaving sign-in off screen.
+  Only named services are requested; the mobile AniList API remains disabled. Permission checks happen
+  on popup opening and permission events, without network requests or polling. Progress, caches, sync
+  records and desktop host permissions retain their existing behavior.
+
 ## [8.2.7] — 2026-10-05
 
 ### Fixed

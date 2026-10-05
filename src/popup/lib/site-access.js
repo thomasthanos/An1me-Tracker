@@ -22,15 +22,19 @@
     return String(origin).replace(/^https?:\/\//, "").replace(/\/\*$/, "").replace(/^www\./, "");
   }
 
-  // Whether the browser says the extension may reach `origin`. Any doubt (an error, no answer) counts as allowed:
-  // a false alarm would send the user hunting for a setting that is already right.
+  // Legacy filler notices avoid false alarms when the API cannot answer. First-run setup instead keeps
+  // unknown hosts visible, so unavailable APIs still lead to manual instructions.
   function isAllowed(provider, origin, unknown = true) {
     return new Promise((resolve) => {
       const timer = setTimeout(() => resolve(unknown), 1500);
       const done = (granted) => { clearTimeout(timer); resolve(typeof granted === "boolean" ? granted : unknown); };
       try {
         const details = { origins: [origin] };
-        const pending = provider.promiseOnly ? provider.api.contains(details) : provider.api.contains(details, done);
+        const callbackDone = granted => {
+          const error = globalThis.chrome?.runtime?.lastError;
+          done(error ? unknown : granted);
+        };
+        const pending = provider.promiseOnly ? provider.api.contains(details) : provider.api.contains(details, callbackDone);
         if (pending && typeof pending.then === "function") pending.then(done, () => done(unknown));
       } catch {
         done(unknown);
@@ -69,7 +73,11 @@
       // are picked up by the permission event listener even after this bounded wait.
       timer = setTimeout(() => settle(false), 30_000);
       const details = { origins };
-      const pending = provider.promiseOnly ? provider.api.request(details) : provider.api.request(details, settle);
+      const callbackDone = granted => {
+        const error = globalThis.chrome?.runtime?.lastError;
+        settle(error ? false : granted);
+      };
+      const pending = provider.promiseOnly ? provider.api.request(details) : provider.api.request(details, callbackDone);
       if (pending && typeof pending.then === "function") pending.then(settle, () => settle(false));
     } catch {
       settle(false);
@@ -98,9 +106,8 @@
     return blocked.length > 0 && blocked.every((origin) => optional.includes(origin));
   }
 
-  // Asks for the optional filler sites straight from a tap that is about to need them (Fetch & Import): Safari
-  // shows its prompt only for those not granted yet, and answers at once for the rest. Calls back once, with
-  // true when everything asked for is allowed; at once with true where nothing is optional (Chrome).
+  // Request the supporting services together, directly from a tap. Safari controls its consent UI.
+  // Chrome keeps required hosts, so with no optional services there is no additional request.
   function askIfOptional(callback) {
     const origins = declaredOptionalOrigins();
     if (!origins.length) {
@@ -165,7 +172,14 @@
     container.append(fallback);
 
     button.addEventListener("click", () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      button.textContent = phone ? "Waiting for Safari…" : "Waiting for browser…";
+      button.setAttribute("aria-busy", "true");
       request(phone ? declaredOptionalOrigins() : blocked, (granted) => {
+        button.disabled = false;
+        button.textContent = "Allow access";
+        button.removeAttribute("aria-busy");
         if (!granted) {
           fallback.hidden = false;
           return;
@@ -213,10 +227,17 @@
         const button = element("button", "site-access-btn", "Allow website access");
         button.type = "button";
         button.addEventListener("click", () => {
+          if (button.disabled) return;
           button.disabled = true;
+          button.textContent = "Waiting for Safari…";
+          button.setAttribute("aria-busy", "true");
           request(missing, allowed => {
+            if (setupGenerations.get(container) !== tokens[index] || !container.isConnected) return;
             if (allowed) { void renderSetup(targets); }
-            else { button.disabled = false; steps.hidden = false; }
+            else {
+              button.disabled = false; button.textContent = "Allow website access";
+              button.removeAttribute("aria-busy"); steps.hidden = false;
+            }
           });
         });
         container.append(button);

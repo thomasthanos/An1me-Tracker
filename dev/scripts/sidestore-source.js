@@ -36,11 +36,11 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Integrated Speed Control: 1×, 1.25×, 1.5× and 2× on iPhone, with hold for temporary 2×.\n" +
-    "• Local speed settings, no added polling or requests; phone audio remains controlled by iOS.\n" +
-    "• Custom touch-friendly speed menus with selected checkmarks.\n" +
-    "• Verified media timestamps for Resume, completion and phone-to-PC sync at faster rates.\n" +
-    "• Existing watch progress, library data and native icon appearances are retained.";
+    "• Open the tracker in Safari and tap Allow website access to request its supporting sites together.\n" +
+    "• Access buttons show waiting feedback and manual Settings instructions if Safari does not grant access.\n" +
+    "• Fetch & Import waits for permission approval instead of starting while the prompt is pending.\n" +
+    "• Setup and sign-in scroll correctly in a partially expanded Safari sheet.\n" +
+    "• Progress and caches are retained; AniList stays disabled on mobile, with no added polling.";
 
   return {
     name: appName,

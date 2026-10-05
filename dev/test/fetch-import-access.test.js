@@ -2,12 +2,9 @@
 //
 //   node dev/test/fetch-import-access.test.js
 //
-// On an iPhone, Safari lists each host the extension uses with Allow / Ask / Deny. AnimeFillerList, left on
-// Ask, can only fail ("no site access"): it sends no CORS headers. Hosts that do (sign-in, cloud sync, Jikan)
-// keep working on Ask, so the notice must not claim those are broken. Asking from the extension changed nothing
-// in Safari's settings and left the notice up, so on a phone the notice is the steps, with no button; a desktop
-// browser can show its own prompt, so there it offers Allow access. The panel must also keep its layout with
-// the notice in it: 8.2.5 lost one CSS rule and the stats and progress spilled out of their boxes.
+// Safari can request optional hosts from a tap. Older builds with required hosts need Settings instructions.
+// A pending or refused prompt must not start a fetch that could record avoidable failures. The panel must
+// also keep its layout with the notice in it: 8.2.5 lost a CSS rule and the progress spilled out of its box.
 // AT_TEST_BROWSER selects Chromium; NODE_PATH can expose a bundled Playwright install.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -36,7 +33,7 @@ const DESKTOP = { viewport: { width: 420, height: 600 } };
 
 // `access`: what permissions.contains answers: true, false, a list of the allowed origins, or null for no
 // permissions API. `grant`: what request answers. `optional`: the manifest's optional_host_permissions (the
-// Safari build declares the filler sites there).
+// Safari build declares its supporting services there).
 async function panel(browser, device, { access, grant = true, optional = null }) {
   const context = await browser.newContext(device);
   const page = await context.newPage();
@@ -51,6 +48,7 @@ async function panel(browser, device, { access, grant = true, optional = null })
         // Answers through both the callback and a promise, as a browser can.
         request: (request, callback) => {
           window.__requests.push({ origins: request.origins, gesture: navigator.userActivation?.isActive === true });
+          if (grant === "pending") return new Promise(resolve => { window.__answer = answer => { callback(answer); resolve(answer); }; });
           setTimeout(() => callback(grant));
           return Promise.resolve(grant);
         },
@@ -123,6 +121,16 @@ async function panel(browser, device, { access, grant = true, optional = null })
       assert.equal((await p.view()).banner, true);
       await p.context.close();
     });
+    await test("the existing Allow access notice shows pending feedback and can retry after denial", async () => {
+      const p = await panel(browser, PHONE, { access: false, grant: "pending", optional: FILLER });
+      await p.page.click(".site-access-btn");
+      assert.equal(await p.page.locator(".site-access-btn").isDisabled(), true);
+      assert.match(await p.page.locator(".site-access-btn").innerText(), /waiting/i);
+      await p.page.evaluate(() => window.__answer(false));
+      assert.equal(await p.page.locator(".site-access-btn").isEnabled(), true);
+      assert.equal(await p.page.$eval(".site-access-steps", el => el.hidden), false);
+      await p.context.close();
+    });
 
     await test("tapping Fetch & Import asks for the optional filler sites, and asks for nothing where they are required", async () => {
       const ask = async (optional) => {
@@ -138,6 +146,49 @@ async function panel(browser, device, { access, grant = true, optional = null })
       const chrome = await ask(null);
       assert.deepEqual(chrome.requests, [], "no prompt where the sites are required");
       assert.equal(chrome.answer, true);
+    });
+
+    await test("the mobile Allow access button requests every declared optional service in one gesture", async () => {
+      const optional = [...FILLER, "https://firestore.googleapis.com/*", "https://api.aniskip.com/*", "https://cdn.myanimelist.net/*"];
+      const p = await panel(browser, PHONE, { access: false, optional });
+      await p.page.click(".site-access-btn");
+      await p.page.waitForTimeout(80);
+      const state = await p.view();
+      assert.deepEqual(state.requests.map(r => r.origins), [optional]);
+      assert.equal(state.requests[0].gesture, true);
+      assert.equal(state.granted, 1);
+      await p.context.close();
+    });
+
+    await test("Fetch & Import waits for consent and does not fetch after refusal", async () => {
+      const source = read("src/popup/main.js");
+      const start = source.indexOf('      if (e.target.closest("#settingsFetchFillers")) {');
+      const end = source.indexOf("\n    });", start);
+      assert.ok(start >= 0 && end > start, "production delegated click handler found");
+      for (const answer of [false, true]) {
+        const p = await panel(browser, PHONE, { access: false, optional: FILLER, grant: "pending" });
+        await p.page.evaluate(block => {
+          window.__fetches = 0; window.__toasts = [];
+          const AT = window.AnimeTracker;
+          AT.FillerFetchUI.close();
+          AT.UIHelpers = { showToast: text => window.__toasts.push(text) };
+          const PopupLogger = { error: () => {} };
+          // Only the slow batch/network boundary is replaced; permission UI and production click code run.
+          const fetchAllFillers = async () => { window.__fetches++; };
+          const handler = eval(`(async e => { ${block} })`);
+          const button = document.createElement("button");
+          button.id = "settingsFetchFillers"; button.textContent = "Fetch & Import";
+          document.body.append(button); button.addEventListener("click", handler);
+        }, source.slice(start, end));
+        await p.page.click("#settingsFetchFillers");
+        await p.page.waitForTimeout(1700);
+        assert.equal(await p.page.evaluate(() => window.__fetches), 0, "no fetch while Safari is waiting for consent");
+        await p.page.evaluate(answer => window.__answer(answer), answer);
+        await p.page.waitForTimeout(80);
+        assert.equal(await p.page.evaluate(() => window.__fetches), answer ? 1 : 0);
+        if (!answer) assert.ok((await p.page.evaluate(() => window.__toasts)).length > 0, "refusal gives actionable feedback");
+        await p.context.close();
+      }
     });
 
     await test("only the filler sites still blocked are named", async () => {
