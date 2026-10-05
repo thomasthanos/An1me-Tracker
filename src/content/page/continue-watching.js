@@ -650,7 +650,8 @@
     const card = document.createElement("div");
     card.className = "at-cw-card";
     card.dataset.cwSlug = item.slug;
-    card.dataset.cwCover = item.cover || "";
+    const coverAllowed = !globalThis.AnimeTrackerWebsiteAccess?.isPaused();
+    card.dataset.cwCover = coverAllowed ? item.cover || "" : "";
     card.classList.add(item.isStart ? "at-cw-card-start" : "at-cw-card-resume");
 
     const resume = document.createElement("a");
@@ -666,7 +667,7 @@
     initial.textContent = (item.title[0] || "?").toUpperCase();
     thumb.appendChild(initial);
 
-    if (item.cover) {
+    if (item.cover && coverAllowed) {
       const img = document.createElement("img");
       img.className = "at-cw-img";
       img.loading = "lazy";
@@ -742,7 +743,12 @@
     const thumb = card.querySelector(".at-cw-thumb");
     // Keep the decoded image in place when only progress or metadata changes. A failed image
     // also stays failed until its URL changes, rather than being downloaded on every refresh.
-    if (card.dataset.cwCover !== (item.cover || "")) {
+    const coverAllowed = !globalThis.AnimeTrackerWebsiteAccess?.isPaused();
+    const currentImage = card.querySelector('.at-cw-img');
+    if (!coverAllowed && currentImage && (!currentImage.complete || card.dataset.cwCover !== (item.cover || ''))) {
+      currentImage.remove(); card.dataset.cwCover = '';
+    }
+    if (coverAllowed && card.dataset.cwCover !== (item.cover || "")) {
       card.querySelector(".at-cw-img")?.remove();
       card.dataset.cwCover = item.cover || "";
       if (item.cover) {
@@ -1172,6 +1178,14 @@
   document.addEventListener("visibilitychange", syncShelf);
   window.addEventListener("pagehide", unmountShelf);
   window.addEventListener("pageshow", (event) => { if (event.persisted) syncShelf(); });
+  let accessWasAllowed;
+  const releaseAccess = globalThis.AnimeTrackerWebsiteAccess?.subscribe(state => {
+    if (state.allowed === accessWasAllowed) return;
+    accessWasAllowed = state.allowed;
+    lastRenderedSignature = null;
+    scheduleRender();
+  });
+  window.addEventListener('pagehide', event => { if (!event.persisted) releaseAccess?.(); });
 
   loadAndRender();
 })();

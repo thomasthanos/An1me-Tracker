@@ -4,6 +4,7 @@ const fs = require("node:fs"), path = require("node:path"), vm = require("node:v
 const root = path.join(__dirname, "../../..");
 const clone = value => value === undefined ? undefined : structuredClone(value);
 function cloudWorker(initial = {}, cloud = {}, options = {}) {
+  const optionsBeforeRequest = options.beforeRequest;
   let now = options.now ?? Date.parse("2026-10-04T12:00:00Z"), failNextPatch = false, failPatches = false;
   const store = clone(initial), remote = clone(cloud), alarms = new Map(options.alarms || []), requests = [], installedListeners = [];
   class Clock extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } }
@@ -38,7 +39,7 @@ function cloudWorker(initial = {}, cloud = {}, options = {}) {
     };
   }
   const sandbox = { console: { log() {}, info() {}, debug() {}, warn() {}, error() {} }, Date: Clock, chrome, URL, URLSearchParams,
-    Response, Headers, AbortController, TextEncoder, TextDecoder, structuredClone, crypto, atob, btoa, queueMicrotask,
+    Response, Headers, ReadableStream, AbortController, TextEncoder, TextDecoder, structuredClone, crypto, atob, btoa, queueMicrotask,
     setTimeout: (...args) => { const timer = setTimeout(...args); timer.unref?.(); return timer; }, clearTimeout,
     setInterval: (...args) => { const timer = setInterval(...args); timer.unref?.(); return timer; }, clearInterval };
   const context = vm.createContext(sandbox);
@@ -46,6 +47,7 @@ function cloudWorker(initial = {}, cloud = {}, options = {}) {
   const call = (name, ...args) => vm.runInContext(name, context)(...args);
   sandbox.fetch = async (url, options = {}) => {
     requests.push({ url: String(url), method: options.method || "GET", body: options.body });
+    if (typeof optionsBeforeRequest === 'function') await optionsBeforeRequest(String(url), options);
     if (!String(url).includes("firestore.googleapis.com")) throw Error("Unexpected endpoint: " + url);
     if (options.method === "PATCH") {
       if (failNextPatch || failPatches) { failNextPatch = false; return new Response("{}", { status: 503 }); }

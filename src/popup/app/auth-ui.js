@@ -175,6 +175,7 @@
   };
 
   function friendlyAuthError(err) {
+    if (err?.code === 'SITE_ACCESS_REQUIRED') return 'Sign-in is paused. Allow website access above, then try again.';
     const raw = (err?.message || "").trim();
     return EMAIL_AUTH_ERRORS[AT.AuthEnv.authErrorCode(raw)] || raw || "Sign-in failed.";
   }
@@ -263,8 +264,10 @@
       const pwEl = document.getElementById("authPasswordInput");
       if (pwEl) pwEl.value = "";
     } catch (err) {
-      await chrome.storage.local.set({ pendingBackgroundMetadataRepair: false });
-      PopupLogger.error("Firebase", "Sign-in error:", err);
+      if (err?.code !== 'SITE_ACCESS_REQUIRED') {
+        await chrome.storage.local.set({ pendingBackgroundMetadataRepair: false });
+        PopupLogger.error("Firebase", "Sign-in error:", err);
+      }
       setEmailFormError(friendlyAuthError(err));
     } finally {
       setEmailFormBusy(false, "Sign in");

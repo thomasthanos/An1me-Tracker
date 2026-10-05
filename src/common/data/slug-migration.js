@@ -51,6 +51,7 @@
   }
 
   async function fetchAn1meViaGateway(url) {
+    if (globalThis.AnimeTrackerWebsiteAccess?.isPaused()) throw globalThis.AnimeTrackerWebsiteAccess.deniedError();
     const reply = await new Promise((resolve) => {
       // settle-once + wall clock: sendMessage's callback never fires if the worker dies mid-flight,
       // and the gateway's own budget can exceed the probe timeout once it retries.
@@ -72,6 +73,9 @@
         finish(null);
       }
     });
+    if (reply?.paused || reply?.error === 'SITE_ACCESS_REQUIRED' || globalThis.AnimeTrackerWebsiteAccess?.isPaused()) {
+      throw globalThis.AnimeTrackerWebsiteAccess?.deniedError?.() || Object.assign(new Error('Website access required'), { code: 'SITE_ACCESS_REQUIRED' });
+    }
     if (!reply || reply.unreachable || typeof reply.text !== "string") return null;
     return { ok: reply.ok === true, status: Number(reply.status) || 0, text: reply.text };
   }
@@ -255,6 +259,7 @@
 
   async function migrate({ force = false } = {}) {
     const summary = { tried: 0, renamed: 0, skipped: 0, ranAt: Date.now() };
+    if (globalThis.AnimeTrackerWebsiteAccess && !(await globalThis.AnimeTrackerWebsiteAccess.canRun())) return { ...summary, paused: true };
     const meta = await sget([STATE_KEY]);
     const state = meta[STATE_KEY] || { lastRunAt: 0, perSlug: {} };
 
@@ -313,7 +318,7 @@
 
       const candidates = buildCandidatesForEntry(slug, entry);
       let resolved = null;
-
+      try {
       for (const cand of candidates) {
         if (await probeSlug(cand)) {
           resolved = cand;
@@ -330,6 +335,12 @@
         }
         await sleep(SEARCH_PROBE_GAP_MS);
       }
+      } catch (error) {
+        if (error?.code === 'SITE_ACCESS_REQUIRED') return { ...summary, paused: true };
+        throw error;
+      }
+
+      if (globalThis.AnimeTrackerWebsiteAccess?.isPaused()) return { ...summary, paused: true };
 
       state.perSlug[slug] = { triedAt: Date.now(), resolved: resolved || null };
 

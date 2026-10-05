@@ -121,7 +121,9 @@ const FirebaseLib = (function () {
             await refreshToken(tokens.refreshToken);
             PopupLogger.log("Firebase", "Token refreshed successfully");
           } catch (e) {
-            if (e?.permanent) {
+            if (e?.paused || e?.code === 'SITE_ACCESS_REQUIRED') {
+              // Consent pause keeps the session; it is not a failed token refresh.
+            } else if (e?.permanent) {
               PopupLogger.warn("Firebase", `Refresh token rejected (${e.message}) — reconnect required`);
             } else if (tokens.expiresAt && tokens.expiresAt > Date.now() + 30000) {
               PopupLogger.warn(
@@ -271,6 +273,8 @@ const FirebaseLib = (function () {
       if (response?.tokens?.idToken) return response.tokens;
 
       const error = new Error(response?.error || "Token refresh failed");
+      error.paused = response?.paused === true;
+      error.code = response?.error;
       error.permanent = response?.permanent === true;
       error.transient = !error.permanent;
       throw error;
@@ -320,6 +324,7 @@ const FirebaseLib = (function () {
         const newTokens = await refreshToken(tokens.refreshToken);
         return newTokens.idToken;
       } catch (error) {
+        if (error?.paused || error?.code === 'SITE_ACCESS_REQUIRED') return tokens.expiresAt > Date.now() + 30000 ? tokens.idToken : null;
         PopupLogger.error("Firebase", `Refresh failed (${error?.permanent ? "rejected" : "transient"}):`, error.message);
 
         // The background worker has flagged the session; the reconnect prompt takes it from here.
@@ -386,6 +391,7 @@ const FirebaseLib = (function () {
       });
       data = await response.json().catch(() => null);
     } catch (networkError) {
+      if (networkError?.code === 'SITE_ACCESS_REQUIRED') throw networkError;
       throw new Error("Network error. Please check your connection.");
     }
     if (!data) {
@@ -659,6 +665,7 @@ const FirebaseSync = (function () {
       reason: reason || (immediate ? "popup:immediate" : "popup:debounced"),
     });
 
+    if (response?.paused && response?.queued) return response;
     if (!response?.success) {
       const error = new Error(response?.error || "Cloud sync failed");
       error.code = response?.error || "SYNC_FAILED";

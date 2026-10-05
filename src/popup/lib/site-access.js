@@ -107,7 +107,7 @@
   // optional hosts: asking for required ones changed nothing there and left the notice up.
   function canAskInPlace(blocked) {
     if (!globalThis.AnimeTrackerUtils?.isMobileDevice?.()) return true;
-    const optional = optionalOrigins();
+    const optional = declaredOptionalOrigins();
     return blocked.length > 0 && blocked.every((origin) => optional.includes(origin));
   }
 
@@ -210,7 +210,7 @@
     const tokens = targets.map(container => {
       const token = {}; setupGenerations.set(container, token); return token;
     });
-    const origins = globalThis.AnimeTrackerUtils?.isMobileDevice?.()
+    const origins = globalThis.AnimeTrackerWebsiteAccess?.enabled || globalThis.AnimeTrackerUtils?.isMobileDevice?.()
       ? globalThis.AnimeTrackerWebsiteAccess?.enabled ? globalThis.AnimeTrackerWebsiteAccess.origins : declaredOptionalOrigins() : [];
     const provider = permissionsApi();
     const granted = provider ? await Promise.all(origins.map(origin => isAllowed(provider, origin, false))) : origins.map(() => false);
@@ -235,7 +235,8 @@
       steps.append(element("li", null, `Open ${SETTINGS_PATH}.`),
         element("li", null, "Under Permissions, choose Allow for the websites listed above."),
         element("li", null, "Return to Safari and reopen the tracker."));
-      steps.hidden = typeof provider?.api?.request === "function";
+      const requestable = missing.filter(origin => declaredOptionalOrigins().includes(origin));
+      steps.hidden = typeof provider?.api?.request === "function" && requestable.length > 0;
       if (steps.hidden) {
         const button = element("button", "site-access-btn", "Allow website access");
         button.type = "button";
@@ -244,7 +245,7 @@
           button.disabled = true;
           button.textContent = "Waiting for Safari…";
           button.setAttribute("aria-busy", "true");
-          request(missing.filter(origin => declaredOptionalOrigins().includes(origin)), allowed => {
+          request(requestable, allowed => {
             if (setupGenerations.get(container) !== tokens[index] || !container.isConnected) return;
             if (allowed) { void globalThis.AnimeTrackerWebsiteAccess?.refresh(); void renderSetup(targets); }
             else {
@@ -264,7 +265,7 @@
     const targets = (Array.isArray(containers) ? containers : [containers]).filter(Boolean);
     let disposed = false;
     const refresh = () => { if (!disposed) void renderSetup(targets); };
-    const provider = globalThis.AnimeTrackerUtils?.isMobileDevice?.() ? permissionsApi() : null;
+    const provider = globalThis.AnimeTrackerWebsiteAccess?.enabled || globalThis.AnimeTrackerUtils?.isMobileDevice?.() ? permissionsApi() : null;
     const events = [provider?.api?.onAdded, provider?.api?.onRemoved].filter(Boolean);
     events.forEach(event => event.addListener?.(refresh));
     const dispose = () => {

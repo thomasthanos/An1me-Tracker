@@ -31,7 +31,7 @@ async function websiteAccessAllowed() {
   return !self.AnimeTrackerWebsiteAccess || await self.AnimeTrackerWebsiteAccess.canRun();
 }
 function websiteAccessPausedResult(kind = null) {
-  return { success: false, paused: true, queued: true, state: "waitingForAccess", kind,
+  return { success: false, paused: true, queued: true, pending: true, acknowledged: false, state: "waitingForAccess", kind,
     error: "SITE_ACCESS_REQUIRED", blockedOrigins: self.AnimeTrackerWebsiteAccess?.getState().blockedOrigins || [] };
 }
 const FIREBASE_PROJECT_ID = (self.firebaseConfig && self.firebaseConfig.projectId) || "";
@@ -1726,6 +1726,7 @@ async function pollCloudData(reason = "consumer-connected", { force = false, req
       }
       return cloudDoc;
     } catch (e) {
+      if (e?.code === 'SITE_ACCESS_REQUIRED') return CLOUD_POLL_SKIPPED;
       console.warn(`[BG-RT] Poll sync failed (${reason}): ${e.message}`);
       throw e;
     } finally {
@@ -1847,7 +1848,7 @@ async function fetchCloudDataCached(user, token, reason = "cache", options = {})
         invalidateBgCloudDocCache();
       }
     } catch (e) {
-      if (e?.status === 401 || e?.status === 403) throw e;
+      if (e?.code === 'SITE_ACCESS_REQUIRED' || e?.status === 401 || e?.status === 403) throw e;
     }
   }
 
@@ -1855,6 +1856,7 @@ async function fetchCloudDataCached(user, token, reason = "cache", options = {})
   try {
     doc = await fetchCloudData(user, token, reason);
   } catch (e) {
+    if (e?.code === 'SITE_ACCESS_REQUIRED') throw e;
     const err = new Error(e?.message || "Fetch failed");
     err.status = e?.status || null;
     err.isTimeout = !!e?.isTimeout;
@@ -2022,6 +2024,7 @@ async function syncProgressOnly(reason = "progress", options = {}) {
     }
     return outcome;
   } catch (error) {
+    if (error?.code === "SITE_ACCESS_REQUIRED") return websiteAccessPausedResult("progress");
     const failureKind = error?.isTimeout ? "timeout" : "network";
     console.log(`[BG] Progress sync ${failureKind}:`, error?.message || error);
     armSyncRetry("progress", `${failureKind}: ${error?.message || error}`);
@@ -2035,7 +2038,7 @@ async function syncProgressOnly(reason = "progress", options = {}) {
 
       // Chrome clamps alarms to a 30s minimum anyway — ask for it explicitly instead of
       // requesting 5s and getting silently clamped (with a console warning on unpacked builds).
-      chrome.alarms.create(PROGRESS_SYNC_ALARM, { delayInMinutes: 0.5 });
+      await armProgressSyncAlarmNoLater(0.5);
     }
   }
 }
@@ -2298,6 +2301,7 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
     }
     return outcome;
   } catch (error) {
+    if (error?.code === "SITE_ACCESS_REQUIRED") return websiteAccessPausedResult("full");
     const failureKind = error?.isTimeout ? "timeout" : "network";
     console.log(`[BG] Sync ${failureKind}:`, error?.message || error);
     armSyncRetry("full", `${failureKind}: ${error?.message || error}`);
@@ -3704,11 +3708,12 @@ const messageHandlers = {
   },
 
   WATCHLIST_SYNC(message, _sender, sendResponse) {
-    sendResponse({ received: true });
     const { animeId, watchlistType, animeSlug } = message;
     if (animeId && watchlistType) {
-      syncWatchlistToSite(animeId, watchlistType, animeSlug || null).catch((e) => console.log("[BG] Watchlist sync error:", e));
-    }
+      syncWatchlistToSite(animeId, watchlistType, animeSlug || null)
+        .then(result => sendResponse({ received: true, ...result }))
+        .catch(e => sendResponse({ received: false, error: e?.message }));
+    } else sendResponse({ received: false });
     return true;
   },
 
@@ -4097,13 +4102,16 @@ self.AnimeTrackerWebsiteAccess.subscribe(state => {
       return;
     }
     if (state.checking) return;
-    await Promise.all([ensureLibraryAutoRefreshAlarm(), ensureAiringScheduleAlarm(), ensureFullSyncPeriodicAlarm()]);
+    await Promise.all([ensureLibraryAutoRefreshAlarm(), ensureAiringScheduleAlarm(),
+      getFirebaseUser().then(user => user ? ensureFullSyncPeriodicAlarm() : undefined),
+      reconcileSmartNotificationAlarm(), self.AnimeTrackerAniListSync?.resumeAfterAccess?.()]);
     await resumeLibraryRepair({ checkAccess: true });
     await maybeStartPendingMetadataRepair();
     const stored = await bgStorageGet([PENDING_SYNC_KEY, PENDING_PROGRESS_SYNC_KEY, PENDING_SIDECAR_SYNC_KEY]);
     if (stored[PENDING_SYNC_KEY]) await syncToFirebase("access:resume");
     else if (stored[PENDING_PROGRESS_SYNC_KEY]) await syncProgressOnly("access:resume");
     if (stored[PENDING_SIDECAR_SYNC_KEY]) await flushPendingSidecarSyncs();
+    await flushPendingWebsiteWatchlist();
   }).catch(error => dlog("[BG] Access pause/resume failed", error?.message));
 });
 
@@ -4130,6 +4138,7 @@ ensureAiringScheduleAlarm();
 })();
 
 ensureAuthTokensMigrated();
+flushPendingWebsiteWatchlist().catch(error => dlog('[BG] Pending watchlist recovery:', error?.message));
 
 (async () => {
   try {

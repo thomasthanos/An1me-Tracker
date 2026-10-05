@@ -1,7 +1,58 @@
 // watchlist-sync.js — mirrors watchlist changes to an1me.to: forwards to a live
 // tab when one is open, else POSTs to the site's admin-ajax endpoint through the gateway.
-async function syncWatchlistToSite(animeId, type, animeSlug = null) {
-  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return { paused: true, success: false };
+const WEBSITE_WATCHLIST_PENDING_KEY = 'pendingWebsiteWatchlist';
+let websiteWatchlistWrite = Promise.resolve(), websiteWatchlistDelivery = Promise.resolve(), websiteWatchlistFlush = null;
+function mutateWebsiteWatchlist(operation) {
+  const run = websiteWatchlistWrite.then(async () => {
+    const stored = await bgStorageGet([WEBSITE_WATCHLIST_PENDING_KEY]);
+    const records = { ...(stored[WEBSITE_WATCHLIST_PENDING_KEY] || {}) };
+    const result = operation(records);
+    await bgStorageSet({ [WEBSITE_WATCHLIST_PENDING_KEY]: records });
+    return result;
+  });
+  websiteWatchlistWrite = run.catch(() => {});
+  return run;
+}
+async function queueWebsiteWatchlist(animeId, type, animeSlug) {
+  return mutateWebsiteWatchlist(records => {
+    return records[String(animeId)] = { animeId, type, animeSlug, token: crypto.randomUUID() };
+  });
+}
+async function flushPendingWebsiteWatchlist() {
+  if (websiteWatchlistFlush) return websiteWatchlistFlush;
+  const run = (async () => {
+    await websiteWatchlistWrite;
+    const stored = await bgStorageGet([WEBSITE_WATCHLIST_PENDING_KEY]);
+    for (const record of Object.values(stored[WEBSITE_WATCHLIST_PENDING_KEY] || {})) {
+      if (self.AnimeTrackerWebsiteAccess?.isPaused()) break;
+      const result = await syncWatchlistToSite(record.animeId, record.type, record.animeSlug, record);
+      if (result?.paused) break;
+    }
+  })();
+  websiteWatchlistFlush = run;
+  try { return await run; } finally { if (websiteWatchlistFlush === run) websiteWatchlistFlush = null; }
+}
+
+async function syncWatchlistToSite(animeId, type, animeSlug = null, pendingRecord = null) {
+  const record = pendingRecord || (self.AnimeTrackerWebsiteAccess?.enabled ? await queueWebsiteWatchlist(animeId, type, animeSlug) : null);
+  const run = websiteWatchlistDelivery.then(async () => {
+    if (record) {
+      await websiteWatchlistWrite;
+      const stored = await bgStorageGet([WEBSITE_WATCHLIST_PENDING_KEY]);
+      if (stored[WEBSITE_WATCHLIST_PENDING_KEY]?.[String(animeId)]?.token !== record.token) return { success: false, superseded: true };
+    }
+    if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return { success: false, paused: true, queued: true };
+    const result = await deliverWebsiteWatchlist(animeId, type, animeSlug);
+    if (result?.success && record) await mutateWebsiteWatchlist(records => {
+      if (records[String(animeId)]?.token === record.token) delete records[String(animeId)];
+    });
+    return result;
+  });
+  websiteWatchlistDelivery = run.catch(() => {});
+  return run;
+}
+
+async function deliverWebsiteWatchlist(animeId, type, animeSlug) {
   dlog(
     `%c WatchlistSync %c ${type} %c anime #${animeId}`,
     "background:#6366f1;color:#fff;border-radius:3px 0 0 3px;padding:2px 6px;font-weight:700",
@@ -14,6 +65,8 @@ async function syncWatchlistToSite(animeId, type, animeSlug = null) {
 
     const liveTab = (tabs || []).find((t) => t && t.id != null && t.discarded !== true && t.status !== "unloaded");
     if (liveTab) {
+      return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Watchlist tab reply timed out')), 30000);
       chrome.tabs.sendMessage(
         liveTab.id,
         {
@@ -23,8 +76,13 @@ async function syncWatchlistToSite(animeId, type, animeSlug = null) {
           // Lets the content script reset-before-add and persist the synced status, instead of a blind single request.
           animeSlug,
         },
-        (response) => {
+        async (response) => {
+          clearTimeout(timer);
           const lastError = chrome.runtime.lastError;
+          if (response?.paused || self.AnimeTrackerWebsiteAccess?.isPaused()) {
+            resolve({ success: false, paused: true, queued: true });
+            return;
+          }
           if (lastError || !response) {
             console.warn(
               `%c WatchlistSync %c tab forward failed`,
@@ -32,7 +90,7 @@ async function syncWatchlistToSite(animeId, type, animeSlug = null) {
               "color:#fca5a5",
               lastError?.message || "no reply",
             );
-            directWatchlistFetch(animeId, type).catch((e) => console.warn("[BG] WatchlistSync direct fallback failed:", e.message));
+            try { await directWatchlistFetch(animeId, type); resolve({ success: true }); } catch (error) { reject(error); }
           } else if (response.success !== true) {
             // The tab answered and the site refused (not logged in, auth_failed, bad_request). This used
             // to be logged as a success because only lastError was checked. No fallback: the direct path
@@ -42,15 +100,18 @@ async function syncWatchlistToSite(animeId, type, animeSlug = null) {
               "background:#ef4444;color:#fff;border-radius:3px 0 0 3px;padding:2px 6px;font-weight:700",
               "color:#fca5a5",
             );
+            resolve({ success: false });
           } else {
             dlog(
               `%c WatchlistSync %c ✓ forwarded to tab`,
               "background:#22c55e;color:#fff;border-radius:3px 0 0 3px;padding:2px 6px;font-weight:700",
               "color:#86efac",
             );
+            resolve({ success: true });
           }
         },
       );
+      });
     } else {
       dlog(
         `%c WatchlistSync %c no live tab open, direct fetch`,
@@ -58,13 +119,16 @@ async function syncWatchlistToSite(animeId, type, animeSlug = null) {
         "color:#fcd34d",
       );
       await directWatchlistFetch(animeId, type);
+      return { success: true };
     }
   } catch (e) {
+    if (e?.code === 'SITE_ACCESS_REQUIRED' || self.AnimeTrackerWebsiteAccess?.isPaused()) return { success: false, paused: true, queued: true };
     console.warn(
       `%c WatchlistSync %c ✗ ${e.message}`,
       "background:#ef4444;color:#fff;border-radius:3px 0 0 3px;padding:2px 6px;font-weight:700",
       "color:#fca5a5",
     );
+    return { success: false };
   }
 }
 

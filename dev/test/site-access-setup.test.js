@@ -156,6 +156,30 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
       assert.equal(await p.page.locator("#authSiteAccess .site-access-btn").isEnabled(), true);
       await p.context.close();
     });
+    await test("cloud-only or image-only denial offers the same single-tap consent inside the fetch modal", async () => {
+      for (const origin of ['https://firestore.googleapis.com/*', 'https://cdn.myanimelist.net/*']) {
+        const p = await setup(browser);
+        await p.page.evaluate(async origin => {
+          const container = document.createElement('div'); container.id = 'modalAccess'; document.body.append(container);
+          await AnimeTracker.SiteAccess.render(container, { knownBlockedOrigins: [origin] });
+        }, origin);
+        assert.equal(await p.page.isVisible('#modalAccess .site-access-btn'), true);
+        await p.page.click('#modalAccess .site-access-btn');
+        assert.deepEqual(await p.page.evaluate(() => window.__requests[0].origins), manifest.optional_host_permissions);
+        await p.context.close();
+      }
+    });
+    await test("missing core site access shows manual steps rather than requesting an empty optional list", async () => {
+      const p = await setup(browser, { allowed: manifest.optional_host_permissions });
+      await p.page.evaluate(async origins => {
+        window.AnimeTrackerWebsiteAccess = { enabled: true, origins };
+        await AnimeTracker.SiteAccess.renderSetup(document.getElementById('authSiteAccess'));
+      }, [...manifest.host_permissions, ...manifest.optional_host_permissions]);
+      assert.equal(await p.page.isVisible('#authSiteAccess .site-access-steps'), true);
+      assert.equal(await p.page.locator('#authSiteAccess .site-access-btn').count(), 0);
+      assert.equal(await p.page.evaluate(() => window.__requests.length), 0);
+      await p.context.close();
+    });
     await test("callback API errors are consumed and show manual instructions", async () => {
       const p = await setup(browser, { grant: "callback-error" });
       await p.page.click("#authSiteAccess .site-access-btn");

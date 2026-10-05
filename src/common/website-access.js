@@ -73,11 +73,14 @@
     return run;
   }
 
-  function invalidate(event) {
+  function invalidate(event, removal = false) {
+    const relevant = (event?.origins || []).some(pattern => pattern === '<all_urls>' || origins.includes(pattern));
+    if (!relevant) return;
     epoch++;
     refreshPromise = null;
     const removed = (event?.origins || []).filter(origin => origins.includes(origin));
-    publish({ version: manifest.version, checking: true, allowed: false,
+    // Adding access must not interrupt requests which were already permitted.
+    if (removal) publish({ version: manifest.version, checking: true, allowed: false,
       blockedOrigins: [...new Set([...state.blockedOrigins, ...removed])] });
     void refresh();
   }
@@ -97,12 +100,35 @@
       if (!(await canRun())) throw deniedError();
       const controller = new AbortController();
       const abort = () => controller.abort();
-      const signal = options.signal;
+      const signal = options.signal || input?.signal;
       if (signal?.aborted) abort(); else signal?.addEventListener("abort", abort, { once: true });
       transfers.add(controller);
-      try { return await originalFetch.call(root, input, { ...options, signal: controller.signal }); }
-      catch (error) { if (!state.allowed) throw deniedError(); throw error; }
-      finally { transfers.delete(controller); signal?.removeEventListener("abort", abort); }
+      const finish = () => { transfers.delete(controller); signal?.removeEventListener("abort", abort); };
+      controller.signal.addEventListener('abort', finish, { once: true });
+      try {
+        const response = await originalFetch.call(root, input, { ...options, signal: controller.signal });
+        // Fetch resolves at headers. Keep cancellation alive until its body has actually
+        // finished, including cloned responses consumed by the cover disk cache.
+        if (response.body?.getReader && typeof root.ReadableStream === 'function' && typeof root.Response === 'function') {
+          const reader = response.body.getReader();
+          const body = new root.ReadableStream({
+            async pull(stream) {
+              try {
+                const chunk = await reader.read();
+                if (chunk.done) { finish(); stream.close(); }
+                else stream.enqueue(chunk.value);
+              } catch (error) { finish(); stream.error(!state.allowed ? deniedError() : error); }
+            },
+            cancel(reason) { finish(); return reader.cancel(reason); },
+          });
+          const wrapped = new root.Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+          for (const key of ['url', 'type', 'redirected']) Object.defineProperty(wrapped, key, { value: response[key] });
+          return wrapped;
+        }
+        finish(); return response;
+      }
+      catch (error) { finish(); if (!state.allowed) throw deniedError(); throw error; }
+      // Successful streams release themselves only when consumed/cancelled, not at headers.
     };
   }
 
@@ -113,12 +139,16 @@
     },
     subscribe(listener) { listeners.add(listener); listener(state); return () => listeners.delete(listener); } });
   if (enabled) {
-    api?.onAdded?.addListener?.(invalidate);
-    api?.onRemoved?.addListener?.(invalidate);
+    api?.onAdded?.addListener?.(event => invalidate(event, false));
+    api?.onRemoved?.addListener?.(event => invalidate(event, true));
     if (!worker) root.chrome?.storage?.onChanged?.addListener?.((changes, area) => {
       const next = changes[KEY]?.newValue;
       if (area === "local" && next?.version === manifest.version) publish(next);
     });
     void refresh();
+    // BFCache can restore the page with changed permissions. Recheck on that event,
+    // while leaving the page's local progress writer independent of network cleanup.
+    root.addEventListener?.('pagehide', () => { for (const controller of transfers) controller.abort(); });
+    root.addEventListener?.('pageshow', event => { if (event.persisted) void refresh(); });
   }
 })(globalThis);

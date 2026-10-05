@@ -239,7 +239,7 @@
     if (changes[Core.AUTH_KEY]) {
       const newAuth = changes[Core.AUTH_KEY].newValue;
       const connected = !!(newAuth && newAuth.accessToken && (!newAuth.expiresAt || newAuth.expiresAt > Date.now()));
-      if (connected && !isMobile()) {
+      if (connected && !isMobile() && !self.AnimeTrackerWebsiteAccess?.isPaused()) {
         try {
           chrome.alarms.create(PUSH_ALARM_PERIODIC, { delayInMinutes: 5, periodInMinutes: 30 });
         } catch {}
@@ -273,6 +273,14 @@
     }
     return false;
   });
+
+  async function resumeAfterAccess() {
+    if (isMobile() || self.AnimeTrackerWebsiteAccess?.isPaused() || !(await getToken())) return;
+    const existing = await chrome.alarms.get(PUSH_ALARM_PERIODIC);
+    if (!existing) await chrome.alarms.create(PUSH_ALARM_PERIODIC, { delayInMinutes: 5, periodInMinutes: 30 });
+    armPushAlarm(1);
+  }
+  self.AnimeTrackerAniListSync = { resumeAfterAccess };
 
   bgStorageGet([STATUS_KEY, Core.AUTH_KEY]).then((s) => {
     const st = s[STATUS_KEY];

@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { cloudWorker } = require('./lib/cloud-worker-harness.js');
+const vm = require('node:vm');
 const NOW = Date.parse('2026-10-04T12:00:00Z');
 const IMAGE = 'https://cdn.myanimelist.net/*';
 const CLOUD = 'https://firestore.googleapis.com/*';
@@ -53,4 +54,84 @@ test('grant resumes durable pending progress without resetting it, and revocatio
   assert.equal(paused.paused, true);
   assert.equal(h.requests.length, previous);
   assert.deepEqual(h.store.videoProgress, initial.videoProgress);
+});
+
+test('pause and exit checkpoints still save the latest six-minute Resume locally and upload on grant', async () => {
+  const initial = seed(); initial.videoProgress = {};
+  const h = cloudWorker(initial, {}, { safariDenied: [CLOUD] });
+  await settle();
+  for (const [sequence, currentTime] of [[1, 180], [2, 360]]) {
+    h.advance(180000);
+    const result = await h.request('SAVE_PROGRESS_BEFORE_UNLOAD', {
+      uniqueId: 'bleach__episode-2', currentTime, duration: 1200, sync: true,
+      context: { sampledAt: new Date(h.now()).toISOString(), sampleSession: 'phone', sampleSequence: sequence },
+    });
+    assert.equal(result.saved, true);
+  }
+  await settle();
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.store.videoProgress['bleach__episode-2'].currentTime, 360);
+  assert.ok(h.store['syncState.pendingProgressFlush']);
+  h.grantWebsiteAccess(); await settle();
+  assert.equal(h.remote.videoProgress['bleach__episode-2'].currentTime, 360);
+  assert.equal(h.store['syncState.pendingProgressFlush'], undefined);
+});
+
+test('mid-flight cloud denial stays a pause without error status or a new retry alarm', async () => {
+  for (const message of ['SYNC_PROGRESS_ONLY', 'SYNC_TO_FIREBASE_IMMEDIATE']) {
+    let h;
+    h = cloudWorker(seed(), {}, { safariDenied: [], beforeRequest: async () => {
+      h.revokeWebsiteAccess(CLOUD); throw h.context.AnimeTrackerWebsiteAccess.deniedError();
+    } });
+    await settle();
+    const outcome = await h.request(message, { force: true }); await settle();
+    assert.equal(outcome.paused, true);
+    assert.notEqual(h.store.cloudSyncStatus?.state, 'error');
+    assert.equal(h.alarms.has('progressSyncRetry'), false); assert.equal(h.alarms.has('fullSyncRetry'), false);
+    assert.equal(h.alarms.has('progressSyncDebounce'), false);
+    assert.equal(h.store.videoProgress['bleach__episode-2'].currentTime, 360);
+  }
+});
+test('denial while metadata is being fetched never stamps the prior usable cache with backoff', async () => {
+  const initial = seed(); initial.animeinfo_bleach = { title: 'Bleach', cachedAt: 100, siteAnimeId: 42 };
+  const h = cloudWorker(initial, {}, { safariDenied: [] }); await settle();
+  let reject, started;
+  const ready = new Promise(resolve => started = resolve);
+  h.context.fetchAnimePageInfo = () => { started(); return new Promise((_resolve, fail) => reject = fail); };
+  const repair = h.call('repairAnimeInfoCache', 'bleach', true);
+  await ready; h.revokeWebsiteAccess(CLOUD); reject(h.context.AnimeTrackerWebsiteAccess.deniedError());
+  await assert.rejects(repair, { code: 'SITE_ACCESS_REQUIRED' }); await settle();
+  assert.deepEqual(h.store.animeinfo_bleach, initial.animeinfo_bleach);
+});
+test('a gateway denied mid-request cannot retry or open a fallback tab', async () => {
+  let h, tabs = 0;
+  h = cloudWorker(seed(), {}, { safariDenied: [], beforeRequest: async () => {
+    h.revokeWebsiteAccess(CLOUD); throw h.context.AnimeTrackerWebsiteAccess.deniedError();
+  } });
+  h.context.chrome.tabs.query = async () => [];
+  h.context.chrome.tabs.create = async () => { tabs++; return { id: 12 }; };
+  await settle();
+  await assert.rejects(h.call('an1meFetch', 'https://an1me.to/anime/bleach/'), { code: 'SITE_ACCESS_REQUIRED' });
+  assert.equal(tabs, 0); assert.equal(h.requests.length, 1);
+});
+test('permission grant restores enabled notification and desktop AniList schedules', async () => {
+  const initial = seed(); initial.smartNotificationsEnabled = true;
+  initial.anilist_auth = { accessToken: 'test-token', expiresAt: NOW + 3600000 };
+  const h = cloudWorker(initial, {}, { safariDenied: [CLOUD] }); await settle();
+  assert.equal(h.alarms.has('smartNotifCheck'), false); assert.equal(h.alarms.has('anilistPushPeriodic'), false);
+  h.grantWebsiteAccess(); await settle();
+  assert.equal(h.alarms.has('smartNotifCheck'), true); assert.equal(h.alarms.has('anilistPushPeriodic'), true);
+});
+test('paused watchlist deletes are durable across worker restart and applied after access returns', async () => {
+  let h = cloudWorker(seed(), {}, { safariDenied: [CLOUD] }); await settle();
+  await h.request('WATCHLIST_SYNC', { animeId: 42, watchlistType: 'watching', animeSlug: 'bleach' });
+  await h.request('WATCHLIST_SYNC', { animeId: 42, watchlistType: 'remove', animeSlug: 'bleach' }); await settle();
+  assert.equal(h.store.pendingWebsiteWatchlist?.['42']?.type, 'remove');
+  h = cloudWorker(h.store, {}, { safariDenied: [CLOUD] }); await settle();
+  const sent = [];
+  h.context.chrome.tabs.query = async () => [{ id: 1 }];
+  h.context.chrome.tabs.sendMessage = (_id, message, callback) => { sent.push(message); callback({ success: true }); };
+  h.grantWebsiteAccess(); await settle();
+  assert.equal(sent.length, 1); assert.equal(sent[0].watchlistType, 'remove');
+  assert.deepEqual(h.store.pendingWebsiteWatchlist || {}, {});
 });

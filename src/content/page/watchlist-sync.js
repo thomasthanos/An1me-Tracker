@@ -170,6 +170,7 @@ const WatchlistSync = {
   // The site's own watchlist buttons post this form; the server rejects it with HTTP 403 unless it
   // carries the page's watchlist nonce (kiraConfig.nonce.watchlist_actions).
   async _postWatchlistChange(animeId, type, timeoutMs) {
+    if (globalThis.AnimeTrackerWebsiteAccess && !(await globalThis.AnimeTrackerWebsiteAccess.canRun())) throw globalThis.AnimeTrackerWebsiteAccess.deniedError();
     const formData = new FormData();
     formData.append("action", type === "remove" ? "remove_from_watchlist" : "add_to_watchlist");
     formData.append("anime_id", animeId.toString());
@@ -215,6 +216,7 @@ const WatchlistSync = {
         return true;
       }
     } catch (e) {
+      if (e?.code === 'SITE_ACCESS_REQUIRED') return false;
       Logger.warn(`Watchlist: network error — ${e.message}`);
       return false;
     }
@@ -223,6 +225,11 @@ const WatchlistSync = {
   async updateStatus(animeId, type, animeSlug = null, options = {}) {
     const Logger = this._logger();
     const force = options.force === true;
+    if (globalThis.AnimeTrackerWebsiteAccess && !(await globalThis.AnimeTrackerWebsiteAccess.canRun())) {
+      // The worker owns a durable, latest-status queue, including removals.
+      if (animeId && type) await chrome.runtime.sendMessage({ type: 'WATCHLIST_SYNC', animeId, watchlistType: type, animeSlug });
+      return false;
+    }
 
     // Explicit false, not a bare return: callers (and the WATCHLIST_SYNC_EXECUTE bridge, which
     // reports `ok !== false`) would otherwise read undefined as success and claim a push that
@@ -285,13 +292,14 @@ const WatchlistSync = {
       } else {
         logOk(`Watchlist: ✓ added "${name}" as ${newLabel}`);
       }
-    } else {
+    } else if (!globalThis.AnimeTrackerWebsiteAccess?.isPaused()) {
       Logger.warn(`Watchlist: ✗ failed to ${type === "remove" ? "remove" : "mark as " + newLabel} "${name}"`);
     }
     return success;
   },
 
   async reconcileWatchlistStatuses() {
+    if (globalThis.AnimeTrackerWebsiteAccess?.isPaused()) return false;
     const Logger = this._logger();
     const LOCK_KEY = "watchlistRepairLock";
     const LOCK_TTL_MS = 5 * 60 * 1000;
@@ -402,6 +410,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || message.type !== "WATCHLIST_SYNC_EXECUTE") return false;
 
   const { animeId, watchlistType, animeSlug } = message;
+  if (globalThis.AnimeTrackerWebsiteAccess?.isPaused()) {
+    sendResponse({ success: false, paused: true, error: 'SITE_ACCESS_REQUIRED' }); return false;
+  }
   if (!animeId || !watchlistType) {
     sendResponse({ success: false, error: "invalid_payload" });
     return false;

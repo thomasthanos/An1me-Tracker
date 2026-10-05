@@ -804,6 +804,7 @@
   }
 
   function startAutoSubmitFlow(cache) {
+    if (globalThis.AnimeTrackerWebsiteAccess?.isPaused()) return;
     if (submitCountdownTimer) return;
 
     let secondsLeft = 3;
@@ -888,6 +889,9 @@
   }
 
   async function applyAndSubmit(cache) {
+    if (globalThis.AnimeTrackerWebsiteAccess && !(await globalThis.AnimeTrackerWebsiteAccess.canRun())) {
+      showToast('Submission paused — allow website access first', 'info'); return false;
+    }
     const ok = await ensureSkipPanelOpen();
     if (!ok) return false;
 
@@ -927,6 +931,7 @@
       showToast("Solve captcha then click Contribute", "info", 3500);
       return false;
     }
+    if (globalThis.AnimeTrackerWebsiteAccess?.isPaused()) return false;
     submitBtn.click();
     Logger.info(`Skiptime: contribution submitted (${getEpisodeIdentity()})`);
     return true;
@@ -1339,6 +1344,8 @@
   document.addEventListener("visibilitychange", syncPageState);
   window.addEventListener("pagehide", unmountPanel);
   window.addEventListener("pageshow", (event) => { if (event.persisted) syncPageState(); });
+  const releaseAccess = globalThis.AnimeTrackerWebsiteAccess?.subscribe(state => { if (!state.allowed) cancelSubmitCountdown(); });
+  window.addEventListener('pagehide', event => { if (!event.persisted) releaseAccess?.(); }, { once: true });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init, { once: true });

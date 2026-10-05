@@ -415,6 +415,9 @@ async function repairAnimeInfoCacheUncoalesced(slug, forceRefresh = true) {
     await bgStorageSet({ [key]: entry });
     return { status: "fetched", entry };
   } catch (error) {
+    if (error?.code === 'SITE_ACCESS_REQUIRED' || self.AnimeTrackerWebsiteAccess?.isPaused()) {
+      throw self.AnimeTrackerWebsiteAccess?.deniedError?.() || error;
+    }
     const message = String(error?.message || "").toLowerCase();
     if (message.includes("http 404")) {
       const notFoundEntry = {

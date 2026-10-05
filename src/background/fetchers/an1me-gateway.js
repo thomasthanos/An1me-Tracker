@@ -237,6 +237,7 @@ async function handleAn1meGatewayAlarm(name) {
 
 // Resolves to a usable an1me.to tab, creating a hidden one as a last resort.
 async function acquireAn1meTab() {
+  if (self.AnimeTrackerWebsiteAccess?.isPaused()) throw self.AnimeTrackerWebsiteAccess.deniedError();
   cancelAn1meTabClose();
 
   if (_an1meTabId != null) {
@@ -276,6 +277,7 @@ async function acquireAn1meTab() {
       }
     }
 
+    if (self.AnimeTrackerWebsiteAccess?.isPaused()) throw self.AnimeTrackerWebsiteAccess.deniedError();
     if (!an1meTabCreationAllowed()) return null;
 
     let created;
@@ -306,7 +308,8 @@ async function acquireAn1meTab() {
     const tabId = await _an1meAcquiring;
     if (tabId != null) _an1meLeases++;
     return tabId;
-  } catch {
+  } catch (error) {
+    if (error?.code === 'SITE_ACCESS_REQUIRED') throw error;
     return null;
   } finally {
     _an1meAcquiring = null;
@@ -442,6 +445,9 @@ async function an1meDirectFetch(url, req, timeoutMs) {
     }
     return { kind: "ok", result: { ok: res.ok, status: res.status, finalUrl: res.url, text, via: "direct" } };
   } catch (error) {
+    if (error?.code === 'SITE_ACCESS_REQUIRED' || self.AnimeTrackerWebsiteAccess?.isPaused()) {
+      throw self.AnimeTrackerWebsiteAccess?.deniedError?.() || error;
+    }
     // controller.abort() surfaces as AbortError, which is our own timeout firing - not a block.
     return { kind: error?.name === "AbortError" ? "timeout" : "network", error };
   } finally {
@@ -470,6 +476,7 @@ function an1meTabReplyIsRetryable(reply, as) {
 }
 
 async function an1meTabFetch(url, req, timeoutMs, deadline) {
+  if (self.AnimeTrackerWebsiteAccess?.isPaused()) throw self.AnimeTrackerWebsiteAccess.deniedError();
   const tabId = await acquireAn1meTab();
   if (tabId == null) return null;
 
@@ -483,10 +490,12 @@ async function an1meTabFetch(url, req, timeoutMs, deadline) {
     headers: req.headers || null,
   };
   try {
+    if (self.AnimeTrackerWebsiteAccess?.isPaused()) throw self.AnimeTrackerWebsiteAccess.deniedError();
     let reply = await sendToAn1meTab(tabId, payload, timeoutMs + AN1ME_SEND_TIMEOUT_PAD_MS);
 
     if (an1meTabReplyIsRetryable(reply, req.as) && Date.now() + AN1ME_CHALLENGE_RETRY_MS < deadline) {
       await AnimeTrackerUtils.sleep(AN1ME_CHALLENGE_RETRY_MS);
+      if (self.AnimeTrackerWebsiteAccess?.isPaused()) throw self.AnimeTrackerWebsiteAccess.deniedError();
       const retry = await sendToAn1meTab(tabId, payload, timeoutMs + AN1ME_SEND_TIMEOUT_PAD_MS);
       if (retry) reply = retry;
     }
@@ -539,6 +548,7 @@ async function an1meFetchUncoalesced(url, options) {
   if (an1meDirectAllowed()) {
     let attempt = 0;
     while (attempt < 2 && remaining() > 1000) {
+      if (self.AnimeTrackerWebsiteAccess?.isPaused()) throw self.AnimeTrackerWebsiteAccess.deniedError();
       const budget = Math.min(
         attempt === 0 ? firstTimeout : Math.max(firstTimeout, AN1ME_SLOW_RETRY_TIMEOUT_MS),
         remaining(),
