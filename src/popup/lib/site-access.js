@@ -120,9 +120,14 @@
   // Fills `container` with which filler sites are blocked and how to allow them, or hides it when none are.
   // On a desktop browser it offers Allow access, and `onGranted` runs once the user allowed them. Resolves to
   // the blocked origins.
-  async function render(container, { onGranted = null } = {}) {
+  async function render(container, { onGranted = null, knownBlockedOrigins = null } = {}) {
     if (!container) return [];
-    const blocked = await blockedOrigins();
+    const token = {};
+    setupGenerations.set(container, token);
+    const all = GROUPS.flatMap(group => group.origins);
+    const blocked = Array.isArray(knownBlockedOrigins)
+      ? all.filter(origin => knownBlockedOrigins.includes(origin)) : await blockedOrigins();
+    if (setupGenerations.get(container) !== token || !container.isConnected) return blocked;
     container.replaceChildren();
     container.hidden = blocked.length === 0;
     if (!blocked.length) return blocked;
@@ -177,6 +182,7 @@
       button.textContent = phone ? "Waiting for Safari…" : "Waiting for browser…";
       button.setAttribute("aria-busy", "true");
       request(phone ? declaredOptionalOrigins() : blocked, (granted) => {
+        if (setupGenerations.get(container) !== token || !container.isConnected) return;
         button.disabled = false;
         button.textContent = "Allow access";
         button.removeAttribute("aria-busy");

@@ -12,6 +12,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.9] — 2026-10-05
+
+### Fixed
+
+- A restored or automatic metadata queue now pauses before fetching when the browser denies access to
+  AnimeFillerList or Jikan. It retains its position and counters, stops retry alarms and popup wake-ups,
+  and continues the same queue after access is granted. A denial learned during a request pauses on
+  that item without counting another failure. Unknown permission answers cannot clear an established pause.
+- **Allow access** is now available inside the **Fetch & Import** panel, including when that panel
+  covers the setup card. It requests the declared optional services directly from a tap, shows pending
+  feedback and keeps manual Settings instructions after refusal. A delayed permission check cannot
+  hide a confirmed denial. The paused panel can be closed while waiting for consent.
+- Previously failed entries in a paused manual import are retried once after the remaining queue
+  finishes, without re-fetching successful entries. Saved playback progress, library and usable caches
+  are retained, with no new network polling.
+
 ## [8.2.8] — 2026-10-05
 
 ### Fixed

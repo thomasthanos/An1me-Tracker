@@ -93,24 +93,18 @@ const FillerFetchUI = {
     const banner = document.querySelector(".ffui-access");
     const SiteAccess = window.AnimeTracker?.SiteAccess;
     if (!banner || !SiteAccess) return;
-    await SiteAccess.render(banner, { onGranted: () => this.onAccessGranted?.() });
+    await SiteAccess.render(banner, { onGranted: () => this.onAccessGranted?.(),
+      knownBlockedOrigins: this._waitingForAccess ? this._blockedOrigins : null });
   },
 
   // A row that failed for lack of access is proof enough, even where the permissions API cannot say which
   // sites: say so, with the Settings path for the filler sites.
-  _showAccessFallback() {
+  _showAccessFallback(blockedOrigins) {
     const banner = document.querySelector(".ffui-access");
-    if (!banner || !banner.hidden) return;
     const SiteAccess = window.AnimeTracker?.SiteAccess;
-    const hosts = (SiteAccess?.GROUPS.find((group) => group.id === "filler")?.origins || []).map((origin) => SiteAccess.hostLabel(origin));
-    const text = document.createElement("p");
-    text.className = "site-access-text";
-    text.textContent = "The browser is keeping the extension off the filler sites, so filler data cannot be fetched.";
-    const path = document.createElement("p");
-    path.className = "site-access-path";
-    path.textContent = `In ${SiteAccess?.SETTINGS_PATH || "the extension's settings"}, set ${hosts.join(" and ")} to Allow.`;
-    banner.replaceChildren(text, path);
-    banner.hidden = false;
+    if (!banner || !SiteAccess) return;
+    const origins = blockedOrigins?.length ? blockedOrigins : SiteAccess.GROUPS.find(group => group.id === "filler")?.origins || [];
+    void SiteAccess.render(banner, { knownBlockedOrigins: origins, onGranted: () => this.onAccessGranted?.() }).catch(() => {});
   },
 
   attachEventListeners() {
@@ -120,7 +114,7 @@ const FillerFetchUI = {
       if (e.target.id !== this.IDS.overlay) return;
       e.preventDefault();
       e.stopPropagation();
-      if (this.state.fetchDone) {
+      if (this.state.fetchDone || this._waitingForAccess) {
         this.close();
       } else {
         this._nudgeModal();
@@ -183,6 +177,9 @@ const FillerFetchUI = {
 
   resetUI(options = {}) {
     this._clearAutoClose();
+    this._waitingForAccess = false;
+    this._blockedOrigins = null;
+    this._accessSignature = null;
     const keepAutoMode = options.autoMode === true;
     Object.assign(this.state, {
       isRunning: false,
@@ -287,10 +284,17 @@ const FillerFetchUI = {
     this.state.cached = Number(state.cached) || 0;
     this.state.skipped = Number(state.skipped) || 0;
     this.state.failed = Number(state.failed) || 0;
-    this.state.isRunning = state.status === "running";
+    const wasWaitingForAccess = this._waitingForAccess;
+    this._waitingForAccess = state.status === "running" && state.waitingForAccess === true;
+    this._blockedOrigins = this._waitingForAccess ? state.blockedOrigins?.length ? state.blockedOrigins :
+      window.AnimeTracker?.SiteAccess?.GROUPS.find(group => group.id === "filler")?.origins : null;
+    this.state.isRunning = state.status === "running" && !this._waitingForAccess;
     this.state.fetchDone = state.status === "completed" || state.status === "error";
     const close = document.querySelector(".ffui-close");
-    if (close) close.hidden = !this.state.fetchDone;
+    if (close) {
+      close.hidden = !this.state.fetchDone && !this._waitingForAccess;
+      close.textContent = this._waitingForAccess ? "Close" : "Done";
+    }
 
     this._setStat("fetched", this.state.fetched);
     this._setStat("cached", this.state.cached);
@@ -298,7 +302,18 @@ const FillerFetchUI = {
     this._setStat("failed", this.state.failed);
     this._renderLogs(Array.isArray(state.logs) ? state.logs : []);
     // A row that failed for lack of access is proof enough, even where the permissions API cannot say so.
-    if ((state.logs || []).some((entry) => /no site access/i.test(String(entry?.detail || "")))) this._showAccessFallback();
+    const needsAccess = this._waitingForAccess || (state.waitingForAccess !== false &&
+      (state.logs || []).some(entry => /no site access/i.test(String(entry?.detail || ""))));
+    if (needsAccess) {
+      const signature = JSON.stringify([state.runId, state.blockedOrigins || null]);
+      if (this._accessSignature !== signature) {
+        this._accessSignature = signature;
+        this._showAccessFallback(state.blockedOrigins);
+      }
+    } else if (wasWaitingForAccess || this._accessSignature !== null) {
+      this._accessSignature = null;
+      void this.checkSiteAccess().catch(() => {});
+    }
 
     const { processed, total } = progress;
     const pct = state.status === "completed" ? 100 : total > 0 ? Math.min(100, (processed / total) * 100) : 0;
@@ -308,7 +323,8 @@ const FillerFetchUI = {
 
     let label = "Ready to fetch and import your data…";
     if (state.status === "running") {
-      const currentTitle = state.waitingForNetwork === true ? "Waiting for connection…" : state.currentTitle || state.currentSlug || "Working…";
+      const currentTitle = this._waitingForAccess ? "Waiting for website access…" :
+        state.waitingForNetwork === true ? "Waiting for connection…" : state.currentTitle || state.currentSlug || "Working…";
       label = `${processed} / ${total} — ${currentTitle}`;
     } else if (state.status === "completed") {
       if (state.failed > 0) {

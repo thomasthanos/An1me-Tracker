@@ -54,7 +54,7 @@
 
   function canWakeMetadataRepair() {
     const state = AT.PopupState.lastMetadataRepairState;
-    return !metadataRepairPopupClosed && (state?.status === "running" || state?.followUpPending === true) &&
+    return !metadataRepairPopupClosed && state?.waitingForAccess !== true && (state?.status === "running" || state?.followUpPending === true) &&
       (typeof document === "undefined" || document.visibilityState !== "hidden");
   }
 
@@ -261,7 +261,7 @@
     const previousStatus = previousState?.status || null;
     if (state?.status === "throttled") return previousState;
     AT.PopupState.lastMetadataRepairState = state || null;
-    if (state?.status === "running" || state?.followUpPending === true) scheduleMetadataRepairWake();
+    if (state?.waitingForAccess !== true && (state?.status === "running" || state?.followUpPending === true)) scheduleMetadataRepairWake();
     else {
       metadataRepairWakeEpoch++;
       clearMetadataRepairWakeTimer();
@@ -292,6 +292,11 @@
     }
 
     if (state.status === "running") {
+      if (state.waitingForAccess === true) {
+        lastMetadataRepairResumeNudgeAt = 0;
+        if (!isSilent) setMetadataRepairStatus("Website access required", false, { error: true });
+        return state;
+      }
       const updatedAt = state.updatedAt ? Date.parse(state.updatedAt) : 0;
       const progress = getMetadataRepairProgress(state);
       // A run paused for lack of a connection is waiting, not stuck, and it resumes by itself.

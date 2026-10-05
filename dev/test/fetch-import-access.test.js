@@ -83,6 +83,26 @@ async function panel(browser, device, { access, grant = true, optional = null })
     catch (error) { failures++; console.error("FAIL " + name + ": " + error.message); }
   };
   try {
+    await test("a late optimistic permission check cannot hide a proven denial in the modal", async () => {
+      const p = await panel(browser, PHONE, { access: true, optional: FILLER });
+      await p.page.evaluate(() => {
+        const callbacks = [];
+        chrome.permissions.contains = (_request, callback) => callbacks.push(callback);
+        const ui = AnimeTracker.FillerFetchUI;
+        void ui.checkSiteAccess();
+        ui.applyBackgroundState({ status: "running", waitingForAccess: true,
+          blockedOrigins: ["https://www.animefillerlist.com/*"], fetchTotal: 119, queueIndex: 48, logs: [] });
+        void ui.checkSiteAccess();
+        callbacks.forEach(callback => callback(true));
+      });
+      await p.page.waitForTimeout(50);
+      assert.equal((await p.view()).button, true);
+      assert.match((await p.view()).text, /animefillerlist/);
+      await p.page.click(".ffui-close");
+      assert.equal(await p.page.$eval(".ffui-overlay", el => el.getAttribute("aria-hidden")), "true", "a paused queue does not trap the popup");
+      await p.context.close();
+    });
+
     await test("on a phone the notice is the Settings steps naming the filler sites, with no button", async () => {
       const p = await panel(browser, PHONE, { access: false });
       const state = await p.view();
@@ -237,7 +257,28 @@ async function panel(browser, device, { access, grant = true, optional = null })
       }));
       const state = await p.view();
       assert.equal(state.banner, true);
-      assert.match(state.text, /set animefillerlist\.com and api\.jikan\.moe to Allow\./);
+      assert.match(state.text, /animefillerlist\.com and api\.jikan\.moe/);
+      assert.match(state.text, /Allow/);
+      await p.context.close();
+    });
+
+    await test("an access-paused restored queue exposes consent inside the modal rather than behind it", async () => {
+      const optional = [...FILLER, "https://firestore.googleapis.com/*", "https://api.aniskip.com/*"];
+      // Even if the API reports allowed, a native denial from the queue must offer an explicit action.
+      const p = await panel(browser, PHONE, { access: true, optional });
+      await p.page.evaluate(FILLER => window.AnimeTracker.FillerFetchUI.applyBackgroundState({
+        status: "running", waitingForAccess: true, blockedOrigins: FILLER, fetchTotal: 119, queueIndex: 48,
+        processed: 48, fetched: 6, skipped: 8, failed: 34, logs: [],
+      }), FILLER);
+      await p.page.waitForTimeout(100);
+      assert.equal((await p.view()).button, true, "consent is reachable above the modal overlay");
+      assert.match(await p.page.locator(".ffui-progress-label").innerText(), /waiting.*access/i);
+      assert.equal(await p.page.locator(".ffui-close").isVisible(), true, "a paused queue can be dismissed");
+      await p.page.click(".site-access-btn"); await p.page.waitForTimeout(80);
+      const state = await p.view();
+      assert.deepEqual(state.requests.map(r => r.origins), [optional]);
+      assert.equal(state.requests[0].gesture, true);
+      assert.equal(state.granted, 1);
       await p.context.close();
     });
 

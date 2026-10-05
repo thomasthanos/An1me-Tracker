@@ -36,11 +36,11 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Open the tracker in Safari and tap Allow website access to request its supporting sites together.\n" +
-    "• Access buttons show waiting feedback and manual Settings instructions if Safari does not grant access.\n" +
-    "• Fetch & Import waits for permission approval instead of starting while the prompt is pending.\n" +
-    "• Setup and sign-in scroll correctly in a partially expanded Safari sheet.\n" +
-    "• Progress and caches are retained; AniList stays disabled on mobile, with no added polling.";
+    "• Fetch queues pause before requests when website access is denied, keeping their position and counters.\n" +
+    "• Tap Allow access inside Fetch & Import to request the supporting sites together and continue the queue.\n" +
+    "• A paused panel can be closed; no retry alarms or popup polling run while waiting for permission.\n" +
+    "• Older failed entries retry once after the remaining queue, without repeating successful fetches.\n" +
+    "• Progress and caches are retained; AniList stays disabled on mobile.";
 
   return {
     name: appName,

@@ -507,25 +507,124 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.equal(h.calls.jikan, 1 + 12, "one search and twelve pages");
   });
 
-  await test("a show that failed for lack of site access is fetched as soon as access is granted", async () => {
+  await test("a denied sweep waits without fetching and resumes the same queue when access is granted", async () => {
     const h = worker({ afl: "down", siteAccess: false, seed: { animeData: library() } });
     await h.c.startLibraryRepair({ origin: "manual" });
-    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
+    await until(async () => { const s = await h.c.getMetadataRepairState(); return s?.waitingForAccess || s?.status === "completed"; });
     const blocked = await h.c.getMetadataRepairState();
-    assert.equal(blocked.failed, 4);
-    assert.match(blocked.logs[0].detail, /no site access/);
+    assert.equal(blocked.waitingForAccess, true);
+    assert.deepEqual([blocked.queueIndex, blocked.processed, blocked.failed], [0, 0, 0]);
+    assert.equal(h.calls.aflIndex + h.calls.aflShow + h.calls.jikan, 0, "permission denial is checked before any request");
     assert.equal(h.store.episodeTypes_noragami, undefined, "no retry stamp was written");
     // The user taps Allow (or allows the extension in Settings), and runs Fetch & Import again at once.
-    h.mode.siteAccess = true;
     h.mode.afl = "ok";
-    await h.c.startLibraryRepair({ origin: "manual" });
-    await until(async () => { const state = await h.c.getMetadataRepairState(); return state?.status === "completed" && state.runId !== blocked.runId; });
+    h.grantAccess();
+    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
     const after = await h.c.getMetadataRepairState();
+    assert.equal(after.runId, blocked.runId, "continue the existing queue rather than restarting successful work");
     assert.deepEqual([after.fetched, after.failed], [4, 0], "nothing waits out a retry stamp");
     // Control: an ordinary network failure still earns its stamp.
     const network = worker({ afl: "down", siteAccess: true });
     await network.resolve("noragami");
     assert.equal(network.store.episodeTypes_noragami.retryable, true);
+  });
+
+  await test("startup resumes no network work without access and preserves saved progress and queue position", async () => {
+    const state = { runId: "before-update", status: "running", origin: "manual", uiMode: "modal", total: 4, fetchTotal: 4,
+      queueIndex: 2, processed: 2, fetched: 2, cached: 0, skipped: 0, failed: 0, logs: [],
+      items: SHOWS.slice(0, 4).map(([slug, title]) => ({ slug, title })), options: { forceInfoRefresh: false, forceFillerRefresh: false } };
+    const progress = { "bleach__episode-3": { currentTime: 360, duration: 1200 } };
+    const h = worker({ siteAccess: false, seed: { metadataRepairState: state, videoProgress: progress, episodeTypes_bleach: prior() } });
+    await h.c.resumeMetadataRepairIfNeeded();
+    await until(async () => { const s = await h.c.getMetadataRepairState(); return s?.waitingForAccess || s?.status === "completed"; });
+    assert.equal(h.calls.aflIndex + h.calls.aflShow + h.calls.jikan, 0);
+    const paused = await h.c.getMetadataRepairState();
+    assert.deepEqual([paused.runId, paused.queueIndex, paused.processed, paused.fetched, paused.failed], ["before-update", 2, 2, 2, 0]);
+    assert.deepEqual(h.store.videoProgress, progress);
+    assert.deepEqual(h.store.episodeTypes_bleach, prior());
+    await h.c.bgStorageSet({ pendingBackgroundMetadataRepair: true });
+    await h.c.runMetadataRepairBatch(); await settle();
+    const quiet = h.writes(); await settle(); await settle();
+    assert.equal(h.runaway(), false);
+    assert.equal(h.writes(), quiet, "no pending-work restart loop while permission is withheld");
+    h.nav.onLine = false;
+    const alarmCount = h.alarms.length;
+    await h.c.runMetadataRepairBatch();
+    assert.equal(h.alarms.length, alarmCount, "a permission pause stays alarm-free if connectivity also drops");
+    assert.equal((await h.c.getMetadataRepairState()).waitingForNetwork, undefined);
+  });
+
+  await test("access revoked between items pauses before the next request without adding a failure", async () => {
+    const h = worker({ siteAccess: true, seed: { animeData: library() } });
+    const fetch = h.c.fetch;
+    h.c.fetch = (url, options) => { const response = fetch(url, options); if (url.startsWith("https://www.animefillerlist.com/shows/")) h.mode.siteAccess = false; return response; };
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => { const s = await h.c.getMetadataRepairState(); return s?.waitingForAccess || s?.status === "completed"; });
+    const paused = await h.c.getMetadataRepairState();
+    assert.equal(paused.waitingForAccess, true);
+    assert.deepEqual([paused.queueIndex, paused.fetched, paused.failed], [1, 1, 0]);
+    assert.equal(h.calls.aflShow, 1);
+  });
+
+  await test("a legacy partially failed manual queue retries old failures once after consent", async () => {
+    const items = SHOWS.slice(0, 4).map(([slug, title]) => ({ slug, title }));
+    const state = { runId: "legacy-denied", status: "running", origin: "manual", uiMode: "modal", fetchTotal: 4, total: 4,
+      processed: 2, queueIndex: 2, fetched: 0, cached: 0, skipped: 0, failed: 2, items, logs: [],
+      failedItems: items.slice(0, 2).map(item => ({ slug: item.slug, name: item.title, type: "retry", at: NOW })),
+      options: { retryFailures: true, forceInfoRefresh: false, forceFillerRefresh: false } };
+    const h = worker({ siteAccess: false, seed: { animeData: library(), metadataRepairState: state,
+      episodeTypes_noragami: { ...prior(), retryable: true, retryAt: NOW, retryError: "Load failed" },
+      episodeTypes_dandadan: { ...prior(), retryable: true, retryAt: NOW, retryError: "Load failed" } } });
+    await h.c.resumeMetadataRepairIfNeeded();
+    await until(async () => (await h.c.getMetadataRepairState())?.waitingForAccess);
+    h.grantAccess();
+    await until(async () => { const s = await h.c.getMetadataRepairState(); return s?.status === "completed" && s.runId !== state.runId; });
+    const after = await h.c.getMetadataRepairState();
+    assert.notEqual(after.runId, state.runId, "the existing queue finishes before one follow-up retry");
+    assert.equal(after.failed, 0);
+    assert.equal(h.calls.aflShow, 4, "two remaining entries and two old failures, with no successful entry fetched twice");
+    assert.equal(h.store.episodeTypes_noragami.retryable, undefined);
+  });
+
+  await test("promise-only permission checks pause and unknown answers cannot clear established denial", async () => {
+    const h = worker({ seed: { animeData: library() } });
+    h.c.browser = { permissions: { contains: async function(details) {
+      assert.equal(arguments.length, 1); assert.equal(details.origins.length, 1); return false;
+    } } };
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await h.c.getMetadataRepairState())?.waitingForAccess);
+    assert.equal((await h.c.getMetadataRepairState()).waitingForAccess, true);
+    h.c.browser.permissions.contains = async () => { throw new Error("worker suspended"); };
+    await h.c.runMetadataRepairBatch();
+    assert.equal(h.calls.aflIndex + h.calls.aflShow + h.calls.jikan, 0);
+    assert.equal((await h.c.getMetadataRepairState()).waitingForAccess, true);
+  });
+
+  await test("a native no-access failure during an item pauses on that item without counting it", async () => {
+    const h = worker({ afl: "down", jikan: "down", siteAccess: true, seed: { animeData: library() } });
+    const fetch = h.c.fetch;
+    h.c.fetch = (url, options) => { if (url === "https://www.animefillerlist.com/shows") h.mode.siteAccess = false; return fetch(url, options); };
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => { const s = await h.c.getMetadataRepairState(); return s?.waitingForAccess || s?.status === "completed"; });
+    const paused = await h.c.getMetadataRepairState();
+    assert.equal(paused.waitingForAccess, true);
+    assert.deepEqual([paused.queueIndex, paused.processed, paused.failed], [0, 0, 0]);
+    assert.equal(h.calls.aflIndex, 1, "a denial learned in flight must not walk the rest of the library");
+  });
+
+  await test("Jikan access revoked during fallback keeps the same item and avoids cache retry stamps", async () => {
+    const h = worker({ afl: "down", jikan: "down", siteAccess: true, seed: { animeData: library() } });
+    let jikanDenied = false;
+    h.c.chrome.permissions.contains = (details, callback) => callback(!(jikanDenied && details.origins.includes("https://api.jikan.moe/*")));
+    const fetch = h.c.fetch;
+    h.c.fetch = (url, options) => { if (url.startsWith("https://api.jikan.moe/")) jikanDenied = true; return fetch(url, options); };
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => { const s = await h.c.getMetadataRepairState(); return s?.waitingForAccess || s?.status === "completed"; });
+    const paused = await h.c.getMetadataRepairState();
+    assert.equal(paused.waitingForAccess, true);
+    assert.deepEqual([paused.queueIndex, paused.processed, paused.failed], [0, 0, 0]);
+    assert.deepEqual(Array.from(paused.blockedOrigins), ["https://api.jikan.moe/*"]);
+    assert.equal(h.store.episodeTypes_noragami, undefined, "the browser setting does not stamp a show with backoff");
   });
 
   await test("a granted permission clears the remembered failure for the next automatic run", async () => {

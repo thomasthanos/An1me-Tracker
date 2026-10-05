@@ -22,6 +22,28 @@ const METADATA_REPAIR_ORIGINS = new Set(["manual", "sign-in", "targeted", "backg
 const isMobileUA = () => AnimeTrackerUtils.isMobileDevice();
 const metadataRepairMaxAttempts = () => (isMobileUA() ? 1 : 2);
 const METADATA_REPAIR_RETRY_BASE_DELAY_MS = 1500;
+const METADATA_REPAIR_HOST_ORIGINS = Object.freeze(["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"]);
+
+// Local permission checks only. Unknown API answers are not evidence of denial,
+// but cannot undo a pause whose denial was already established.
+async function getMetadataRepairBlockedOrigins(previous = []) {
+  const browserApi = globalThis.browser?.permissions;
+  const promiseOnly = typeof browserApi?.contains === "function";
+  const api = promiseOnly ? browserApi : globalThis.chrome?.permissions;
+  const answers = await Promise.all(METADATA_REPAIR_HOST_ORIGINS.map(origin => new Promise(resolve => {
+    if (typeof api?.contains !== "function") { resolve(null); return; }
+    const timer = setTimeout(() => resolve(null), 1500);
+    const done = value => { clearTimeout(timer); resolve(typeof value === "boolean" ? value : null); };
+    try {
+      const details = { origins: [origin] };
+      const callback = value => done(globalThis.chrome?.runtime?.lastError ? null : value);
+      const pending = promiseOnly ? api.contains(details) : api.contains(details, callback);
+      if (pending?.then) pending.then(done, () => done(null));
+    } catch { done(null); }
+  })));
+  return METADATA_REPAIR_HOST_ORIGINS.filter((origin, index) =>
+    answers[index] === false || (answers[index] === null && previous.includes(origin)));
+}
 
 function normalizeMetadataRepairOrigin(value, isTargeted = false, isAuto = null) {
   const normalized = String(value || "").trim().toLowerCase();
@@ -338,6 +360,7 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
 }
 
 let metadataRepairInProgress = false;
+let metadataRepairAccessChanged = false;
 const animeInfoRepairInflight = new Map();
 
 async function repairAnimeInfoCacheUncoalesced(slug, forceRefresh = true) {
@@ -606,6 +629,11 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
     // No site access is a browser setting, not this show's state. Like offline, leave the entry as it was: a retry
     // stamp would make the show wait up to 15 minutes after the user allows access, and look still broken.
     if (/no site access/i.test(String(error?.message || ""))) throw error;
+    // The Jikan fallback can lose access in flight too, while AFL's original
+    // error still says only Load failed. Do not write a backoff stamp for denial.
+    if ((await getMetadataRepairBlockedOrigins()).length) {
+      throw Object.assign(new Error("no site access"), { deferRetry: true });
+    }
     // Transient failure: cache a short retryable backoff so it isn't re-fetched every sweep. Keep prior data if any.
     // retryAt (not cachedAt) carries the backoff timestamp so prior valid data keeps its original cachedAt
     // and stays usable/displayable during the backoff window.
@@ -732,12 +760,27 @@ async function pauseMetadataRepairForNetwork(state) {
   scheduleMetadataRepairFallback(2);
 }
 
+async function pauseMetadataRepairForAccess(state, blockedOrigins) {
+  const fresh = await getMetadataRepairState();
+  if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return;
+  const retryOldFailures = fresh.origin === "manual" && fresh.failed > 0 && fresh.pendingManualRetry !== true;
+  if (retryOldFailures) await bgStorageSet({ [PENDING_METADATA_REPAIR_KEY]: true });
+  if (retryOldFailures || fresh.waitingForAccess !== true || JSON.stringify(fresh.blockedOrigins) !== JSON.stringify(blockedOrigins)) {
+    await setMetadataRepairState({ ...fresh, waitingForAccess: true, blockedOrigins,
+      ...(retryOldFailures ? { pendingManualRetry: true } : {}),
+      updatedAt: new Date().toISOString() });
+  }
+  // Consent needs a user gesture, so neither an alarm nor a pending job should retry it.
+  await chrome.alarms.clear(METADATA_REPAIR_ALARM);
+}
+
 async function runMetadataRepairBatch(options = {}) {
   if (metadataRepairInProgress) return false;
   metadataRepairInProgress = true;
   // Set when this pass stops for lack of a connection. The pending-repair hook below must not restart a run that is
   // deliberately waiting, or the two would call each other in a tight loop.
   let pausedForNetwork = false;
+  let pausedForAccess = false;
 
   try {
     let state = await getMetadataRepairState();
@@ -746,8 +789,6 @@ async function runMetadataRepairBatch(options = {}) {
       return false;
     }
 
-    scheduleMetadataRepairFallback(2);
-
     const gentle = state.options?.auto !== false && (await _isWatchTabOpen());
 
     while (true) {
@@ -755,19 +796,6 @@ async function runMetadataRepairBatch(options = {}) {
       if (!state || state.status !== "running") {
         await chrome.alarms.clear(METADATA_REPAIR_ALARM);
         return false;
-      }
-
-      if (isBrowserOffline()) {
-        pausedForNetwork = true;
-        await pauseMetadataRepairForNetwork(state);
-        return false;
-      }
-      if (state.waitingForNetwork === true) {
-        // Back from a pause for the connection, which also covers the case where the online event never reached
-        // this worker (iOS suspends it). See forgetFailuresFromOutage.
-        forgetFailuresFromOutage();
-        state = { ...state, waitingForNetwork: false };
-        await setMetadataRepairState(state);
       }
 
       const items = Array.isArray(state.items) ? state.items : [];
@@ -781,6 +809,32 @@ async function runMetadataRepairBatch(options = {}) {
           completedAt: new Date().toISOString(),
         });
         return true;
+      }
+
+      const blocked = await getMetadataRepairBlockedOrigins(state.waitingForAccess ? state.blockedOrigins || METADATA_REPAIR_HOST_ORIGINS : []);
+      if (blocked.length) {
+        pausedForAccess = true;
+        await pauseMetadataRepairForAccess(state, blocked);
+        return false;
+      }
+      if (state.waitingForAccess === true) {
+        const fresh = await getMetadataRepairState();
+        if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return false;
+        forgetFailuresFromOutage();
+        state = { ...fresh, waitingForAccess: false, blockedOrigins: [], updatedAt: new Date().toISOString() };
+        await setMetadataRepairState(state);
+      }
+
+      if (isBrowserOffline()) {
+        pausedForNetwork = true;
+        await pauseMetadataRepairForNetwork(state);
+        return false;
+      }
+      if (state.waitingForNetwork === true) {
+        // iOS may suspend the worker before its online event arrives.
+        forgetFailuresFromOutage();
+        state = { ...state, waitingForNetwork: false };
+        await setMetadataRepairState(state);
       }
 
       const item = items[index];
@@ -821,8 +875,18 @@ async function runMetadataRepairBatch(options = {}) {
         fillerResult = { status: "failed", error: message };
       }
 
-      // The connection dropped while this item was in flight. Its failure says nothing about the item, so do not
-      // count it or move past it: stop here and run the same item again once the connection is back.
+      // Access may have been revoked during this request. Retry this same item after
+      // consent instead of counting the browser setting as a failure of the show.
+      if (infoResult.status === "failed" || fillerResult.status === "failed") {
+        const blocked = await getMetadataRepairBlockedOrigins();
+        if (blocked.length || /no site access/i.test(`${infoResult.error || ""} ${fillerResult.error || ""}`)) {
+          pausedForAccess = true;
+          await pauseMetadataRepairForAccess(state, blocked.length ? blocked : [...METADATA_REPAIR_HOST_ORIGINS]);
+          return false;
+        }
+      }
+
+      // With access intact, a connection lost in flight also leaves the same item queued.
       if (isBrowserOffline() && (infoResult.status === "failed" || fillerResult.status === "failed")) {
         pausedForNetwork = true;
         await pauseMetadataRepairForNetwork(state);
@@ -896,7 +960,10 @@ async function runMetadataRepairBatch(options = {}) {
     metadataRepairInProgress = false;
     // Runs after the in-progress guard is released so a queued repair can actually start;
     // cheap no-op when the pending flag isn't set.
-    if (!pausedForNetwork) {
+    if (metadataRepairAccessChanged) {
+      metadataRepairAccessChanged = false;
+      resumeLibraryRepair({ checkAccess: true }).catch(() => {});
+    } else if (!pausedForNetwork && !pausedForAccess) {
       maybeStartPendingMetadataRepair().catch((error) => {
         console.error("[BG] Failed to trigger pending repair after batch:", error);
       });
@@ -1042,8 +1109,9 @@ async function startLibraryRepair(options = {}) {
 
 // A visible popup periodically sends this message while a persisted job is running.
 // Unlike START, it never creates a new sweep or promotes an automatic job to manual.
-async function resumeLibraryRepair() {
+async function resumeLibraryRepair({ checkAccess = false } = {}) {
   let state = await getMetadataRepairState();
+  if (state?.waitingForAccess === true && !checkAccess) return state;
   if (state?.status !== "running" && state?.followUpPending === true) {
     await maybeStartPendingMetadataRepair();
     state = await getMetadataRepairState();
@@ -1065,7 +1133,12 @@ function forgetFailuresFromOutage() {
 // Access to a filler site was just granted (the Allow button, or a browser prompt): failures remembered while
 // it was blocked say nothing any more.
 try {
-  chrome.permissions?.onAdded?.addListener?.(() => forgetFailuresFromOutage());
+  const permissions = globalThis.browser?.permissions || chrome.permissions;
+  permissions?.onAdded?.addListener?.(() => {
+    forgetFailuresFromOutage();
+    if (metadataRepairInProgress) metadataRepairAccessChanged = true;
+    else resumeLibraryRepair({ checkAccess: true }).catch(() => {});
+  });
 } catch {}
 
 // Back online: continue a run that paused for lack of a connection right away rather than waiting for the alarm.
@@ -1112,6 +1185,7 @@ async function maybeStartPendingMetadataRepair() {
   const targetedSlugs = Array.isArray(stored[PENDING_REPAIR_SLUGS_KEY]) ? stored[PENDING_REPAIR_SLUGS_KEY].filter(Boolean) : [];
 
   const existingState = await getMetadataRepairState();
+  if (existingState?.status === "running" && existingState.waitingForAccess === true) return false;
   if (existingState?.status !== "running" && existingState?.pendingManualRetry === true) {
     await startLibraryRepair({ origin: "manual", auto: false, forceInfoRefresh: false, forceFillerRefresh: false });
     return true;
@@ -1181,6 +1255,7 @@ function deriveMetadataRepairPriorities(animeData, limit = 25) {
 async function ensureLibraryFresh(prioritySlugs = []) {
   let existingState = await getMetadataRepairState();
   if (existingState?.status === "running") {
+    if (existingState.waitingForAccess === true) return false;
       const priorities = new Set(Array.isArray(prioritySlugs) ? prioritySlugs : []);
     if (priorities.size > 0 && Array.isArray(existingState.items)) {
       const index = Math.max(0, Number(existingState.queueIndex) || 0);

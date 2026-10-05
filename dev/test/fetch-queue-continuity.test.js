@@ -243,6 +243,16 @@ function installedWorker(local, sync) {
     assert.equal(local.settings.watchThreshold, 0.9); assert.deepEqual(local.animeinfo_naruto, info());
     assert.equal(Object.keys(sync).length, 0);
   });
+  await test('an access-paused queue shows its counters without wake polling or stale restart messages', async () => {
+    const state = { runId: 'paused-access', status: 'running', uiMode: 'modal', origin: 'manual', waitingForAccess: true,
+      fetchTotal: 119, queueIndex: 48, processed: 48, failed: 34, updatedAt: new Date(now - 600000).toISOString() };
+    const messages = [];
+    const p = popup({ metadataRepairState: state }, async message => { messages.push(message); });
+    await p.AT.MetadataRepair.syncMetadataRepairStateFromStorage({ autoOpenRunning: true });
+    assert.equal(p.rendered.at(-1).queueIndex, 48);
+    assert.equal(p.timers.length, 0, 'no periodic wake while the user must grant access');
+    assert.deepEqual(messages, [], 'a stale timestamp is not a reason to resume without permission');
+  });
   await test('an install or update event preserves an existing library, settings, progress and metadata cache', async () => {
     for (const reason of ['install', 'update']) {
       const store = { animeData: { naruto: { episodes: [1] } }, videoProgress: { episode: { currentTime: 30 } }, settings: { watchThreshold: 0.9 },
