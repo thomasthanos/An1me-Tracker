@@ -213,7 +213,7 @@ async function panel(browser, device, { access, grant = true, optional = null })
 
     await test("only the filler sites still blocked are named", async () => {
       const p = await panel(browser, PHONE, { access: ["https://api.jikan.moe/*"] });
-      assert.equal((await p.view()).steps[1], "Under Permissions, tap animefillerlist.com and choose Allow for each.");
+      assert.equal((await p.view()).steps[1], "Under Permissions, tap animefillerlist.com and choose Allow.");
       await p.context.close();
     });
 
@@ -322,6 +322,23 @@ async function panel(browser, device, { access, grant = true, optional = null })
       const stopped = await buttons();
       assert.equal(await p.page.evaluate(() => window.__stops), 1);
       assert.deepEqual(stopped, { hide: "Done", stop: false, open: true, label: "Stopped — 3 of 40 checked" });
+      await p.context.close();
+    });
+
+    await test("a queue paused for All Websites names that one switch and links to Settings", async () => {
+      const p = await panel(browser, PHONE, { access: false });
+      await p.page.evaluate(() => {
+        window.AnimeTrackerWebsiteAccess = { enabled: true, origins: ["<all_urls>"], isPaused: () => true, refresh: async () => {},
+          getState: () => ({ allowed: false, blockedOrigins: ["<all_urls>"] }) };
+        window.AnimeTracker.FillerFetchUI.applyBackgroundState({ runId: "r", status: "running", waitingForAccess: true,
+          blockedOrigins: ["<all_urls>"], fetchTotal: 20, queueIndex: 4, processed: 4, logs: [] });
+      });
+      await p.page.waitForTimeout(100);
+      const state = await p.view();
+      assert.equal(state.banner, true);
+      assert.equal(state.steps[1], "Under Permissions, tap All Websites and choose Allow.");
+      assert.equal(await p.page.getAttribute(".ffui-access .site-access-link", "href"), "an1metracker://safari-settings");
+      assert.equal(await p.page.locator(".ffui-access .site-access-link").isVisible(), true);
       await p.context.close();
     });
 

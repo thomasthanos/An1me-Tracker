@@ -28,20 +28,20 @@ const EXTRA_PAGES = ["src/setup/access.html"];
 // Safari has no identity (Google / AniList OAuth), notifications or side panel APIs.
 const SAFARI_UNSUPPORTED_PERMISSIONS = ["identity", "notifications", "sidePanel"];
 
-// Keep the tracking site required; make every supporting service requestable from a popup tap.
-// AniList API work is disabled on mobile, but its image CDN still supplies library covers.
-// The desktop manifest and its existing permissions remain unchanged.
+// iOS lists every host pattern as its own row under Settings → Safari → Extensions, each to be set to Allow by
+// hand, and Safari cannot be asked to allow a list of them from the extension. One broad pattern shows there as a
+// single "All Websites" switch instead, so the Safari build asks for <all_urls> in place of the twelve services
+// (Firebase, Jikan, AnimeFillerList, AniSkip, MyAnimeList and the image CDNs). The tracking site stays named so
+// it keeps working on its own row before that switch is on. Content scripts still run on an1me.to only, and AniList
+// API work stays off on mobile in code. The desktop manifest and its permissions are unchanged.
 const SAFARI_CORE_HOSTS = ["https://an1me.to/*", "https://*.an1me.to/*"];
-const SAFARI_DISABLED_HOSTS = ["https://graphql.anilist.co/*"];
+const SAFARI_ALL_WEBSITES = "<all_urls>";
 
 function toSafariManifest(manifest) {
   const safari = { ...manifest, permissions: (manifest.permissions || []).filter((p) => !SAFARI_UNSUPPORTED_PERMISSIONS.includes(p)) };
   delete safari.side_panel;
-  safari.host_permissions = (manifest.host_permissions || []).filter(host => SAFARI_CORE_HOSTS.includes(host));
-  safari.optional_host_permissions = [...new Set([
-    ...(manifest.optional_host_permissions || []),
-    ...(manifest.host_permissions || []).filter(host => !SAFARI_CORE_HOSTS.includes(host)),
-  ])].filter(host => !SAFARI_DISABLED_HOSTS.includes(host));
+  delete safari.optional_host_permissions;
+  safari.host_permissions = [...(manifest.host_permissions || []).filter(host => SAFARI_CORE_HOSTS.includes(host)), SAFARI_ALL_WEBSITES];
   return safari;
 }
 

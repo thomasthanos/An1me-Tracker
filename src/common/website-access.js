@@ -6,7 +6,11 @@
   let manifest = {};
   try { manifest = (root.browser?.runtime || root.chrome?.runtime)?.getManifest?.() || {}; } catch {}
   const optional = manifest.optional_host_permissions || [];
-  const origins = optional.length ? [...new Set([...(manifest.host_permissions || []), ...optional])] : [];
+  const declared = [...(manifest.host_permissions || []), ...optional];
+  // The Safari build asks for every website in one pattern, which iOS Settings shows as a single "All Websites"
+  // switch: that one grant is the gate. Builds that listed each service as optional need all of them instead.
+  const broad = declared.find(origin => origin === "<all_urls>" || origin === "*://*/*");
+  const origins = broad ? [broad] : optional.length ? [...new Set(declared)] : [];
   const enabled = origins.length > 0;
   const KEY = "websiteAccessState";
   const listeners = new Set(), transfers = new Set();

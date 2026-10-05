@@ -18,7 +18,14 @@
   }
 
   // The name Safari shows for the host in the extension's settings.
+  // A pattern for every website (the Safari build asks for one) is Safari's "All Websites" row.
+  function isAllWebsites(origin) {
+    return origin === "<all_urls>" || origin === "*://*/*";
+  }
+
+  // The name Safari shows for the host in the extension's settings.
   function hostLabel(origin) {
+    if (isAllWebsites(origin)) return "All Websites";
     return String(origin).replace(/^https?:\/\//, "").replace(/\/\*$/, "").replace(/^www\./, "");
   }
 
@@ -162,12 +169,19 @@
       const allow = el("li");
       allow.append(doc.createTextNode("Under Permissions, tap "));
       strongHosts(allow);
-      allow.append(doc.createTextNode(" and choose Allow for each."));
+      allow.append(doc.createTextNode(hosts.length === 1 ? " and choose Allow." : " and choose Allow for each."));
       fallback.append(allow, el("li", null, "Come back and run Fetch & Import again."));
     }
+    // On iPhone the app takes the user straight to the extension's settings; it shows and hides with the steps.
+    const settingsLink = phone && canOpenSettingsFromApp() ? el("a", "site-access-link", "Open Safari Settings") : null;
+    if (settingsLink) settingsLink.href = APP_SETTINGS_URL;
+    const showFallback = (show) => {
+      fallback.hidden = !show;
+      if (settingsLink) settingsLink.hidden = !show;
+    };
 
     if (!canAskInPlace(blocked)) {
-      container.append(fallback);
+      container.append(fallback, ...(settingsLink ? [settingsLink] : []));
       return blocked;
     }
 
@@ -179,8 +193,8 @@
     const button = el("button", "site-access-btn", "Allow access");
     button.type = "button";
     container.append(button);
-    fallback.hidden = true;
-    container.append(fallback);
+    container.append(fallback, ...(settingsLink ? [settingsLink] : []));
+    showFallback(false);
 
     button.addEventListener("click", () => {
       if (button.disabled) return;
@@ -193,7 +207,7 @@
         button.textContent = "Allow access";
         button.removeAttribute("aria-busy");
         if (!granted) {
-          fallback.hidden = false;
+          showFallback(true);
           return;
         }
         if (globalThis.AnimeTrackerWebsiteAccess?.enabled) {
@@ -237,7 +251,8 @@
 
   // The iPhone app can take the user straight to the extension's settings; elsewhere there is no app to ask.
   function canOpenSettingsFromApp() {
-    return !!globalThis.AnimeTrackerUtils?.isMobileDevice?.() && declaredOptionalOrigins().length > 0;
+    return !!globalThis.AnimeTrackerUtils?.isMobileDevice?.() &&
+      (globalThis.AnimeTrackerWebsiteAccess?.enabled === true || declaredOptionalOrigins().length > 0);
   }
 
   // The websites to allow on this device: every website the tracker uses where Safari gates them (the Safari
@@ -273,20 +288,26 @@
         const node = doc.createElement(tag); if (className) node.className = className;
         if (text != null) node.textContent = text; return node;
       };
+      // One "All Websites" switch, or (builds that named each service) a list of websites to allow one by one.
+      const allWebsites = missing.length === 1 && isAllWebsites(missing[0]);
       container.append(element("p", "site-access-title", "Safari website access"),
-        element("p", "site-access-text", "Online work is paused until all required websites are allowed. Local progress is still saved. Allow metadata, covers, Skip Outro and cloud sync together."));
+        element("p", "site-access-text", allWebsites
+          ? "Sync, covers, fillers and Skip Outro are paused until Safari allows the tracker on All Websites. It is one switch in Settings. Local progress is still saved."
+          : "Online work is paused until all required websites are allowed. Local progress is still saved. Allow metadata, covers, Skip Outro and cloud sync together."));
       const details = element("details", "site-access-hosts");
-      details.append(element("summary", null, `${missing.length} websites need access`));
-      const list = element("ul");
-      missing.forEach(origin => list.append(element("li", null, hostLabel(origin))));
-      details.append(list); container.append(details);
+      if (!allWebsites) {
+        details.append(element("summary", null, `${missing.length} website${missing.length === 1 ? "" : "s"} need${missing.length === 1 ? "s" : ""} access`));
+        const list = element("ul");
+        missing.forEach(origin => list.append(element("li", null, hostLabel(origin))));
+        details.append(list); container.append(details);
+      }
 
       const fromApp = canOpenSettingsFromApp();
       const settings = element("a", "site-access-link", "Open Safari Settings");
       settings.href = APP_SETTINGS_URL;
       const steps = element("ol", "site-access-steps");
       steps.append(element("li", null, fromApp ? `Tap Open Safari Settings, or open ${SETTINGS_PATH}.` : `Open ${SETTINGS_PATH}.`),
-        element("li", null, "Under Permissions, set each website listed above to Allow."),
+        element("li", null, allWebsites ? "Under Permissions, set All Websites to Allow." : "Under Permissions, set each website listed above to Allow."),
         element("li", null, "Come back to Safari. This card checks again by itself."));
       const requestable = missing.filter(origin => declaredOptionalOrigins().includes(origin));
       const canRequest = typeof provider?.api?.request === "function" && requestable.length > 0;

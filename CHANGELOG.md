@@ -12,6 +12,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.11] — 2026-10-05
+
+### Changed
+
+- **iPhone website access is one switch.** iOS listed every website the tracker uses (sign-in, cloud sync,
+  Jikan, AnimeFillerList, AniSkip, MyAnimeList and the image hosts) as its own row to set to **Allow** by hand,
+  and Safari cannot be asked from the extension to allow a list of them. The Safari build now asks for every
+  website in one permission, which iOS Settings shows as a single **All Websites** switch: **Settings → Apps →
+  Safari → Extensions → An1me.to Tracker → All Websites → Allow**. The tracker's scripts still run on an1me.to
+  only; elsewhere it only reads the services it already used. The desktop extension is unchanged.
+- The **Website access** page and card now lead straight to that switch with **Open Safari Settings**,
+  instead of offering a prompt that cannot allow it, and clear themselves when you come back with it on.
+  The Fetch & Import notice links to Settings the same way. Online work stays paused while the switch is on
+  **Ask**; local progress keeps saving.
+
 ## [8.2.10] — 2026-10-05
 
 ### Fixed
