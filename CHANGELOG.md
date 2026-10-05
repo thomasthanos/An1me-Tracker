@@ -12,6 +12,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [Unreleased]
+
+### Fixed
+
+- Filler data no longer depends on AnimeFillerList alone. When it cannot be reached (Safari blocking the
+  site on a phone, a Cloudflare challenge, or the site being down), a show with no filler data yet is filled
+  from Jikan (MyAnimeList's filler flags) instead of staying "needs retry". Only a positive answer with the
+  same episode count is used: no answer is never cached as "no filler", and data already cached from
+  AnimeFillerList, which also tells mixed canon apart, is kept rather than replaced. The stand-in is checked
+  again after three days so it moves back to AnimeFillerList once that answers. A show page that cannot be
+  read falls back the same way.
+- Fetch & Import rows say why AnimeFillerList failed: **no site access** when the browser does not let the
+  extension reach it (on iPhone: set All Websites to Allow), **blocked by Cloudflare** for a challenge, or
+  the HTTP status or network error.
+- Jikan requests are spaced about a second apart, under Jikan's rate limit, so a sweep that leans on it is
+  not answered with 429s.
+- Very long series (One Piece, Detective Conan) get every episode from Jikan instead of stopping at 1000
+  and failing as incomplete.
+
 ## [8.2.3] — 2026-10-05
 
 ### Fixed

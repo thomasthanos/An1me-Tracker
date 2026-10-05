@@ -22,6 +22,9 @@
   const EPISODE_TYPES_TTL = 24 * HOUR;
   const FILLER_FINISHED_TTL = 7 * DAY;
   const NOT_FOUND_TTL = 3 * DAY;
+  // Jikan data that stood in for an unreachable AnimeFillerList: checked again sooner than the seven days
+  // a finished show normally keeps, so it moves back to AnimeFillerList once that is reachable.
+  const AFL_FALLBACK_TTL = 3 * DAY;
   const RETRYABLE_TTL = 15 * MINUTE;
   // 5: added nativeTitle + synonyms, which the filler matcher needs. A bump invalidates every
   // cached info snapshot and forces one full re-scrape - silent and alarm-driven, so the user
@@ -113,6 +116,7 @@
     if (filler.retryable) return Math.max(at + RETRYABLE_TTL, toMs(filler.retryAfterAt) || 0);
     if (filler.notFound) return at + NOT_FOUND_TTL;
     if (info && info.status === "RELEASING") return at + EPISODE_TYPES_TTL;
+    if (filler.aflFallback) return at + AFL_FALLBACK_TTL;
     return at + FILLER_FINISHED_TTL;
   }
 
@@ -175,6 +179,7 @@
     EPISODE_TYPES_TTL,
     FILLER_FINISHED_TTL,
     NOT_FOUND_TTL,
+    AFL_FALLBACK_TTL,
     RETRYABLE_TTL,
     INFO_SCHEMA_VERSION,
     EPISODE_TYPES_SCHEMA_VERSION,

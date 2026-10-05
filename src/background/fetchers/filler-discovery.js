@@ -62,6 +62,39 @@ function resetFillerFetchBreakers() {
   globalThis.__jikanCircuitBrokenUntil = 0;
 }
 
+const AFL_ORIGIN_PATTERN = "https://www.animefillerlist.com/*";
+
+// False only when the browser says the extension may not reach AnimeFillerList: Safari lets the user
+// limit an extension to some websites, and Chrome to sites they pick. A fetch then fails as a bare
+// "Load failed", which says nothing about the fix. Any doubt (no API, an error, no answer) is "allowed".
+function aflHostAccessDenied() {
+  return new Promise((resolve) => {
+    const api = globalThis.chrome?.permissions;
+    if (typeof api?.contains !== "function") return resolve(false);
+    const timer = setTimeout(() => resolve(false), 1000);
+    const done = (granted) => { clearTimeout(timer); resolve(granted === false); };
+    try {
+      const pending = api.contains({ origins: [AFL_ORIGIN_PATTERN] }, done);
+      if (pending && typeof pending.then === "function") pending.then(done, () => done(true));
+    } catch {
+      done(true);
+    }
+  });
+}
+
+// Why AnimeFillerList could not be read, in words short enough for a Fetch & Import row.
+async function describeAflFailure(reason, response = null) {
+  const header = (name) => String(response?.headers?.get?.(name) || "");
+  // A challenge says so in cf-mitigated; a plain 403 from Cloudflare is its firewall. A 5xx through Cloudflare
+  // is usually the site itself being down, so it keeps its status.
+  if (response && (header("cf-mitigated").toLowerCase() === "challenge" ||
+      (response.status === 403 && /cloudflare/i.test(header("server"))))) {
+    return "blocked by Cloudflare";
+  }
+  if (!response && await aflHostAccessDenied()) return "no site access";
+  return reason;
+}
+
 function aflIndexIsFresh(snapshot) {
   if (!snapshot || Number(snapshot.schemaVersion || 0) < AFL_INDEX_SCHEMA) return false;
   if (!Array.isArray(snapshot.shows) || snapshot.shows.length === 0) return false;
@@ -174,12 +207,13 @@ async function getAflShowIndex(options = {}) {
     const timer = setTimeout(() => ctrl.abort(), 20000);
     let html = null;
     let reason = "no response";
+    let res = null;
     try {
-      const res = await fetch(AFL_INDEX_URL, { signal: ctrl.signal });
+      res = await fetch(AFL_INDEX_URL, { signal: ctrl.signal });
       if (res.ok) html = await res.text();
-      else reason = `HTTP ${res.status}`;
+      else reason = await describeAflFailure(`HTTP ${res.status}`, res);
     } catch (e) {
-      reason = e?.name === "AbortError" ? "timed out" : String(e?.message || e || "network error");
+      reason = e?.name === "AbortError" ? "timed out" : await describeAflFailure(String(e?.message || e || "network error"));
       console.warn("[BG] AnimeFillerList index fetch failed:", e?.message || e);
     } finally {
       clearTimeout(timer);
@@ -373,15 +407,20 @@ async function fetchEpisodeTypesFromAnimeFillerList(animeSlug) {
     const url = `https://www.animefillerlist.com/shows/${animeSlug}`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
+    // The show page fails for the same reasons the index does (blocked, challenged, down), and the
+    // caller can still try Jikan for it, so those failures are marked and described the same way.
+    const unreachable = (reason) => Object.assign(new Error(`afl_page_unavailable: ${reason}`), { aflUnreachable: true });
     let response;
     try {
       response = await fetch(url, { signal: ctrl.signal });
+    } catch (fetchError) {
+      throw unreachable(fetchError?.name === "AbortError" ? "timed out" : await describeAflFailure(String(fetchError?.message || fetchError || "network error")));
     } finally {
       clearTimeout(timer);
     }
     if (!response.ok) {
       if (response.status === 404) return null;
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw unreachable(await describeAflFailure(`HTTP ${response.status}`, response));
     }
     const html = await response.text();
     const episodeTypes = { canon: [], filler: [], mixed: [], anime_canon: [], totalEpisodes: null };
@@ -457,6 +496,20 @@ function rebaseEpisodeTypes(episodeTypes, offset, seasonLength) {
 // (2.5s and 3.5s used to be) turned one slow answer into an hour of "filler unavailable" for every show.
 const JIKAN_MOBILE_SEARCH_TIMEOUT_MS = 5000;
 const JIKAN_MOBILE_EPISODES_TIMEOUT_MS = 7000;
+// Jikan allows about one request a second sustained (3/s, 60/min). Every request, search or episode page,
+// takes the next free slot, so a library sweep that leans on Jikan is not answered with 429s.
+const JIKAN_MIN_GAP_MS = 1000;
+// 100 episodes a page: enough for the longest-running shows (One Piece, Detective Conan), which used to
+// stop at 10 pages and always end as "incomplete".
+const JIKAN_MAX_EPISODE_PAGES = 15;
+let _jikanNextSlotAt = 0;
+
+async function waitForJikanSlot() {
+  const now = Date.now();
+  const at = Math.max(now, _jikanNextSlotAt);
+  _jikanNextSlotAt = at + JIKAN_MIN_GAP_MS;
+  if (at > now) await AnimeTrackerUtils.sleep(at - now);
+}
 
 async function fetchJikanEpisodes(title, options = {}) {
   const unavailable = (message) => Object.assign(new Error(message), {
@@ -474,6 +527,7 @@ async function fetchJikanEpisodes(title, options = {}) {
     let malId = Number(options.malId) || 0;
 
     if (!malId) {
+      await waitForJikanSlot();
       const searchCtrl = new AbortController();
       const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
       const searchTimer = setTimeout(() => searchCtrl.abort(), isMobile ? JIKAN_MOBILE_SEARCH_TIMEOUT_MS : 3500);
@@ -526,7 +580,8 @@ async function fetchJikanEpisodes(title, options = {}) {
     let page = 1;
     let hasNext = true;
 
-    while (hasNext && page <= 10) {
+    while (hasNext && page <= JIKAN_MAX_EPISODE_PAGES) {
+      await waitForJikanSlot();
       const epCtrl = new AbortController();
       const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
       const epTimer = setTimeout(() => epCtrl.abort(), isMobile ? JIKAN_MOBILE_EPISODES_TIMEOUT_MS : 5000);
@@ -557,7 +612,6 @@ async function fetchJikanEpisodes(title, options = {}) {
       allEpisodes.push(...epData.data);
       hasNext = epData?.pagination?.has_next_page === true;
       page++;
-      if (hasNext) await AnimeTrackerUtils.sleep(400);
     }
 
     if (hasNext) throw new Error("jikan_episodes_incomplete");

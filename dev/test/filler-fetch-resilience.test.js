@@ -23,9 +23,9 @@ const info = (title) => ({ title, totalEpisodes: 28, latestEpisode: 28, status: 
 const prior = () => ({ canon: [1, 3, 4], filler: [2, 5], mixed: [], anime_canon: [], totalEpisodes: 28, schemaVersion: 3, cachedAt: NOW - 8 * DAY, _source: "afl" });
 
 // One isolated worker per case: the Jikan circuit and the slug cache live in the global scope.
-function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {} } = {}) {
+function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess = null } = {}) {
   const store = structuredClone(seed), calls = { aflIndex: 0, aflShow: 0, jikan: 0, offline: 0 }, timers = [], alarms = [], listeners = {};
-  const mode = { afl, jikan };
+  const mode = { afl, jikan, jikanEpisodes: 28 };
   // The browser's own connectivity flag, which the worker reads as navigator.onLine. Flip it to cut the connection.
   const nav = { userAgent: ua, platform: ua, onLine: true };
   let time = NOW, writes = 0, runaway = false;
@@ -46,21 +46,40 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {} } = {}) {
         const abort = () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
         if (options.signal?.aborted) abort(); else options.signal?.addEventListener("abort", abort, { once: true });
       });
+      const blocked = () =>
+        mode.afl === "down" ? Promise.reject(new TypeError("Load failed"))
+          : mode.afl === "403" ? Promise.resolve(new Response("", { status: 403 }))
+            : mode.afl === "challenge" ? Promise.resolve(new Response("<title>Just a moment...</title>", { status: 403, headers: { "cf-mitigated": "challenge", server: "cloudflare" } }))
+              : mode.afl === "503" ? Promise.resolve(new Response("", { status: 503, headers: { server: "cloudflare" } }))
+                : null;
       if (url === "https://www.animefillerlist.com/shows") {
         calls.aflIndex++;
-        return mode.afl === "down" ? Promise.reject(new TypeError("Load failed")) : mode.afl === "403" ? Promise.resolve(new Response("", { status: 403 })) : Promise.resolve(new Response(INDEX_HTML));
+        return blocked() || Promise.resolve(new Response(INDEX_HTML));
       }
       if (url.startsWith("https://www.animefillerlist.com/shows/")) {
         calls.aflShow++;
-        return mode.afl === "down" ? Promise.reject(new TypeError("Load failed")) : Promise.resolve(new Response(showPage(28)));
+        return blocked() || Promise.resolve(new Response(showPage(28)));
       }
       if (url.startsWith("https://api.jikan.moe/")) {
         calls.jikan++;
-        return mode.jikan === "hang" ? hang() : Promise.resolve(new Response(JSON.stringify({ data: [] })));
+        if (mode.jikan === "hang") return hang();
+        if (mode.jikan === "down") return Promise.reject(new TypeError("Load failed"));
+        if (mode.jikan === "listed") {
+          // MAL knows every show: the search echoes the title, and every seventh episode is filler.
+          const query = url.match(/anime\?q=([^&]+)/);
+          if (query) return Promise.resolve(new Response(JSON.stringify({ data: [{ mal_id: 900, title: decodeURIComponent(query[1]) }] })));
+          const page = Number(url.match(/page=(\d+)/)[1]), first = (page - 1) * 100, total = mode.jikanEpisodes || 28;
+          const data = Array.from({ length: Math.max(0, Math.min(100, total - first)) }, (_, i) => ({ mal_id: first + i + 1, filler: (first + i + 1) % 7 === 0, recap: false }));
+          return Promise.resolve(new Response(JSON.stringify({ data, pagination: { has_next_page: first + 100 < total } })));
+        }
+        return Promise.resolve(new Response(JSON.stringify({ data: [] })));
       }
       return Promise.reject(new Error("unexpected request " + url));
     },
-    chrome: { runtime: { getManifest: () => ({ version: "8.2.1" }) }, alarms: { create: (name, options) => alarms.push({ name, options }), clear: async () => true }, tabs: { query: async () => [] } },
+    chrome: {
+      // siteAccess false plays a browser where the user has not allowed the extension on AnimeFillerList.
+      ...(siteAccess === null ? {} : { permissions: { contains: (request, callback) => callback(siteAccess) } }),
+      runtime: { getManifest: () => ({ version: "8.2.1" }) }, alarms: { create: (name, options) => alarms.push({ name, options }), clear: async () => true }, tabs: { query: async () => [] } },
     dlog() {},
   });
   c.self = c;
@@ -83,13 +102,13 @@ const library = () => Object.fromEntries(SHOWS.slice(0, 4).map(([slug, title]) =
 const missEntries = (store) => Object.entries(store).filter(([key, value]) => (key.startsWith("episodeTypes_") || key.startsWith("fillerslug_")) && value?.notFound);
 
 (async () => {
-  await test("an unreachable index fails every show retryably after one request, with no Jikan lookups and no false 'no filler'", async () => {
+  await test("an unreachable index fails every show retryably after one request, and an empty Jikan answer is no 'no filler'", async () => {
     const seed = { episodeTypes_bleach: prior() };
     const h = worker({ afl: "down", seed });
     const results = [];
     for (const [slug] of SHOWS) results.push(await h.resolve(slug));
     assert.equal(h.calls.aflIndex, 1, "the index is requested once for the whole sweep");
-    assert.equal(h.calls.jikan, 0, "the lookup is not handed to Jikan");
+    assert.equal(h.calls.jikan, SHOWS.length - 1, "Jikan is asked once per show with no data of its own, never for bleach");
     for (const result of results) {
       assert.equal(result.fillerResult.status, "failed");
       assert.match(result.fillerResult.error, /^afl_index_unavailable: Load failed$/);
@@ -104,7 +123,7 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     const h = worker({ afl: "403" });
     const result = await h.resolve("noragami");
     assert.match(result.fillerResult.error, /^afl_index_unavailable: HTTP 403$/);
-    assert.equal(h.calls.jikan, 0);
+    assert.deepEqual(missEntries(h.store), []);
   });
 
   await test("the index failure is remembered for two minutes, then the index is requested again", async () => {
@@ -388,6 +407,101 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     const h = worker();
     const detail = vm.runInContext("formatMetadataRepairDetail", h.c)({ status: "cached" }, { status: "failed", error: "jikan_offline" });
     assert.equal(detail, "info cached • filler offline, retry later");
+  });
+
+  await test("with AnimeFillerList unreachable, Jikan fills in filler data for a show that had none", async () => {
+    const h = worker({ afl: "down", jikan: "listed" });
+    const result = await h.resolve("noragami");
+    assert.equal(result.fillerResult.status, "fetched");
+    const entry = h.store.episodeTypes_noragami;
+    assert.deepEqual(entry.filler, [7, 14, 21, 28]);
+    assert.equal(entry._source, "jikan");
+    assert.equal(entry.aflFallback, true, "marked so it moves back to AnimeFillerList later");
+    assert.equal(entry.retryable, undefined);
+    const detail = vm.runInContext("formatMetadataRepairDetail", h.c)(result.infoResult, result.fillerResult);
+    assert.equal(detail, "info cached • 4 fillers / 28 eps");
+  });
+
+  await test("a Jikan answer with a different episode count is not used as a stand-in", async () => {
+    // A 12-episode MAL entry for a 28-episode show is another season or another show: its marks would land on
+    // the wrong episodes, which is worse than none.
+    const h = worker({ afl: "down", jikan: "listed" });
+    h.mode.jikanEpisodes = 12;
+    const result = await h.resolve("noragami");
+    assert.equal(result.fillerResult.status, "failed");
+    assert.equal(result.fillerResult.error, "afl_index_unavailable: Load failed");
+    assert.equal(h.store.episodeTypes_noragami._source, undefined);
+    assert.deepEqual(missEntries(h.store), []);
+  });
+
+  await test("data already cached from AnimeFillerList is kept rather than replaced by Jikan", async () => {
+    const h = worker({ afl: "down", jikan: "listed", seed: { episodeTypes_bleach: prior() } });
+    const result = await h.resolve("bleach");
+    assert.equal(result.fillerResult.status, "failed");
+    assert.equal(h.calls.jikan, 0);
+    assert.deepEqual(h.store.episodeTypes_bleach.filler, [2, 5]);
+  });
+
+  await test("a show page that cannot be read also falls back, and without Jikan data names the site", async () => {
+    const slugHit = { fillerslug_noragami: { slug: "noragami", score: 1, matchedVia: "Noragami", kind: "exact", needsOffset: false, indexVersion: 1, schemaVersion: 4, cachedAt: NOW } };
+    const listed = worker({ afl: "challenge", jikan: "listed", seed: slugHit });
+    const fallback = await listed.resolve("noragami");
+    assert.equal(fallback.fillerResult.status, "fetched");
+    assert.equal(listed.store.episodeTypes_noragami._source, "jikan");
+    const unlisted = worker({ afl: "challenge", seed: slugHit });
+    const failed = await unlisted.resolve("noragami");
+    assert.equal(failed.fillerResult.error, "afl_page_unavailable: blocked by Cloudflare");
+    const detail = vm.runInContext("formatMetadataRepairDetail", unlisted.c)(failed.infoResult, failed.fillerResult);
+    assert.equal(detail, "info cached • filler site unreachable (blocked by Cloudflare)");
+    assert.deepEqual(missEntries(unlisted.store), []);
+  });
+
+  await test("when Jikan fails too, the row still names the AnimeFillerList failure", async () => {
+    const h = worker({ afl: "403", jikan: "down" });
+    const result = await h.resolve("noragami");
+    assert.equal(result.fillerResult.error, "afl_index_unavailable: HTTP 403");
+    assert.equal(h.store.episodeTypes_noragami.retryable, true);
+  });
+
+  await test("a Cloudflare challenge and a site the extension may not reach are named as such", async () => {
+    const challenged = await worker({ afl: "challenge" }).resolve("noragami");
+    assert.equal(challenged.fillerResult.error, "afl_index_unavailable: blocked by Cloudflare");
+    // Control: a 503 passed through Cloudflare is the site being down, not a block.
+    const down = await worker({ afl: "503" }).resolve("noragami");
+    assert.equal(down.fillerResult.error, "afl_index_unavailable: HTTP 503");
+    const noAccess = await worker({ afl: "down", siteAccess: false }).resolve("noragami");
+    assert.equal(noAccess.fillerResult.error, "afl_index_unavailable: no site access");
+    // Control: with access granted, a network failure is still reported as it came.
+    const allowed = await worker({ afl: "down", siteAccess: true }).resolve("noragami");
+    assert.equal(allowed.fillerResult.error, "afl_index_unavailable: Load failed");
+  });
+
+  await test("Jikan stand-in data is checked again after three days and replaced once AnimeFillerList answers", async () => {
+    const h = worker({ afl: "down", jikan: "listed" });
+    await h.resolve("noragami");
+    const policy = h.c.AnimeTrackerCachePolicy;
+    const finished = h.store.animeinfo_noragami;
+    h.advance(3 * DAY - MINUTE);
+    assert.equal(policy.isFillerFresh(h.store.episodeTypes_noragami, finished), true);
+    h.advance(2 * MINUTE);
+    assert.equal(policy.isFillerFresh(h.store.episodeTypes_noragami, finished), false, "stale after three days");
+    assert.equal(policy.isFillerFresh({ ...h.store.episodeTypes_noragami, aflFallback: undefined, _source: "animefillerlist" }, finished), true, "AnimeFillerList data keeps its seven days");
+    h.mode.afl = "ok";
+    h.c.resetFillerFetchBreakers();
+    const refreshed = await h.resolve("noragami");
+    assert.equal(refreshed.fillerResult.status, "fetched");
+    assert.equal(h.store.episodeTypes_noragami._source, "animefillerlist");
+    assert.equal(h.store.episodeTypes_noragami.aflFallback, undefined);
+  });
+
+  await test("Jikan returns every episode of a very long series instead of stopping at 1000", async () => {
+    const seed = { "animeinfo_one-piece": { ...info("One Piece"), totalEpisodes: 1150, latestEpisode: 1150 } };
+    const h = worker({ afl: "down", jikan: "listed", seed });
+    h.mode.jikanEpisodes = 1150;
+    const result = await h.resolve("one-piece");
+    assert.equal(result.fillerResult.status, "fetched", result.fillerResult.error);
+    assert.equal(h.store["episodeTypes_one-piece"].totalEpisodes, 1150);
+    assert.equal(h.calls.jikan, 1 + 12, "one search and twelve pages");
   });
 
   process.exitCode = failures ? 1 : 0;
