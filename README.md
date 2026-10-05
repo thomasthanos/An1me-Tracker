@@ -144,6 +144,10 @@ src/            Content scripts, player hooks, cloud and shared modules
 dev/scripts/    Packaging, iOS utilities and documentation artwork
 dev/test/       Regression tests
 dev/screenshots/ Store and documentation screenshots
+ios/            Native iOS host sources
+.github/        Workflows, security setup and documentation artwork
+dist/           Generated browser packages (ignored)
+build/          Generated Xcode project and IPA (ignored)
 ```
 
 ```sh
@@ -152,17 +156,15 @@ node dev/scripts/package.js --target safari --zip
 node dev/scripts/build-hero.js  # Regenerate all documentation SVGs from manifest.json
 ```
 
-Run regression tests on **PowerShell**:
-
-```powershell
-Get-ChildItem dev/test -Filter '*.test.js' | ForEach-Object { node $_.FullName }
-```
-
-Or on **Bash**:
+Run the same regression command on **PowerShell, Bash or CI**:
 
 ```sh
-for test in dev/test/*.test.js; do node "$test" || exit 1; done
+node dev/scripts/run-tests.js
 ```
+
+Suites run in separate processes; any failure makes the command fail. Browser integration tests
+need Playwright and a Chromium browser, and report `SKIP` when Playwright is unavailable.
+See the [development guide](dev/README.md) for individual tests, package outputs and cleanup rules.
 
 </details>
 

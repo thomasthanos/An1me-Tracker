@@ -107,9 +107,10 @@ policy. Changes to exclusions or accepted risks require a separate maintainer de
 
 ## Automated checks and limitations
 
-- GitHub CodeQL scans JavaScript/TypeScript and GitHub Actions with the extended query suite and
-  remote/local input models. The native Swift host is not covered by this configuration and
-  requires separate review.
+- GitHub CodeQL scans JavaScript/TypeScript and GitHub Actions with the extended query suite,
+  including build and release scripts in `dev/scripts/`. Test-only harnesses in `dev/test/` are
+  excluded because they intentionally execute repository sources. The native Swift host is not
+  covered by this configuration and requires separate review.
 - Dependabot checks GitHub Actions versions weekly and can propose dependency security fixes.
   Update pull requests require review before merging.
 - GitHub secret scanning and push protection check for recognized credentials. An alert must be

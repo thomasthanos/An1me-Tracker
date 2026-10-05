@@ -1,10 +1,10 @@
 name: An1me Tracker CodeQL config
 
-# dev/ holds the unit tests and build/packaging scripts. They are never shipped in the extension or
-# the iOS app, and the tests load the repo's own sources into vm contexts, which CodeQL reports as
-# code injection. Scan what ships: manifest.json, background.js, popup.html, src/, ios/ and workflows.
+# Test harnesses intentionally execute the repository's own sources in VM contexts.
+# Exclude only tests; build, packaging and release scripts in dev/scripts remain in scope.
+# JavaScript/TypeScript and Actions are scanned; native Swift needs separate review.
 paths-ignore:
-  - dev/**
+  - dev/test/**
 
 queries:
   - uses: security-extended

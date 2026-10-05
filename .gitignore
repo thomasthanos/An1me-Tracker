@@ -1,10 +1,14 @@
+# Private deployment configuration (never part of the extension).
 backend/serviceAccountKey.json
 **/.env
 **/.env.*
 !**/.env.example
 
+# Generated browser packages and native Xcode/IPA output.
 /dist/
 /build/
 *.zip
+
+# Local audit notes, screenshots and temporary agent work.
 /.agents/
 /_metadata/

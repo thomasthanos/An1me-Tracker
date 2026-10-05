@@ -1,0 +1,2 @@
+# SVG generators write LF on every platform; keep regenerated artwork clean on Windows too.
+*.svg text eol=lf

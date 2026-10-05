@@ -1,0 +1,37 @@
+name: Repository checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-package:
+    name: Tests and packages (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Regression tests
+        run: node dev/scripts/run-tests.js
+      - name: Chrome package
+        run: node dev/scripts/package.js --zip
+      - name: Safari package
+        run: node dev/scripts/package.js --target safari --zip

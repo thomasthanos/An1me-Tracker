@@ -35,8 +35,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
       - name: Test
-        run: for t in dev/test/*.test.js; do node "$t" > /dev/null || { node "$t"; exit 1; }; done
+        run: node dev/scripts/run-tests.js
 
       - name: Package the extension for Safari
         id: meta

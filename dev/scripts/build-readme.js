@@ -89,15 +89,6 @@ const cards=[
  ['sync','Across your devices','Optional Firebase cloud sync.','Your library and resume points.','#7ce9ce'],
  ['filler','Know what to skip','Filler tags and AniSkip outro skip.','Spend more time on the story.','#aca4ff']
 ];
-for(const [name,title,line1,line2,color] of cards){
- svg(`feature-${name}.svg`,280,128,title,`${surface(280,120)}
- <rect x="17" y="17" width="33" height="33" rx="10" fill="${color}" fill-opacity=".08"/>
- <g class="float">${stroke(name,33.5,33.5,color,.65)}</g>
- <circle cx="255" cy="22" r="2.5" fill="${color}" class="pulse"/>
- <text x="17" y="72" class="ink" font-size="18" font-weight="650" letter-spacing="-.35">${esc(title)}</text>
- <text x="17" y="93" class="muted" font-size="12">${esc(line1)}</text>
- <text x="17" y="110" class="muted" font-size="12">${esc(line2)}</text>`,`${title}. ${line1} ${line2}`);
-}
 // One image per layout prevents GitHub mobile from wrapping six separate cards.
 // Mobile keeps two columns at every width without relying on README custom CSS.
 const mobileLabels = {
@@ -143,4 +134,4 @@ for(const [name,title,subtitle,symbol,primary] of [
 for(const [name,label,width] of [['features','Features',91],['platforms','Platforms',99],['speed','Speed',76],['changelog','Changelog',103],['privacy','Privacy',83]]){
  svg(`nav-${name}.svg`,width,30,label,`<rect x="1" y="1" width="${width-2}" height="28" rx="9" fill="#122036" stroke="#36506f"/><text x="${width/2}" y="19" class="muted" text-anchor="middle" font-size="12" font-weight="600">${label}</text>`);
 }
-console.log(`Rebuilt README hero, mobile hero, 6 feature cards, 2 compact feature grids and 7 buttons for ${version}.`);
+console.log(`Rebuilt README hero, mobile hero, 2 compact feature grids and 7 buttons for ${version}.`);

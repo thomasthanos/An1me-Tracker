@@ -1,4 +1,4 @@
-# Advanced CodeQL setup (replaces GitHub's default setup) so dev/ can be excluded — see
+# Advanced CodeQL setup (replaces GitHub's default setup) so test harnesses can be excluded — see
 # .github/codeql/codeql-config.yml.
 name: CodeQL
 
