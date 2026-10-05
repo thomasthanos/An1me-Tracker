@@ -49,6 +49,19 @@ const fillerSlugCache = {
 
 let _aflIndexPromise = null;
 
+// A failed index load (offline, blocked, rate limited, unreadable page) is remembered briefly so one
+// sweep does not repeat a 20-second request for every show in the library.
+const AFL_INDEX_FAILURE_MEMO_MS = 2 * 60 * 1000;
+let _aflIndexFailure = null;
+
+// A manual "Fetch & Import" is the user asking to try again right now, so it must not be refused by
+// state that an earlier bad moment left behind.
+function resetFillerFetchBreakers() {
+  _aflIndexFailure = null;
+  globalThis.__jikanCircuitBroken = false;
+  globalThis.__jikanCircuitBrokenUntil = 0;
+}
+
 function aflIndexIsFresh(snapshot) {
   if (!snapshot || Number(snapshot.schemaVersion || 0) < AFL_INDEX_SCHEMA) return false;
   if (!Array.isArray(snapshot.shows) || snapshot.shows.length === 0) return false;
@@ -141,13 +154,32 @@ async function getAflShowIndex(options = {}) {
       return { shows: snapshot.shows, version: Number(snapshot.cachedAt) || 0 };
     }
 
+    const previous = Array.isArray(snapshot?.shows) && snapshot.shows.length > 0
+      ? { shows: snapshot.shows, version: Number(snapshot.cachedAt) || 0 }
+      : null;
+    // Having no index at all is reported as unavailable, never as an empty list: an empty list reads as
+    // "this show is not on AnimeFillerList", which sent every show to Jikan and cached a false "no filler".
+    const unavailable = (reason) => ({
+      shows: [],
+      version: 0,
+      unavailable: { reason, retryAfterMs: AFL_INDEX_FAILURE_MEMO_MS },
+    });
+
+    const failure = _aflIndexFailure;
+    if (failure && Date.now() - failure.at < AFL_INDEX_FAILURE_MEMO_MS) {
+      return previous || unavailable(failure.reason);
+    }
+
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 20000);
     let html = null;
+    let reason = "no response";
     try {
       const res = await fetch(AFL_INDEX_URL, { signal: ctrl.signal });
       if (res.ok) html = await res.text();
+      else reason = `HTTP ${res.status}`;
     } catch (e) {
+      reason = e?.name === "AbortError" ? "timed out" : String(e?.message || e || "network error");
       console.warn("[BG] AnimeFillerList index fetch failed:", e?.message || e);
     } finally {
       clearTimeout(timer);
@@ -157,13 +189,15 @@ async function getAflShowIndex(options = {}) {
     // A parse that yields almost nothing means the page structure changed. Keep whatever we had
     // rather than replacing a good index with an empty one.
     if (shows.length < 100) {
-      if (html) console.warn(`[BG] AnimeFillerList index parsed only ${shows.length} shows - keeping previous index`);
-      if (Array.isArray(snapshot?.shows) && snapshot.shows.length > 0) {
-        return { shows: snapshot.shows, version: Number(snapshot.cachedAt) || 0 };
+      if (html) {
+        console.warn(`[BG] AnimeFillerList index parsed only ${shows.length} shows - keeping previous index`);
+        reason = `unreadable index (${shows.length} shows)`;
       }
-      return { shows: [], version: 0 };
+      _aflIndexFailure = { at: Date.now(), reason };
+      return previous || unavailable(reason);
     }
 
+    _aflIndexFailure = null;
     const cachedAt = Date.now();
     try {
       await bgStorageSet({ [AFL_INDEX_KEY]: { schemaVersion: AFL_INDEX_SCHEMA, cachedAt, shows } });
@@ -232,6 +266,16 @@ async function discoverFillerSlug(an1meSlug, animeTitle, options = {}) {
   }
 
   const index = await getAflShowIndex();
+  // Without an index a show cannot be matched or ruled out. Fail retryably instead of continuing, so
+  // nothing is negative-cached and the lookup is not handed to Jikan for every show in the library.
+  const requireIndex = () => {
+    if (!index.unavailable) return;
+    throw Object.assign(new Error(`afl_index_unavailable: ${index.unavailable.reason}`), {
+      aflIndexUnavailable: true,
+      deferRetry: true,
+      retryAfterMs: Math.max(1000, Number(index.unavailable.retryAfterMs) || AFL_INDEX_FAILURE_MEMO_MS),
+    });
+  };
 
   let cached = null;
   try {
@@ -254,6 +298,7 @@ async function discoverFillerSlug(an1meSlug, animeTitle, options = {}) {
       fillerSlugCache.set(cacheKey, hit);
       return hit;
     }
+    requireIndex();
     if (cached.notFound) {
       // A miss recorded against a guess is much weaker evidence than a miss against the full
       // index, so it is re-evaluated as soon as the index moves on or the scorer changes.
@@ -272,6 +317,7 @@ async function discoverFillerSlug(an1meSlug, animeTitle, options = {}) {
     } catch {}
   }
 
+  requireIndex();
   const keys = collectFillerMatchKeys(an1meSlug, animeTitle, info);
   // If the entry itself IS an OVA/movie, the supplement listings are the correct targets, so the
   // penalty must not apply.
@@ -407,6 +453,11 @@ function rebaseEpisodeTypes(episodeTypes, offset, seasonLength) {
   return out;
 }
 
+// A timeout opens the Jikan circuit for an hour, so a limit that a phone on mobile data regularly misses
+// (2.5s and 3.5s used to be) turned one slow answer into an hour of "filler unavailable" for every show.
+const JIKAN_MOBILE_SEARCH_TIMEOUT_MS = 5000;
+const JIKAN_MOBILE_EPISODES_TIMEOUT_MS = 7000;
+
 async function fetchJikanEpisodes(title, options = {}) {
   const unavailable = (message) => Object.assign(new Error(message), {
     deferRetry: true,
@@ -422,7 +473,7 @@ async function fetchJikanEpisodes(title, options = {}) {
     if (!malId) {
       const searchCtrl = new AbortController();
       const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
-      const searchTimer = setTimeout(() => searchCtrl.abort(), isMobile ? 2500 : 3500);
+      const searchTimer = setTimeout(() => searchCtrl.abort(), isMobile ? JIKAN_MOBILE_SEARCH_TIMEOUT_MS : 3500);
       let searchRes;
       try {
         searchRes = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=5`, { signal: searchCtrl.signal });
@@ -474,7 +525,7 @@ async function fetchJikanEpisodes(title, options = {}) {
     while (hasNext && page <= 10) {
       const epCtrl = new AbortController();
       const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
-      const epTimer = setTimeout(() => epCtrl.abort(), isMobile ? 3500 : 5000);
+      const epTimer = setTimeout(() => epCtrl.abort(), isMobile ? JIKAN_MOBILE_EPISODES_TIMEOUT_MS : 5000);
       let epRes;
       try {
         epRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, { signal: epCtrl.signal });
