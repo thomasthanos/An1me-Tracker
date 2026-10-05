@@ -5,7 +5,7 @@
 <br>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src=".github/assets/badge-v-tracker.svg" alt="Version 8.2.1"></a>&nbsp;&nbsp;
+  <a href="CHANGELOG.md"><img src=".github/assets/badge-v-tracker.svg" alt="Version 8.2.2"></a>&nbsp;&nbsp;
   <a href="manifest.json"><img src=".github/assets/badge-manifest.svg" alt="Manifest V3"></a>&nbsp;&nbsp;
   <a href="PRIVACY.md"><img src=".github/assets/badge-cloud-sync.svg" alt="Cloud Sync Optional"></a>
 </p>
@@ -98,7 +98,7 @@ https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-source/s
 ```
 
 Or download the prebuilt IPA directly:  
-[**Download An1meTracker-8.2.1.ipa**](https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-v8.2.1/An1meTracker-8.2.1.ipa)
+[**Download An1meTracker-8.2.2.ipa**](https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-v8.2.2/An1meTracker-8.2.2.ipa)
 
 For step-by-step instructions with screenshots, read the **[iPhone Setup Guide (IOS.md)](IOS.md)**.
 
