@@ -12,6 +12,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.10] — 2026-10-05
+
+### Fixed
+
+- **Fetch & Import** no longer holds the popup until it finishes. **Hide** closes the panel while the run
+  carries on (its progress stays on the status line, and a hidden run is not reopened every time the popup
+  opens), and **Stop** ends it where it is: work already fetched stays cached and nothing restarts it until
+  Fetch & Import is pressed again. Tapping outside the panel or pressing Escape hides it.
+- On iPhone, Safari could answer the access prompt with yes while leaving every website on **Ask**, and the
+  card then offered the same button again, so tapping it went round in circles. The card now checks what
+  Safari actually allowed; when the websites are still on Ask it lists them and leads with **Open Safari
+  Settings** and the steps, keeping the prompt as a second try, and it checks again by itself when Safari
+  comes back to the front. Fetch & Import no longer starts a queue that would only pause again.
+- After an install or update that leaves any website on Ask, the extension opens a **Website access** page
+  once for that version, with the same card in a full tab.
+- Online work (cloud sync, metadata, covers, Skip Outro, watchlist sync, retry alarms) pauses while Safari
+  keeps the tracker off the websites it uses and resumes by itself once they are allowed. Local progress and
+  the library keep saving meanwhile.
+- The iPhone app's **Safari Settings** button opens the extension's own page in Settings on iOS 26.2 and
+  later, and the app answers the extension's **Open Safari Settings** link the same way. Earlier iOS
+  versions open Settings as before.
+
 ## [8.2.9] — 2026-10-05
 
 ### Fixed
