@@ -42,32 +42,8 @@ function background(height) {
   </g>`;
 }
 
-svg('hero-animated.svg', 880, 208, 'An1me Tracker — Never lose your episode',
-  'Playback tracking and anime library for Chrome, Edge and iPhone Safari. Optional cloud sync.', `${background(208)}
-  <image href="data:image/png;base64,${icon}" x="30" y="28" width="42" height="42"/>
-  <text x="84" y="45" class="muted" font-size="11" font-weight="700" letter-spacing="2">YOUR NEXT EPISODE, READY.</text>
-  <rect x="84" y="55" width="59" height="20" rx="10" fill="#182e45"/>
-  <text x="113.5" y="69" text-anchor="middle" class="accent" font-size="11" font-weight="600">v${escape(version)}</text>
-  <text x="30" y="114" class="ink" font-size="40" font-weight="750" letter-spacing="-1.5">An1me Tracker</text>
-  <text x="32" y="143" class="muted" font-size="16">Less searching. More watching.</text>
-  <g transform="translate(32 174)" font-size="11" font-weight="600">
-    <circle r="3" cy="-4" fill="#67e8d0" class="pulse"/><text x="12" class="muted">LOCAL FIRST</text>
-    <text x="110" class="muted">CHROME / EDGE</text><text x="225" class="muted">IPHONE SAFARI</text>
-  </g>
-  <g transform="translate(538 28)">
-    <rect width="310" height="152" rx="13" fill="#101e30" stroke="#2d425c"/>
-    <text x="18" y="25" class="muted" font-size="10" font-weight="700" letter-spacing="1.6">CONTINUE WATCHING</text>
-    <circle cx="290" cy="21" r="3" fill="#67e8d0" class="pulse"/>
-    <rect x="18" y="41" width="44" height="56" rx="7" fill="#1c3e58"/>
-    <path d="m36 59 12 10-12 10z" fill="url(#accent)"/>
-    <text x="76" y="59" class="ink" font-size="16" font-weight="650">Right where you left off.</text>
-    <text x="76" y="81" class="muted" font-size="12">Episode 12 · Ready to resume</text>
-    <rect x="18" y="114" width="274" height="4" rx="2" fill="#283b52"/>
-    <rect x="18" y="114" width="165" height="4" rx="2" fill="url(#accent)"/>
-    <circle cx="183" cy="116" r="4" fill="#93eaff" class="pulse"/>
-    <text x="18" y="138" class="accent" font-size="11">14:20</text>
-    <text x="292" y="138" text-anchor="end" class="muted" font-size="11">23:45</text>
-  </g>`);
+// Shared release badges and companion headers below; README artwork has its own layouts.
+require('./build-readme.js');
 
 function header(name, title, subtitle, label, symbol) {
   svg(name, 880, 112, title, subtitle, `${background(112)}
@@ -100,4 +76,4 @@ function badge(name, text, width, color, versionBadge = false) {
 badge('badge-v-tracker.svg', `Version ${version}`, 103, '#7bdcff', true);
 badge('badge-manifest.svg', 'Manifest V3', 101, '#a7aaff');
 badge('badge-cloud-sync.svg', 'Sync optional', 112, '#67e8d0');
-console.log(`Rebuilt 9 compact documentation SVGs for ${version}.`);
+console.log(`Rebuilt companion headers and badges for ${version}.`);
