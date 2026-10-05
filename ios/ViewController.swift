@@ -488,21 +488,21 @@ struct An1meTrackerAppView: View {
                 detail: "Άνοιξε τις «Επεκτάσεις», βρες το An1me Tracker και γύρισε τον διακόπτη σε ON."
             ),
             GuideStep(
-                title: "Δικαιώματα: όλα σε «Allow»",
-                detail: "Κάτω από «Permissions» κάθε site έχει δική του επιλογή · δεν υπάρχει «All Websites». Βάλε «Allow» (Να επιτρέπεται) σε: \(neededSites)."
+                title: "Δικαιώματα: «Allow» στα sites του filler",
+                detail: "Κάτω από «Permissions» κάθε site έχει δική του επιλογή · δεν υπάρχει «All Websites». Πάτα και βάλε «Allow» (Να επιτρέπεται) σε: \(neededSites). Τα υπόλοιπα δουλεύουν και στο «Ask»."
             ),
             otherSitesStep
         ]
     }
 
-    /// The hosts the extension reaches besides an1me.to. iOS lists each one separately, and one left on
-    /// "Ask" blocks what it serves: cloud sync and sign-in, filler data, Skip Outro.
-    private let neededSites = "an1me.to, firestore.googleapis.com, identitytoolkit.googleapis.com, securetoken.googleapis.com, animefillerlist.com, api.jikan.moe, api.aniskip.com"
+    /// The hosts that need Allow. iOS lists each one separately. Sign-in, cloud sync and Jikan answer the
+    /// extension on "Ask" too, but AnimeFillerList can only be read with Allow.
+    private let neededSites = "an1me.to, animefillerlist.com, api.jikan.moe"
 
     private var otherSitesStep: GuideStep {
         GuideStep(
             title: "Έλεγχος από την επέκταση",
-            detail: "Άνοιξε το Tracker στο Safari → Settings. Αν κάποιο site είναι ακόμα σε «Ask», θα το δεις εκεί: πάτα «Allow access» για να τα επιτρέψεις όλα μαζί."
+            detail: "Άνοιξε το Tracker στο Safari → Settings. Αν κάποιο site του filler είναι ακόμα σε «Ask», θα το δεις εκεί μαζί με τα βήματα · ο ίδιος έλεγχος υπάρχει και στο Fetch & Import."
         )
     }
 

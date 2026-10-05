@@ -58,6 +58,9 @@
   -webkit-mask-composite:xor;
       mask-composite:exclude;
 }
+/* The box takes focus when it opens so screen readers land in the dialog; the browser's ring around the whole
+   panel only looked like a glitch. Its buttons keep their own focus styles. */
+.ffui-box:focus { outline: none; }
 .ffui-box.is-attention {
   animation:ffui-attention .18s ease;
 }
@@ -109,7 +112,8 @@
   overscroll-behavior:contain;
   -webkit-overflow-scrolling:touch;
 }
-.ffui-progress-wrap, .ffui-stats, .ffui-close {
+.ffui-progress-wrap, .ffui-stats, .ffui-access { flex-shrink:0; }
+.ffui-close {
   margin-left:auto; min-width:64px; min-height:36px; padding:6px 14px;
   color:var(--t1); background:rgba(var(--primary-rgb),0.15);
   border:1px solid rgba(var(--primary-rgb),0.35); border-radius:10px;

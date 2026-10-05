@@ -12,6 +12,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.6] — 2026-10-05
+
+### Fixed
+
+- The Fetch & Import panel keeps its layout again. 8.2.5 lost one style rule, so with the access notice up
+  the progress box spilled past the right edge with its percentage hidden, and the stats spilled out of their
+  row over the notice.
+- On an iPhone the access notice is now the steps that work. Safari changes a site from Ask to Allow only in
+  its settings, so the Allow access button changed nothing there and left the notice up; the notice now
+  gives the Settings path (the app's Safari Settings button opens it) and names the sites to set to Allow.
+  Desktop browsers keep the button, where their own prompt does the job.
+- The notice no longer claims cloud sync and sign-in are blocked. Sites left on Ask still answer requests
+  their own CORS headers allow, which is why signing in and syncing worked all along; only AnimeFillerList
+  needs Allow, plus Jikan so its real errors come through. IOS.md and the app's setup guide now name just
+  an1me.to, animefillerlist.com and api.jikan.moe.
+- No focus ring is drawn around the whole Fetch & Import panel when it opens.
+
 ## [8.2.5] — 2026-10-05
 
 ### Fixed

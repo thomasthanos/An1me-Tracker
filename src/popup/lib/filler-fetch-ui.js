@@ -105,10 +105,10 @@ const FillerFetchUI = {
     const hosts = (SiteAccess?.GROUPS.find((group) => group.id === "filler")?.origins || []).map((origin) => SiteAccess.hostLabel(origin));
     const text = document.createElement("p");
     text.className = "site-access-text";
-    text.textContent = "The browser is not letting the extension reach the filler sites, so filler data cannot be fetched.";
+    text.textContent = "The browser is keeping the extension off the filler sites, so filler data cannot be fetched.";
     const path = document.createElement("p");
     path.className = "site-access-path";
-    path.textContent = `In ${SiteAccess?.SETTINGS_PATH || "the extension's settings"}, set each of these to Allow: ${hosts.join(", ")}.`;
+    path.textContent = `In ${SiteAccess?.SETTINGS_PATH || "the extension's settings"}, set ${hosts.join(" and ")} to Allow.`;
     banner.replaceChildren(text, path);
     banner.hidden = false;
   },
