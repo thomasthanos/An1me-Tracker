@@ -22,26 +22,30 @@ if (!["chrome", "safari"].includes(TARGET)) throw new Error(`Unknown --target ${
 const NAME = TARGET === "safari" ? "an1me-tracker-safari" : "an1me-tracker";
 const OUT = path.join(DIST, NAME);
 const RUNTIME_ENTRIES = ["manifest.json", "background.js", "popup.html", "src"];
-// Extension pages besides the popup: the website access page the worker opens after an install or update.
-const EXTRA_PAGES = ["src/setup/access.html"];
 
 // Safari has no identity (Google / AniList OAuth), notifications or side panel APIs.
 const SAFARI_UNSUPPORTED_PERMISSIONS = ["identity", "notifications", "sidePanel"];
 
-// iOS lists every host pattern as its own row under Settings → Safari → Extensions, each to be set to Allow by
-// hand, and Safari cannot be asked to allow a list of them from the extension. One broad pattern shows there as a
-// single "All Websites" switch instead, so the Safari build asks for <all_urls> in place of the twelve services
-// (Firebase, Jikan, AnimeFillerList, AniSkip, MyAnimeList and the image CDNs). The tracking site stays named so
-// it keeps working on its own row before that switch is on. Content scripts still run on an1me.to only, and AniList
-// API work stays off on mobile in code. The desktop manifest and its permissions are unchanged.
+// Safari only asks the user about hosts the manifest declares optional, and only when the extension requests them
+// from a tap. So the services the tracker reads (Firebase, Jikan, AnimeFillerList, AniSkip, MyAnimeList and the
+// image CDNs) are optional here, and one Allow website access tap requests them all in one Safari prompt.
+// <all_urls> is optional too: it is never requested, but it gives Settings a single "All Websites" switch for
+// anyone who prefers to allow them there. The tracking site stays required. Content scripts still run on an1me.to
+// only, and the AniList API stays off on mobile. The desktop manifest and its permissions are unchanged.
 const SAFARI_CORE_HOSTS = ["https://an1me.to/*", "https://*.an1me.to/*"];
+const SAFARI_DISABLED_HOSTS = ["https://graphql.anilist.co/*"];
 const SAFARI_ALL_WEBSITES = "<all_urls>";
 
 function toSafariManifest(manifest) {
   const safari = { ...manifest, permissions: (manifest.permissions || []).filter((p) => !SAFARI_UNSUPPORTED_PERMISSIONS.includes(p)) };
   delete safari.side_panel;
-  delete safari.optional_host_permissions;
-  safari.host_permissions = [...(manifest.host_permissions || []).filter(host => SAFARI_CORE_HOSTS.includes(host)), SAFARI_ALL_WEBSITES];
+  const hosts = manifest.host_permissions || [];
+  safari.host_permissions = hosts.filter(host => SAFARI_CORE_HOSTS.includes(host));
+  safari.optional_host_permissions = [...new Set([
+    ...(manifest.optional_host_permissions || []),
+    ...hosts.filter(host => !SAFARI_CORE_HOSTS.includes(host) && !SAFARI_DISABLED_HOSTS.includes(host)),
+    SAFARI_ALL_WEBSITES,
+  ])];
   return safari;
 }
 
@@ -129,7 +133,6 @@ if (TARGET === "safari") {
 const references = new Set([
   ...manifestReferences(manifest),
   ...htmlReferences(path.join(OUT, "popup.html")),
-  ...EXTRA_PAGES.flatMap((page) => [page, ...(fs.existsSync(path.join(OUT, page)) ? htmlReferences(path.join(OUT, page)) : [])]),
   ...importScriptsReferences(path.join(OUT, "background.js")),
 ]);
 const missing = [...references].filter((ref) => !fs.existsSync(path.join(OUT, ref)));

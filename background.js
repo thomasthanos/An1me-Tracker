@@ -3864,11 +3864,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.runtime.onInstalled.addListener((details) => {
-  // Website access is requested from an explicit tap, never from this non-interactive event: it only opens the page
-  // with that tap on it.
-  if (details.reason === "install" || details.reason === "update") {
-    openWebsiteAccessSetupIfNeeded().catch((error) => console.warn("[BG] Website access setup page failed:", error?.message || error));
-  }
+  // Website access is requested from an explicit tap in the popup, never from this non-interactive event.
   if (details.reason === "install") {
     // Re-registering/restoring an extension can leave existing storage in place.
     // Initialize missing keys only; an install event must never reset user data.
@@ -3941,24 +3937,6 @@ chrome.runtime.onInstalled.addListener((details) => {
       .catch((e) => console.warn("[BG] Post-update flag write failed:", e));
   }
 });
-
-// Safari leaves every website on Ask until the user allows it, and only asks after a tap in the extension. When an
-// install or update finds any of them still on Ask, this opens the setup page once for that version, so the first
-// thing the user meets is that tap (or the way to Settings) rather than a tracker that has quietly paused itself.
-const WEBSITE_ACCESS_SETUP_PAGE = "src/setup/access.html";
-const WEBSITE_ACCESS_SETUP_SHOWN_KEY = "websiteAccessSetupShownFor";
-async function openWebsiteAccessSetupIfNeeded() {
-  const access = self.AnimeTrackerWebsiteAccess;
-  if (!access?.enabled) return false;
-  const state = await access.refresh();
-  if (state?.allowed) return false;
-  const version = chrome.runtime.getManifest().version;
-  const stored = await bgStorageGet([WEBSITE_ACCESS_SETUP_SHOWN_KEY]);
-  if (stored[WEBSITE_ACCESS_SETUP_SHOWN_KEY] === version) return false;
-  await bgStorageSet({ [WEBSITE_ACCESS_SETUP_SHOWN_KEY]: version });
-  await chrome.tabs.create({ url: chrome.runtime.getURL(WEBSITE_ACCESS_SETUP_PAGE) });
-  return true;
-}
 
 chrome.runtime.onStartup.addListener(() => {
   dlog("[Anime Tracker] Extension started");

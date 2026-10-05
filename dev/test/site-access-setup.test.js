@@ -39,7 +39,7 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
       contains(details, callback) {
         if (promiseOnly && arguments.length !== 1) throw new TypeError("Promise-only API takes one argument");
         window.__checks++;
-        const result = details.origins.every(origin => granted.has(origin));
+        const result = details.origins.every(origin => granted.has(origin) || granted.has("<all_urls>"));
         if (callback) queueMicrotask(() => callback(result));
         return Promise.resolve(result);
       },
@@ -67,6 +67,7 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
     window.fetch = () => { throw new Error("Permission setup must not fetch"); };
     window.setInterval = () => { throw new Error("Permission setup must not poll"); };
     window.__grantInSettings = () => [...manifest.host_permissions, ...(manifest.optional_host_permissions || [])].forEach(origin => granted.add(origin));
+    window.__allowAllWebsites = () => granted.add("<all_urls>");
     window.__grantOutside = () => { manifest.optional_host_permissions.forEach(origin => granted.add(origin)); for (const fn of window.__events.added) fn({ origins: manifest.optional_host_permissions }); };
   }, { manifest: shape, promiseOnly, grant, allowed });
   await page.addScriptTag({ content: read("src/common/utils.js") });
@@ -236,40 +237,41 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
       assert.equal(await p.page.evaluate(() => document.getElementById("mobileSiteAccess").hidden), true);
       await p.context.close();
     });
-    await test("the Safari build asks for one All Websites switch in Settings, with no prompt to tap", async () => {
-      assert.deepEqual(safariManifest.host_permissions, [...CORE, "<all_urls>"]);
-      assert.equal(safariManifest.optional_host_permissions, undefined);
+    await test("the Safari build offers one button that asks Safari for every service in one prompt", async () => {
+      const services = safariManifest.optional_host_permissions.filter(origin => origin !== "<all_urls>");
+      assert.deepEqual(safariManifest.host_permissions, CORE);
+      assert.ok(safariManifest.optional_host_permissions.includes("<all_urls>"));
       const p = await setup(browser, { manifest: safariManifest, gate: true, allowed: CORE });
-      const card = await p.page.evaluate(() => {
+      const before = await p.page.evaluate(() => {
         const el = document.getElementById("authSiteAccess");
-        return { hidden: el.hidden, button: !!el.querySelector(".site-access-btn"), list: !!el.querySelector(".site-access-hosts"),
-          steps: [...el.querySelectorAll(".site-access-steps li")].map(li => li.textContent),
-          stepsHidden: el.querySelector(".site-access-steps").hidden, link: el.querySelector(".site-access-link")?.getAttribute("href"),
-          linkHidden: el.querySelector(".site-access-link").hidden, text: el.textContent };
+        return { hidden: el.hidden, steps: el.querySelector(".site-access-steps").hidden, link: el.querySelector(".site-access-link").hidden };
       });
-      assert.equal(card.hidden, false);
-      assert.equal(card.button, false, "Safari cannot be asked for All Websites from the extension");
-      assert.equal(card.list, false, "one switch, not a list of websites");
-      assert.equal(card.stepsHidden, false);
-      assert.equal(card.linkHidden, false);
-      assert.equal(card.link, "an1metracker://safari-settings");
-      assert.deepEqual(card.steps, [
-        "Tap Open Safari Settings, or open Settings → Apps → Safari → Extensions → An1me.to Tracker.",
-        "Under Permissions, set All Websites to Allow.",
-        "Come back to Safari. This card checks again by itself.",
-      ]);
-      assert.match(card.text, /All Websites/);
-      assert.doesNotMatch(card.text, /googleapis|jikan|animefillerlist/);
-      assert.equal(await p.page.evaluate(() => window.__requests.length), 0);
-      const link = await p.page.locator("#authSiteAccess .site-access-link").boundingBox();
-      assert.ok(link.height >= 44 && link.x + link.width <= 390);
+      assert.deepEqual(before, { hidden: false, steps: true, link: true }, "the button first; no trip to Settings");
+      await p.page.click("#authSiteAccess .site-access-btn");
+      await p.page.waitForTimeout(150);
+      const requests = await p.page.evaluate(() => window.__requests);
+      assert.equal(requests.length, 1, "one tap, one prompt");
+      assert.equal(requests[0].gesture, true);
+      assert.deepEqual(requests[0].origins, services, "every service, and not the all-websites pattern Safari will not grant");
+      assert.equal(await p.page.isVisible("#authSiteAccess"), false);
+      assert.equal(await p.page.evaluate(() => window.AnimeTrackerWebsiteAccess.isPaused()), false);
       await p.context.close();
     });
-    await test("turning All Websites on in Settings clears the card on return and lifts the pause", async () => {
-      const p = await setup(browser, { manifest: safariManifest, gate: true, allowed: CORE });
-      assert.equal(await p.page.evaluate(() => window.AnimeTrackerWebsiteAccess.isPaused()), true);
-      await p.page.evaluate(() => { window.__grantInSettings(); document.dispatchEvent(new Event("visibilitychange")); });
-      await p.page.waitForTimeout(100);
+    await test("if Safari leaves them on Ask, Settings appears under the button with the one All Websites step", async () => {
+      const p = await setup(browser, { manifest: safariManifest, gate: true, allowed: CORE, grant: "noop" });
+      await p.page.click("#authSiteAccess .site-access-btn");
+      await p.page.waitForTimeout(150);
+      const card = await p.page.evaluate(() => {
+        const el = document.getElementById("authSiteAccess");
+        return { hidden: el.hidden, button: !!el.querySelector(".site-access-btn"), steps: el.querySelector(".site-access-steps").hidden,
+          step: el.querySelectorAll(".site-access-steps li")[1].textContent, link: el.querySelector(".site-access-link").hidden,
+          href: el.querySelector(".site-access-link").getAttribute("href") };
+      });
+      assert.deepEqual(card, { hidden: false, button: true, steps: false, step: "Under Permissions, set All Websites to Allow.", link: false,
+        href: "an1metracker://safari-settings" });
+      // Turning All Websites on in Settings is enough on its own; coming back checks again.
+      await p.page.evaluate(() => { window.__allowAllWebsites(); document.dispatchEvent(new Event("visibilitychange")); });
+      await p.page.waitForTimeout(150);
       assert.equal(await p.page.isVisible("#authSiteAccess"), false);
       assert.equal(await p.page.evaluate(() => window.AnimeTrackerWebsiteAccess.isPaused()), false);
       await p.context.close();

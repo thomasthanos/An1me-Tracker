@@ -85,7 +85,7 @@ test('unknown permission APIs fail closed and content scripts use a bounded work
   await p.api.refresh(); assert.equal(await p.api.canRun(), false);
 });
 
-test('one pattern for every website is the whole gate (the Safari build), whatever else the manifest names', async () => {
+test('a build that names only the all-websites pattern gates on it alone (8.2.11)', async () => {
   for (const broad of ['<all_urls>', '*://*/*']) {
     let granted = false;
     const event = { addListener() {}, removeListener() {} };
@@ -112,4 +112,30 @@ test('the desktop manifest (named hosts, nothing optional) leaves the gate off',
   vm.runInContext(source, context);
   assert.equal(context.AnimeTrackerWebsiteAccess.enabled, false);
   assert.equal(await context.AnimeTrackerWebsiteAccess.canRun(), true);
+});
+
+test('the Safari build opens when every service is allowed from the tap, or when All Websites is on in Settings', async () => {
+  const services = ['https://firestore.googleapis.com/*', 'https://api.jikan.moe/*'];
+  for (const route of ['services', 'all-websites']) {
+    const granted = new Set(['https://an1me.to/*']);
+    const event = { addListener() {}, removeListener() {} };
+    const permissions = { onAdded: event, onRemoved: event,
+      contains: (details, callback) => queueMicrotask(() => callback(details.origins.every(origin => granted.has(origin) || granted.has('<all_urls>')))) };
+    const context = vm.createContext({ console, URL, AbortController, Request, Response, ReadableStream, setTimeout, clearTimeout,
+      fetch: async () => new Response('ok'),
+      chrome: { permissions, runtime: { getManifest: () => ({ version: 'test', host_permissions: ['https://an1me.to/*', 'https://*.an1me.to/*'],
+        optional_host_permissions: [...services, '<all_urls>'] }) } } });
+    vm.runInContext(source, context);
+    const api = context.AnimeTrackerWebsiteAccess;
+    assert.deepEqual([...api.origins], services, 'the gate is the services, not the tracking site or the switch');
+    assert.equal(api.broad, '<all_urls>');
+    assert.equal(await api.canRun(), false);
+    assert.deepEqual([...api.getState().blockedOrigins], services);
+    granted.add(services[0]); await api.refresh();
+    assert.equal(await api.canRun(), false, 'one service is not enough');
+    if (route === 'services') granted.add(services[1]); else granted.add('<all_urls>');
+    await api.refresh();
+    assert.equal(await api.canRun(), true, route);
+    assert.equal(await (await context.fetch('https://api.jikan.moe/v4/anime')).text(), 'ok');
+  }
 });

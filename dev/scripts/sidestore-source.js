@@ -36,10 +36,10 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Website access is now one switch: Settings → Safari → Extensions → An1me.to Tracker → All Websites → Allow.\n" +
-    "• Open Safari Settings on the Website access card goes through this app straight to that page (iOS 26.2+).\n" +
-    "• Scripts still run on an1me.to only; online work pauses until the switch is on and local progress keeps saving.\n" +
-    "• Fetch & Import can be hidden while it runs or stopped at any time.\n" +
+    "• One button for website access: Allow website access asks Safari for every site the tracker uses at once.\n" +
+    "• If Safari does not allow them, Open Safari Settings goes through this app to the extension's page: All Websites → Allow.\n" +
+    "• No separate setup page opens after installing or updating.\n" +
+    "• Scripts still run on an1me.to only; online work pauses until access is allowed and local progress keeps saving.\n" +
     "• AniList stays disabled on mobile.";
 
   return {

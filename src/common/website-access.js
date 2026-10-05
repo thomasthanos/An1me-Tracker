@@ -7,10 +7,13 @@
   try { manifest = (root.browser?.runtime || root.chrome?.runtime)?.getManifest?.() || {}; } catch {}
   const optional = manifest.optional_host_permissions || [];
   const declared = [...(manifest.host_permissions || []), ...optional];
-  // The Safari build asks for every website in one pattern, which iOS Settings shows as a single "All Websites"
-  // switch: that one grant is the gate. Builds that listed each service as optional need all of them instead.
-  const broad = declared.find(origin => origin === "<all_urls>" || origin === "*://*/*");
-  const origins = broad ? [broad] : optional.length ? [...new Set(declared)] : [];
+  const isBroad = origin => origin === "<all_urls>" || origin === "*://*/*";
+  // A pattern for every website: Settings' "All Websites" switch. When it is on, everything is allowed.
+  const broad = declared.find(isBroad) || null;
+  // The Safari build declares the services optional (requested together from one tap) beside that switch: the gate
+  // opens when all of them are allowed or All Websites is. The tracking site has its own row and is not part of it.
+  const services = optional.filter(origin => !isBroad(origin));
+  const origins = broad ? (services.length ? services : [broad]) : optional.length ? [...new Set(declared)] : [];
   const enabled = origins.length > 0;
   const KEY = "websiteAccessState";
   const listeners = new Set(), transfers = new Set();
@@ -62,7 +65,8 @@
     const run = (async () => {
       let next;
       if (typeof api?.contains === "function") {
-        const granted = await Promise.all(origins.map(contains));
+        const everything = broad && !origins.includes(broad) && await contains(broad);
+        const granted = everything ? origins.map(() => true) : await Promise.all(origins.map(contains));
         const blockedOrigins = origins.filter((_origin, index) => !granted[index]);
         next = { version: manifest.version, checking: false, allowed: !blockedOrigins.length, blockedOrigins };
       } else if (!worker) {
@@ -78,7 +82,7 @@
   }
 
   function invalidate(event, removal = false) {
-    const relevant = (event?.origins || []).some(pattern => pattern === '<all_urls>' || origins.includes(pattern));
+    const relevant = (event?.origins || []).some(pattern => isBroad(pattern) || origins.includes(pattern));
     if (!relevant) return;
     epoch++;
     refreshPromise = null;
@@ -136,7 +140,7 @@
     };
   }
 
-  root.AnimeTrackerWebsiteAccess = Object.freeze({ enabled, origins, canRun, refresh,
+  root.AnimeTrackerWebsiteAccess = Object.freeze({ enabled, origins, broad, canRun, refresh,
     getState: () => state, isPaused: () => enabled && !state.allowed, deniedError,
     imageUrl(url, fallback = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") {
       return enabled && !state.allowed && /^https?:/i.test(String(url)) ? fallback : url;

@@ -105,9 +105,21 @@
     return [...new Set(Array.isArray(declared) ? declared.filter(origin => typeof origin === "string") : [])];
   }
 
-  function optionalOrigins() {
-    const declared = declaredOptionalOrigins();
-    return GROUPS.flatMap((group) => group.origins).filter(origin => declared.includes(origin));
+  // What one tap can ask Safari for: every optional website except the all-websites pattern, which Safari does not
+  // grant from a request (it is the switch in Settings).
+  function requestableOrigins() {
+    return declaredOptionalOrigins().filter(origin => !isAllWebsites(origin));
+  }
+
+  // The manifest's pattern for every website, if it declares one: Settings shows it as "All Websites".
+  function allWebsitesOrigin() {
+    if (globalThis.AnimeTrackerWebsiteAccess?.broad) return globalThis.AnimeTrackerWebsiteAccess.broad;
+    let declared = [];
+    try {
+      const manifest = (globalThis.browser?.runtime || globalThis.chrome?.runtime)?.getManifest?.() || {};
+      declared = [...(manifest.host_permissions || []), ...(manifest.optional_host_permissions || [])];
+    } catch {}
+    return declared.find(isAllWebsites) || null;
   }
 
   // A desktop browser shows its prompt for any host the user withheld. Safari on iPhone and iPad prompts only for
@@ -121,7 +133,7 @@
   // Request the supporting services together, directly from a tap. Safari controls its consent UI.
   // Chrome keeps required hosts, so with no optional services there is no additional request.
   function askIfOptional(callback) {
-    const origins = declaredOptionalOrigins();
+    const origins = requestableOrigins();
     if (!origins.length) {
       callback(true);
       return;
@@ -201,7 +213,7 @@
       button.disabled = true;
       button.textContent = phone ? "Waiting for Safari…" : "Waiting for browser…";
       button.setAttribute("aria-busy", "true");
-      request(phone ? declaredOptionalOrigins() : blocked, async (granted) => {
+      request(phone ? requestableOrigins() : blocked, async (granted) => {
         if (setupGenerations.get(container) !== token || !container.isConnected) return;
         button.disabled = false;
         button.textContent = "Allow access";
@@ -266,7 +278,11 @@
   async function missingSetupOrigins() {
     const origins = setupOrigins();
     const provider = permissionsApi();
-    const granted = provider ? await Promise.all(origins.map(origin => isAllowed(provider, origin, false))) : origins.map(() => false);
+    if (!provider) return origins;
+    // All Websites on in Settings covers every one of them.
+    const everything = allWebsitesOrigin();
+    if (everything && !origins.includes(everything) && await isAllowed(provider, everything, false)) return [];
+    const granted = await Promise.all(origins.map(origin => isAllowed(provider, origin, false)));
     return origins.filter((_origin, index) => !granted[index]);
   }
 
@@ -288,12 +304,14 @@
         const node = doc.createElement(tag); if (className) node.className = className;
         if (text != null) node.textContent = text; return node;
       };
-      // One "All Websites" switch, or (builds that named each service) a list of websites to allow one by one.
+      // Only the All Websites switch is missing (a build that asks for nothing else), or the websites to allow.
       const allWebsites = missing.length === 1 && isAllWebsites(missing[0]);
+      // Where the manifest has an All Websites switch, that one switch is the Settings fallback.
+      const settingsSwitch = allWebsitesOrigin() !== null;
       container.append(element("p", "site-access-title", "Safari website access"),
         element("p", "site-access-text", allWebsites
           ? "Sync, covers, fillers and Skip Outro are paused until Safari allows the tracker on All Websites. It is one switch in Settings. Local progress is still saved."
-          : "Online work is paused until all required websites are allowed. Local progress is still saved. Allow metadata, covers, Skip Outro and cloud sync together."));
+          : "Sync, covers, fillers and Skip Outro are paused until Safari allows the websites the tracker uses. One tap asks for all of them. Local progress is still saved."));
       const details = element("details", "site-access-hosts");
       if (!allWebsites) {
         details.append(element("summary", null, `${missing.length} website${missing.length === 1 ? "" : "s"} need${missing.length === 1 ? "s" : ""} access`));
@@ -307,19 +325,18 @@
       settings.href = APP_SETTINGS_URL;
       const steps = element("ol", "site-access-steps");
       steps.append(element("li", null, fromApp ? `Tap Open Safari Settings, or open ${SETTINGS_PATH}.` : `Open ${SETTINGS_PATH}.`),
-        element("li", null, allWebsites ? "Under Permissions, set All Websites to Allow." : "Under Permissions, set each website listed above to Allow."),
+        element("li", null, allWebsites || settingsSwitch ? "Under Permissions, set All Websites to Allow." : "Under Permissions, set each website listed above to Allow."),
         element("li", null, "Come back to Safari. This card checks again by itself."));
-      const requestable = missing.filter(origin => declaredOptionalOrigins().includes(origin));
+      const requestable = missing.filter(origin => requestableOrigins().includes(origin));
       const canRequest = typeof provider?.api?.request === "function" && requestable.length > 0;
-      container.append(steps, settings);
       let button = null;
-      // Settings first once a prompt has not worked, or where the extension cannot ask at all; the prompt
-      // then stays below as a second try.
+      // The button is the way in. Settings appears under it only once a prompt has not worked, or where the
+      // extension cannot ask at all.
       const showSettings = (show) => {
         steps.hidden = !show;
         settings.hidden = !show || !fromApp;
-        if (show) details.open = true;
-        button?.classList.toggle("is-secondary", show);
+        // Without an All Websites switch, the list is what to allow in Settings.
+        if (show && !settingsSwitch) details.open = true;
       };
       if (canRequest) {
         button = element("button", "site-access-btn", "Allow website access");
@@ -346,6 +363,7 @@
         });
         container.append(button);
       }
+      container.append(steps, settings);
       showSettings(!canRequest || promptFailed());
     });
     if (typeof options.onRender === "function") options.onRender(missing);

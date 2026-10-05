@@ -75,9 +75,12 @@ function loadCoordinator(withNotifications) {
   check("Safari manifest keeps every other permission", packaged.permissions, source.permissions.filter((p) => !["identity", "notifications", "sidePanel"].includes(p)));
   check("Safari manifest keeps the content scripts and version", [packaged.content_scripts, packaged.version], [source.content_scripts, source.version]);
   const core = ["https://an1me.to/*", "https://*.an1me.to/*"];
-  // iOS shows one row per host pattern; one pattern for every website is a single "All Websites" switch.
-  check("Safari asks for the tracking site and All Websites, nothing per service", packaged.host_permissions, [...core, "<all_urls>"]);
-  check("no per-service optional hosts reach the Safari manifest", packaged.optional_host_permissions, undefined);
+  // Safari prompts only for optional hosts requested from a tap: the services are optional so one tap asks for all
+  // of them, and the optional all-websites pattern is Settings' single "All Websites" switch for the same thing.
+  const services = source.host_permissions.filter(host => !core.includes(host) && host !== "https://graphql.anilist.co/*");
+  check("only the tracking site stays required in Safari", packaged.host_permissions, core);
+  check("one tap can request every service, and Settings has an All Websites switch", packaged.optional_host_permissions, [...services, "<all_urls>"]);
+  check("the disabled mobile AniList API is not requested", packaged.optional_host_permissions.includes("https://graphql.anilist.co/*"), false);
   check("content scripts still run on an1me.to only", [...new Set(packaged.content_scripts.flatMap((script) => script.matches))].every((match) => /an1me\.to\//.test(match)), true);
   const filler = ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"];
   check("Chrome's manifest still requires the filler sites", filler.every((host) => source.host_permissions.includes(host)) && !source.optional_host_permissions, true);
