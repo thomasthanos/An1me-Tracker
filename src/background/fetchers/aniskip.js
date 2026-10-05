@@ -73,9 +73,12 @@ async function getMalIdForSlug(slug, title) {
     const ttl = cached.retryable ? SLUG_TO_MAL_RETRY_TTL_MS : cached.httpMiss ? SLUG_TO_MAL_HTTP_MISS_TTL_MS : SLUG_TO_MAL_TTL_MS;
     if (age < ttl) return cached.malId || null;
   }
-  if (!title) return null;
+  // A confirmed MAL id never changes, so an expired one is still right. The 30-day TTL only asks for a
+  // re-check; until one succeeds the old id keeps Skip Outro working.
+  const staleMalId = cached?.matched === true && Number(cached.malId) > 0 ? Number(cached.malId) : null;
+  if (!title) return staleMalId;
   // Reuse cached MAL IDs on mobile, but resolving a new ID through AniList is desktop-only.
-  if (AnimeTrackerUtils.isMobileDevice()) return null;
+  if (AnimeTrackerUtils.isMobileDevice()) return staleMalId;
   try {
     const ctrl = new AbortController();
     const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
@@ -121,12 +124,18 @@ async function getMalIdForSlug(slug, title) {
     }
     const match = self.AnimeTrackerTitleMatch?.bestMatch([title], candidates, 0.82) || null;
     const malId = match ? Number(match.id) || null : null;
-    bundle[slug] = malId
-      ? { malId, cachedAt: Date.now(), matched: true }
+    // A search that finds no good match does not undo one we confirmed earlier; it only proves the search moved.
+    const resolved = malId || staleMalId;
+    bundle[slug] = resolved
+      ? { malId: resolved, cachedAt: Date.now(), matched: true }
       : { malId: null, cachedAt: Date.now(), httpMiss: true, negativeCacheVersion: 1 };
     scheduleSlugMalBundleFlush();
-    return malId;
+    return resolved;
   } catch {
+    // A failed re-check says nothing about the id we already had: keep it rather than overwrite it with a miss.
+    if (staleMalId) return staleMalId;
+    // Offline says nothing about this show either; leave the cache alone so the next load simply asks again.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
     bundle[slug] = { malId: null, cachedAt: Date.now(), retryable: true, negativeCacheVersion: 1 };
     scheduleSlugMalBundleFlush();
     return null;
@@ -165,8 +174,9 @@ async function fetchAniSkipOutroStart(slug, title, episodeNumber, episodeLength)
       if (res.status === 404) {
         bundle[cacheKey] = { outroStart: null, cachedAt: Date.now() };
         scheduleAniSkipBundleFlush();
+        return null;
       }
-      return null;
+      return cached?.outroStart || null;
     }
     const data = await res.json();
     let outroStart = null;
@@ -178,8 +188,9 @@ async function fetchAniSkipOutroStart(slug, title, episodeNumber, episodeLength)
     scheduleAniSkipBundleFlush();
     return outroStart;
   } catch {
-    // Timeout or network error: transient, so nothing is cached and the next episode load retries.
-    return null;
+    // Timeout or network error: transient, so nothing is cached and the next episode load retries. An expired
+    // outro time is still the right one for this episode, so it keeps the button working meanwhile.
+    return cached?.outroStart || null;
   }
 }
 

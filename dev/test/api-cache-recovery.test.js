@@ -6,11 +6,12 @@ const root = path.join(__dirname, "../..");
 const read = f => fs.readFileSync(path.join(root, f), "utf8");
 let failures = 0;
 async function test(name, fn) { try { await fn(); console.log(`PASS ${name}`); } catch (e) { failures++; console.error(`FAIL ${name}: ${e.message}`); } }
-function worker(responses, initial = {}) {
+// `env` adds globals such as a navigator, to play a phone or a browser that is offline.
+function worker(responses, initial = {}, env = {}) {
   let now = Date.now(), calls = 0;
   class Clock extends Date { static now() { return now; } }
   const store = structuredClone(initial);
-  const c = vm.createContext({ Date: Clock, console, AbortController, setTimeout, clearTimeout,
+  const c = vm.createContext({ Date: Clock, console, AbortController, setTimeout, clearTimeout, ...env,
     fetch: async () => { calls++; const result = responses.shift(); if (result instanceof Error) throw result; if (!result) throw Error("unexpected fetch"); return result; },
     bgStorageGet: async () => store, bgStorageSet: async data => Object.assign(store, structuredClone(data)),
   });
@@ -53,6 +54,54 @@ const match = response(200, { data: [{ mal_id: 20, title: "Naruto" }] });
     } });
     assert.equal(await h.c.getMalIdForSlug("bleach", "Bleach"), 30); assert.equal(h.calls(), 0);
     assert.equal(await h.c.getMalIdForSlug("naruto", "Naruto"), 20);
+  });
+  const DAY = 24 * 60 * 60 * 1000;
+  const expiredBleach = () => ({ malIdForSlugBundle: { bleach: { malId: 30, matched: true, cachedAt: Date.now() - 31 * DAY } } });
+  await test("an expired MAL id survives a failed re-check instead of being replaced by a miss", async () => {
+    for (const failure of [Error("Load failed"), response(503)]) {
+      const h = worker([failure], expiredBleach());
+      assert.equal(await h.c.getMalIdForSlug("bleach", "Bleach"), 30);
+      assert.equal(h.calls(), 1, "the re-check was attempted");
+      assert.equal(h.store.malIdForSlugBundle.bleach.malId, 30, "and the stored id is untouched");
+    }
+  });
+  await test("a re-check that matches the title still replaces an expired MAL id", async () => {
+    const h = worker([response(200, { data: [{ mal_id: 269, title: "Bleach" }] })], expiredBleach());
+    assert.equal(await h.c.getMalIdForSlug("bleach", "Bleach"), 269);
+    assert.equal(h.store.malIdForSlugBundle.bleach.malId, 269);
+  });
+  await test("a re-check that finds no match keeps the confirmed MAL id for another full period", async () => {
+    const h = worker([match], expiredBleach());
+    assert.equal(await h.c.getMalIdForSlug("bleach", "Bleach"), 30);
+    assert.equal(await h.c.getMalIdForSlug("bleach", "Bleach"), 30);
+    assert.equal(h.calls(), 1, "not searched again on the next episode");
+  });
+  await test("a phone keeps using an expired MAL id it cannot re-check", async () => {
+    const h = worker([], expiredBleach(), { navigator: { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", onLine: true } });
+    assert.equal(await h.c.getMalIdForSlug("bleach", "Bleach"), 30);
+    assert.equal(await h.c.getMalIdForSlug("naruto", "Naruto"), null, "an id it never had is still not looked up");
+    assert.equal(h.calls(), 0);
+  });
+  await test("offline, a show with no MAL id yet is not cached as a miss", async () => {
+    const h = worker([Error("Load failed")], {}, { navigator: { userAgent: "", onLine: false } });
+    assert.equal(await h.c.getMalIdForSlug("naruto", "Naruto"), null);
+    assert.equal(h.store.malIdForSlugBundle?.naruto, undefined, "nothing written");
+  });
+  const outroCache = (outroStart) => ({
+    malIdForSlugBundle: { bleach: { malId: 30, matched: true, cachedAt: Date.now() } },
+    aniSkipOutroBundle: { "30:5": { outroStart, cachedAt: Date.now() - 91 * DAY } },
+  });
+  await test("an expired outro time keeps Skip Outro working when AniSkip cannot be reached", async () => {
+    for (const failure of [Error("Load failed"), response(503), response(429)]) {
+      const h = worker([failure], outroCache(1300));
+      assert.equal(await h.c.fetchAniSkipOutroStart("bleach", "Bleach", 5, 1440), 1300);
+      assert.equal(h.store.aniSkipOutroBundle["30:5"].outroStart, 1300, "the cached time is not replaced");
+    }
+  });
+  await test("a 404 from AniSkip is still a confirmed miss", async () => {
+    const h = worker([response(404)], outroCache(1300));
+    assert.equal(await h.c.fetchAniSkipOutroStart("bleach", "Bleach", 5, 1440), null);
+    assert.equal(h.store.aniSkipOutroBundle["30:5"].outroStart, null);
   });
   await test("only legacy negative filler caches expire; valid episode data stays warm", () => {
     const h = worker([]); const p = h.c.AnimeTrackerCachePolicy;

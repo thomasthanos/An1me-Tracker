@@ -294,10 +294,16 @@
     if (state.status === "running") {
       const updatedAt = state.updatedAt ? Date.parse(state.updatedAt) : 0;
       const progress = getMetadataRepairProgress(state);
+      // A run paused for lack of a connection is waiting, not stuck, and it resumes by itself.
+      const waiting = state.waitingForNetwork === true;
       if (!updatedAt || Date.now() - updatedAt > METADATA_REPAIR_STALE_MS) {
         if (!isSilent) {
           setMetadataRepairStatus(
-            progress.total > 0 ? `Resuming ${progress.processed}/${progress.total}...` : "Resuming import...",
+            waiting
+              ? "Waiting for connection..."
+              : progress.total > 0
+                ? `Resuming ${progress.processed}/${progress.total}...`
+                : "Resuming import...",
           );
         }
 
@@ -325,7 +331,9 @@
         // Deliberately mute: cards still refresh live via applyAnimeInfoCacheChange.
         return state;
       }
-      if (uiMode === "status") {
+      if (waiting) {
+        setMetadataRepairStatus("Waiting for connection...");
+      } else if (uiMode === "status") {
         setMetadataRepairStatus(
           progress.remaining > 0 ? `Fetching ${progress.remaining} anime...` : "Fetching data...",
         );
