@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf an1me-tracker)",
+      "Bash(rm -rf *)",
+      "Bash(rm *)",
+      "Bash(git *)",
+      "Bash(node *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(zip *)",
+      "Bash(unzip *)",
+      "Bash(curl *)",
+      "Bash(*)",
+      "Read(**/*)",
+      "Edit(**/*)",
+      "Write(**/*)"
+    ]
+  }
+}
