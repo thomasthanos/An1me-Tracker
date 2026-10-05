@@ -84,3 +84,32 @@ test('unknown permission APIs fail closed and content scripts use a bounded work
   const p = policy(); await p.api.canRun(); p.context.chrome.permissions.contains = () => { throw Error('Unavailable'); };
   await p.api.refresh(); assert.equal(await p.api.canRun(), false);
 });
+
+test('one pattern for every website is the whole gate (the Safari build), whatever else the manifest names', async () => {
+  for (const broad of ['<all_urls>', '*://*/*']) {
+    let granted = false;
+    const event = { addListener() {}, removeListener() {} };
+    const permissions = { onAdded: event, onRemoved: event,
+      contains: (details, callback) => queueMicrotask(() => callback(details.origins.every(origin => origin !== broad || granted))) };
+    const context = vm.createContext({ console, URL, AbortController, Request, Response, ReadableStream, setTimeout, clearTimeout,
+      fetch: async () => new Response('ok'),
+      chrome: { permissions, runtime: { getManifest: () => ({ version: 'test', host_permissions: ['https://an1me.to/*', 'https://*.an1me.to/*', broad] }) } } });
+    vm.runInContext(source, context);
+    const api = context.AnimeTrackerWebsiteAccess;
+    assert.equal(api.enabled, true);
+    assert.deepEqual([...api.origins], [broad]);
+    assert.equal(await api.canRun(), false);
+    await assert.rejects(context.fetch('https://api.jikan.moe/v4/anime'), { code: 'SITE_ACCESS_REQUIRED' });
+    granted = true; await api.refresh();
+    assert.equal(await api.canRun(), true);
+    assert.equal(await (await context.fetch('https://api.jikan.moe/v4/anime')).text(), 'ok');
+  }
+});
+
+test('the desktop manifest (named hosts, nothing optional) leaves the gate off', async () => {
+  const context = vm.createContext({ console, setTimeout, clearTimeout, fetch: async () => new Response('ok'), Response,
+    chrome: { runtime: { getManifest: () => JSON.parse(fs.readFileSync(path.join(__dirname, '../../manifest.json'), 'utf8')) } } });
+  vm.runInContext(source, context);
+  assert.equal(context.AnimeTrackerWebsiteAccess.enabled, false);
+  assert.equal(await context.AnimeTrackerWebsiteAccess.canRun(), true);
+});

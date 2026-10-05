@@ -9,13 +9,18 @@ catch (error) { if (error.code !== "MODULE_NOT_FOUND") throw error; console.log(
 const root = path.resolve(__dirname, "../..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 execFileSync(process.execPath, [path.join(root, "dev/scripts/package.js"), "--target", "safari"]);
-const manifest = JSON.parse(read("dist/an1me-tracker-safari/manifest.json"));
+const safariManifest = JSON.parse(read("dist/an1me-tracker-safari/manifest.json"));
+// The request flow below is for builds that list each service as optional (8.2.8–8.2.10), which the code still
+// supports; the current Safari build asks for every website in one pattern instead (tested at the end).
+const CORE = ["https://an1me.to/*", "https://*.an1me.to/*"];
+const manifest = { ...safariManifest, host_permissions: CORE,
+  optional_host_permissions: JSON.parse(read("manifest.json")).host_permissions.filter(origin => !CORE.includes(origin) && origin !== "https://graphql.anilist.co/*") };
 const html = read("popup.html").replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "").replace(/<link\b[^>]*>/gi, "");
 const css = [...read("popup.html").matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(match => read(match[1])).join("\n");
 const executablePath = [process.env.AT_TEST_BROWSER, ...[process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean).flatMap(dir => [path.join(dir, "Microsoft/Edge/Application/msedge.exe"), path.join(dir, "Google/Chrome/Application/chrome.exe")]), "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/chromium", "/usr/bin/google-chrome"].filter(Boolean).find(file => fs.existsSync(file));
 const phone = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1" };
 
-async function setup(browser, { promiseOnly = false, grant = true, allowed = [], mobile = true } = {}) {
+async function setup(browser, { promiseOnly = false, grant = true, allowed = [], mobile = true, manifest: shape = manifest, gate = false } = {}) {
   const context = await browser.newContext(mobile ? phone : { viewport: { width: 420, height: 700 } });
   const page = await context.newPage();
   await page.setContent(html);
@@ -25,6 +30,7 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
     document.querySelector(".auth-content").classList.add("auth-mobile");
   });
   await page.evaluate(({ manifest, promiseOnly, grant, allowed }) => {
+    window.__manifest = manifest;
     const granted = new Set(allowed);
     window.__checks = 0; window.__requests = []; window.__cleanups = 0; window.__lastErrorReads = 0;
     window.__events = { added: new Set(), removed: new Set() };
@@ -60,10 +66,12 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
     window[promiseOnly ? "browser" : "chrome"] = { permissions, runtime };
     window.fetch = () => { throw new Error("Permission setup must not fetch"); };
     window.setInterval = () => { throw new Error("Permission setup must not poll"); };
-    window.__grantInSettings = () => manifest.optional_host_permissions.forEach(origin => granted.add(origin));
+    window.__grantInSettings = () => [...manifest.host_permissions, ...(manifest.optional_host_permissions || [])].forEach(origin => granted.add(origin));
     window.__grantOutside = () => { manifest.optional_host_permissions.forEach(origin => granted.add(origin)); for (const fn of window.__events.added) fn({ origins: manifest.optional_host_permissions }); };
-  }, { manifest, promiseOnly, grant, allowed });
+  }, { manifest: shape, promiseOnly, grant, allowed });
   await page.addScriptTag({ content: read("src/common/utils.js") });
+  // The popup loads the access gate before the card; the current Safari build needs it to know what to ask for.
+  if (gate) await page.addScriptTag({ content: read("src/common/website-access.js") });
   await page.addScriptTag({ content: read("src/popup/lib/site-access.js") });
   await page.evaluate(() => { window.__dispose = window.AnimeTracker.SiteAccess.mountSetup([document.getElementById("authSiteAccess"), document.getElementById("mobileSiteAccess")]); });
   await page.waitForTimeout(80);
@@ -226,6 +234,44 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
       await p.page.waitForTimeout(100);
       assert.equal(await p.page.isVisible("#authSiteAccess"), false);
       assert.equal(await p.page.evaluate(() => document.getElementById("mobileSiteAccess").hidden), true);
+      await p.context.close();
+    });
+    await test("the Safari build asks for one All Websites switch in Settings, with no prompt to tap", async () => {
+      assert.deepEqual(safariManifest.host_permissions, [...CORE, "<all_urls>"]);
+      assert.equal(safariManifest.optional_host_permissions, undefined);
+      const p = await setup(browser, { manifest: safariManifest, gate: true, allowed: CORE });
+      const card = await p.page.evaluate(() => {
+        const el = document.getElementById("authSiteAccess");
+        return { hidden: el.hidden, button: !!el.querySelector(".site-access-btn"), list: !!el.querySelector(".site-access-hosts"),
+          steps: [...el.querySelectorAll(".site-access-steps li")].map(li => li.textContent),
+          stepsHidden: el.querySelector(".site-access-steps").hidden, link: el.querySelector(".site-access-link")?.getAttribute("href"),
+          linkHidden: el.querySelector(".site-access-link").hidden, text: el.textContent };
+      });
+      assert.equal(card.hidden, false);
+      assert.equal(card.button, false, "Safari cannot be asked for All Websites from the extension");
+      assert.equal(card.list, false, "one switch, not a list of websites");
+      assert.equal(card.stepsHidden, false);
+      assert.equal(card.linkHidden, false);
+      assert.equal(card.link, "an1metracker://safari-settings");
+      assert.deepEqual(card.steps, [
+        "Tap Open Safari Settings, or open Settings → Apps → Safari → Extensions → An1me.to Tracker.",
+        "Under Permissions, set All Websites to Allow.",
+        "Come back to Safari. This card checks again by itself.",
+      ]);
+      assert.match(card.text, /All Websites/);
+      assert.doesNotMatch(card.text, /googleapis|jikan|animefillerlist/);
+      assert.equal(await p.page.evaluate(() => window.__requests.length), 0);
+      const link = await p.page.locator("#authSiteAccess .site-access-link").boundingBox();
+      assert.ok(link.height >= 44 && link.x + link.width <= 390);
+      await p.context.close();
+    });
+    await test("turning All Websites on in Settings clears the card on return and lifts the pause", async () => {
+      const p = await setup(browser, { manifest: safariManifest, gate: true, allowed: CORE });
+      assert.equal(await p.page.evaluate(() => window.AnimeTrackerWebsiteAccess.isPaused()), true);
+      await p.page.evaluate(() => { window.__grantInSettings(); document.dispatchEvent(new Event("visibilitychange")); });
+      await p.page.waitForTimeout(100);
+      assert.equal(await p.page.isVisible("#authSiteAccess"), false);
+      assert.equal(await p.page.evaluate(() => window.AnimeTrackerWebsiteAccess.isPaused()), false);
       await p.context.close();
     });
     await test("desktop and already granted mobile installs do not show setup or request access", async () => {

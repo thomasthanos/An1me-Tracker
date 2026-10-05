@@ -29,37 +29,36 @@ const executablePath = [process.env.AT_TEST_BROWSER,
 const PHONE = { viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2,
   userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 Version/26.0 Mobile/15E148 Safari/604.1" };
 
-// `grant`: true grants what is asked, false refuses, "noop" answers yes and grants nothing (what the iPhone did).
-async function open(browser, { grant = true } = {}) {
+const CORE = ["https://an1me.to/*", "https://*.an1me.to/*"];
+
+// Safari's answers at the boundary: an1me.to already allowed on its own row (as on the user's phone), All Websites
+// still on Ask until the test turns it on "in Settings".
+async function open(browser) {
   const context = await browser.newContext(PHONE);
-  await context.addInitScript(({ manifest, grant }) => {
-    const granted = new Set(manifest.host_permissions);
-    const listeners = new Set();
+  await context.addInitScript(({ manifest, CORE }) => {
+    const granted = new Set(CORE);
     window.__requests = [];
     window.__removed = [];
     window.chrome = {
       runtime: { getManifest: () => manifest, lastError: undefined, sendMessage: () => Promise.resolve(null) },
       permissions: {
-        onAdded: { addListener: (fn) => listeners.add(fn), removeListener: (fn) => listeners.delete(fn) },
+        onAdded: { addListener() {}, removeListener() {} },
         onRemoved: { addListener() {}, removeListener() {} },
         contains: (details) => Promise.resolve(details.origins.every((origin) => granted.has(origin))),
-        request: (details) => {
-          window.__requests.push({ origins: details.origins, gesture: navigator.userActivation.isActive });
-          if (grant === true) details.origins.forEach((origin) => granted.add(origin));
-          return Promise.resolve(grant !== false);
-        },
+        request: (details) => { window.__requests.push(details.origins); return Promise.resolve(false); },
       },
       tabs: { getCurrent: (callback) => callback({ id: 42 }), remove: (id) => window.__removed.push(id) },
     };
-    window.__allowInSettings = () => manifest.optional_host_permissions.forEach((origin) => granted.add(origin));
-  }, { manifest, grant });
+    window.__allowAllWebsites = () => granted.add("<all_urls>");
+  }, { manifest, CORE });
   const page = await context.newPage();
   await page.goto(pageUrl);
   await page.waitForTimeout(150);
   const view = () => page.evaluate(() => {
     const shown = (selector) => { const el = document.querySelector(selector); return !!el && !el.hidden && el.getClientRects().length > 0; };
     return { card: shown("#setupAccess"), done: shown("#setupDone"), checking: shown("#setupChecking"), button: shown("#setupAccess .site-access-btn"),
-      steps: shown("#setupAccess .site-access-steps"), link: shown("#setupAccess .site-access-link"), requests: window.__requests,
+      steps: [...document.querySelectorAll("#setupAccess .site-access-steps li")].map((li) => li.textContent),
+      link: shown("#setupAccess .site-access-link"), requests: window.__requests,
       overflow: document.documentElement.scrollWidth > window.innerWidth };
   });
   return { context, page, view };
@@ -73,51 +72,34 @@ async function open(browser, { grant = true } = {}) {
     catch (error) { failures++; console.error("FAIL " + name + ": " + error.message); }
   };
   try {
-    await test("the page offers the one tap first, fits the phone and asks nothing by itself", async () => {
+    await test("the page leads straight to the one All Websites switch, fits the phone and asks nothing by itself", async () => {
+      assert.deepEqual(manifest.host_permissions, [...CORE, "<all_urls>"]);
       const p = await open(browser);
       const state = await p.view();
       assert.equal(state.checking, false);
       assert.equal(state.card, true);
-      assert.equal(state.button, true);
-      assert.equal(state.steps, false, "Settings comes second while the prompt may work");
       assert.equal(state.done, false);
+      assert.equal(state.button, false, "there is no prompt that can allow All Websites");
+      assert.equal(state.link, true);
+      assert.equal(state.steps[1], "Under Permissions, set All Websites to Allow.");
+      assert.equal(await p.page.getAttribute("#setupAccess .site-access-link", "href"), "an1metracker://safari-settings");
       assert.equal(state.overflow, false, "no sideways scrolling at 375px");
       assert.deepEqual(state.requests, []);
-      const box = await p.page.locator("#setupAccess .site-access-btn").boundingBox();
+      const box = await p.page.locator("#setupAccess .site-access-link").boundingBox();
       assert.ok(box.height >= 44 && box.x >= 16 && box.x + box.width <= 375 - 16);
       await p.context.close();
     });
 
-    await test("allowing from the tap switches the page to done, and Close this tab closes it", async () => {
-      const p = await open(browser, { grant: true });
-      await p.page.click("#setupAccess .site-access-btn");
+    await test("coming back with All Websites allowed shows All set, and Close this tab closes it", async () => {
+      const p = await open(browser);
+      // The user flips the switch in Settings, which sends no event, and returns to the tab.
+      await p.page.evaluate(() => { window.__allowAllWebsites(); document.dispatchEvent(new Event("visibilitychange")); });
       await p.page.waitForTimeout(150);
       const state = await p.view();
-      assert.equal(state.requests.length, 1);
-      assert.equal(state.requests[0].gesture, true);
-      assert.deepEqual(state.requests[0].origins, manifest.optional_host_permissions);
       assert.equal(state.card, false);
       assert.equal(state.done, true);
       await p.page.click("#setupClose");
       assert.deepEqual(await p.page.evaluate(() => window.__removed), [42]);
-      await p.context.close();
-    });
-
-    await test("a yes that leaves the websites on Ask leads to Settings, and coming back from it finishes", async () => {
-      const p = await open(browser, { grant: "noop" });
-      await p.page.click("#setupAccess .site-access-btn");
-      await p.page.waitForTimeout(150);
-      let state = await p.view();
-      assert.equal(state.done, false);
-      assert.equal(state.steps, true);
-      assert.equal(state.link, true);
-      assert.equal(await p.page.getAttribute("#setupAccess .site-access-link", "href"), "an1metracker://safari-settings");
-      // The user allows them in Settings, which sends no event, and returns to the tab.
-      await p.page.evaluate(() => { window.__allowInSettings(); document.dispatchEvent(new Event("visibilitychange")); });
-      await p.page.waitForTimeout(150);
-      state = await p.view();
-      assert.equal(state.card, false);
-      assert.equal(state.done, true);
       await p.context.close();
     });
   } finally {

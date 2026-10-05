@@ -75,10 +75,10 @@ function loadCoordinator(withNotifications) {
   check("Safari manifest keeps every other permission", packaged.permissions, source.permissions.filter((p) => !["identity", "notifications", "sidePanel"].includes(p)));
   check("Safari manifest keeps the content scripts and version", [packaged.content_scripts, packaged.version], [source.content_scripts, source.version]);
   const core = ["https://an1me.to/*", "https://*.an1me.to/*"];
-  const services = source.host_permissions.filter(host => !core.includes(host) && host !== "https://graphql.anilist.co/*");
-  check("Safari can request every metadata, image, Skip Outro and cloud host", packaged.optional_host_permissions, services);
-  check("only the tracking site stays required in Safari", packaged.host_permissions, core);
-  check("the disabled mobile AniList API is not requested", [...packaged.host_permissions, ...packaged.optional_host_permissions].includes("https://graphql.anilist.co/*"), false);
+  // iOS shows one row per host pattern; one pattern for every website is a single "All Websites" switch.
+  check("Safari asks for the tracking site and All Websites, nothing per service", packaged.host_permissions, [...core, "<all_urls>"]);
+  check("no per-service optional hosts reach the Safari manifest", packaged.optional_host_permissions, undefined);
+  check("content scripts still run on an1me.to only", [...new Set(packaged.content_scripts.flatMap((script) => script.matches))].every((match) => /an1me\.to\//.test(match)), true);
   const filler = ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"];
   check("Chrome's manifest still requires the filler sites", filler.every((host) => source.host_permissions.includes(host)) && !source.optional_host_permissions, true);
   check("native host icon artwork stays out of the extension bundle", fs.existsSync(path.join(REPO, "dist/an1me-tracker-safari/src/icons/ios")), false);

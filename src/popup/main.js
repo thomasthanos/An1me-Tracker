@@ -1927,7 +1927,7 @@
           if (!allowed || access?.isPaused?.()) {
             AT.SiteAccess?.notePromptFailed?.();
             AT.SiteAccess?.refreshSetup?.();
-            AT.UIHelpers?.showToast?.("Safari did not allow the websites. Open Safari Settings from the website access card and set them to Allow.", { type: "warning", duration: 6000 });
+            AT.UIHelpers?.showToast?.("Safari is still keeping the tracker off the websites it needs. Tap Open Safari Settings on the website access card and set them to Allow.", { type: "warning", duration: 6000 });
             return;
           }
           await fetchAllFillers({
