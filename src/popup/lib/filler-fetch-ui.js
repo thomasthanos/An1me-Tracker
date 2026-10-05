@@ -23,6 +23,11 @@ const FillerFetchUI = {
 
   onComplete: null,
 
+  // Called when the user presses Stop; the caller ends the background run.
+  onStop: null,
+
+  HIDDEN_RUN_KEY: "ffuiHiddenRunId",
+
   init() {
     this.createModal();
     this.attachEventListeners();
@@ -37,7 +42,10 @@ const FillerFetchUI = {
 
             <div class="ffui-header">
               <span class="ffui-title" id="ffui-title"><span class="ffui-title-dot"></span>Fetch & Import</span>
-              <button type="button" class="ffui-close" hidden>Done</button>
+              <div class="ffui-actions">
+                <button type="button" class="ffui-stop" hidden>Stop</button>
+                <button type="button" class="ffui-close" hidden>Done</button>
+              </div>
             </div>
 
             <div class="ffui-body">
@@ -110,18 +118,16 @@ const FillerFetchUI = {
   attachEventListeners() {
     const overlay = document.getElementById(this.IDS.overlay);
     overlay.querySelector(".ffui-close")?.addEventListener("click", () => this.close());
-    const blockOutsideClick = (e) => {
+    overlay.querySelector(".ffui-stop")?.addEventListener("click", () => this.stop());
+    // A run carries on in the background, so the panel never holds the popup hostage: tapping outside hides it.
+    const outsideClick = (e) => {
       if (e.target.id !== this.IDS.overlay) return;
       e.preventDefault();
       e.stopPropagation();
-      if (this.state.fetchDone || this._waitingForAccess) {
-        this.close();
-      } else {
-        this._nudgeModal();
-      }
+      if (e.type === "click") this.close();
     };
-    overlay.addEventListener("mousedown", blockOutsideClick);
-    overlay.addEventListener("click", blockOutsideClick);
+    overlay.addEventListener("mousedown", outsideClick);
+    overlay.addEventListener("click", outsideClick);
 
     if (this._escHandler) {
       try {
@@ -130,11 +136,7 @@ const FillerFetchUI = {
     }
     this._escHandler = (e) => {
       if (e.key !== "Escape" || !this.state.isOpen) return;
-      if (this.state.isRunning) {
-        e.preventDefault();
-        this._nudgeModal();
-        return;
-      }
+      e.preventDefault();
       this.close();
     };
     document.addEventListener("keydown", this._escHandler);
@@ -155,8 +157,11 @@ const FillerFetchUI = {
     this.checkSiteAccess().catch(() => {});
   },
 
+  // Hiding a run that is still going remembers it, so reopening the popup does not throw the panel back up for
+  // the same run. The status line keeps showing its progress, and Fetch & Import brings the panel back.
   close() {
     this._clearAutoClose();
+    if (this._runId && !this.state.fetchDone) this._rememberHidden(this._runId);
     this.state.isOpen = false;
     this.state.autoMode = false;
     const overlay = document.getElementById(this.IDS.overlay);
@@ -167,12 +172,42 @@ const FillerFetchUI = {
     overlay.setAttribute("aria-hidden", "true");
   },
 
-  _nudgeModal() {
-    const container = document.getElementById(this.IDS.container);
-    if (!container) return;
-    container.classList.remove("is-attention");
-    void container.offsetWidth;
-    container.classList.add("is-attention");
+  // Kept in this popup's storage so it survives closing it; in memory where storage is unavailable.
+  isHiddenRun(runId) {
+    if (!runId) return false;
+    let stored = null;
+    try { stored = localStorage.getItem(this.HIDDEN_RUN_KEY); } catch {}
+    return (stored ?? this._hiddenRunId) === String(runId);
+  },
+
+  _rememberHidden(runId) {
+    this._hiddenRunId = String(runId);
+    try { localStorage.setItem(this.HIDDEN_RUN_KEY, this._hiddenRunId); } catch {}
+  },
+
+  // Stop ends the run in the background; the panel shows the result the caller hands back.
+  async stop() {
+    const button = document.querySelector(".ffui-stop");
+    if (!button || button.disabled || typeof this.onStop !== "function") return;
+    button.disabled = true;
+    button.textContent = "Stopping…";
+    try {
+      await this.onStop();
+    } finally {
+      button.disabled = false;
+      button.textContent = "Stop";
+    }
+  },
+
+  // Hide while a run is going (it carries on), Done once it has ended; Stop only while there is a run to stop.
+  _setActions({ running = false, done = false, canStop = false } = {}) {
+    const close = document.querySelector(".ffui-close");
+    const stop = document.querySelector(".ffui-stop");
+    if (close) {
+      close.hidden = !running && !done;
+      close.textContent = done ? "Done" : "Hide";
+    }
+    if (stop) stop.hidden = !(running && canStop && typeof this.onStop === "function");
   },
 
   resetUI(options = {}) {
@@ -180,6 +215,7 @@ const FillerFetchUI = {
     this._waitingForAccess = false;
     this._blockedOrigins = null;
     this._accessSignature = null;
+    this._runId = null;
     const keepAutoMode = options.autoMode === true;
     Object.assign(this.state, {
       isRunning: false,
@@ -194,8 +230,7 @@ const FillerFetchUI = {
     if (!keepAutoMode) this.state.autoMode = false;
 
     this._setProgress(0, "Ready to fetch and import your data…");
-    const close = document.querySelector(".ffui-close");
-    if (close) close.hidden = true;
+    this._setActions();
     ["fetched", "cached", "skipped", "failed"].forEach((k) => this._setStat(k, 0));
 
     const log = document.getElementById(this.IDS.logFeed);
@@ -250,6 +285,7 @@ const FillerFetchUI = {
     this._clearAutoClose();
     this.state.isRunning = true;
     this.state.fetchDone = false;
+    this._setActions({ running: true });
     this._setProgress(0, label);
   },
 
@@ -290,11 +326,8 @@ const FillerFetchUI = {
       window.AnimeTracker?.SiteAccess?.GROUPS.find(group => group.id === "filler")?.origins : null;
     this.state.isRunning = state.status === "running" && !this._waitingForAccess;
     this.state.fetchDone = state.status === "completed" || state.status === "error";
-    const close = document.querySelector(".ffui-close");
-    if (close) {
-      close.hidden = !this.state.fetchDone && !this._waitingForAccess;
-      close.textContent = this._waitingForAccess ? "Close" : "Done";
-    }
+    this._runId = state.runId || null;
+    this._setActions({ running: state.status === "running", done: this.state.fetchDone, canStop: !!state.runId });
 
     this._setStat("fetched", this.state.fetched);
     this._setStat("cached", this.state.cached);
@@ -327,7 +360,9 @@ const FillerFetchUI = {
         state.waitingForNetwork === true ? "Waiting for connection…" : state.currentTitle || state.currentSlug || "Working…";
       label = `${processed} / ${total} — ${currentTitle}`;
     } else if (state.status === "completed") {
-      if (state.failed > 0) {
+      if (state.stopped === true) {
+        label = `Stopped — ${processed} of ${total} checked`;
+      } else if (state.failed > 0) {
         label = `Import finished — ${state.failed} items need retry`;
       } else if (totalCount > 0) {
         label = `All ${totalCount} anime verified & up to date!`;

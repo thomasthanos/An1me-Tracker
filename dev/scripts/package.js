@@ -22,6 +22,8 @@ if (!["chrome", "safari"].includes(TARGET)) throw new Error(`Unknown --target ${
 const NAME = TARGET === "safari" ? "an1me-tracker-safari" : "an1me-tracker";
 const OUT = path.join(DIST, NAME);
 const RUNTIME_ENTRIES = ["manifest.json", "background.js", "popup.html", "src"];
+// Extension pages besides the popup: the website access page the worker opens after an install or update.
+const EXTRA_PAGES = ["src/setup/access.html"];
 
 // Safari has no identity (Google / AniList OAuth), notifications or side panel APIs.
 const SAFARI_UNSUPPORTED_PERMISSIONS = ["identity", "notifications", "sidePanel"];
@@ -72,11 +74,13 @@ function manifestReferences(manifest) {
   return refs;
 }
 
+// Paths are returned relative to the package root, so a page in a subfolder can use "../" references.
 function htmlReferences(htmlPath) {
   const html = fs.readFileSync(htmlPath, "utf8");
+  const base = path.posix.dirname(path.relative(OUT, htmlPath).split(path.sep).join("/"));
   const refs = new Set();
-  for (const match of html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="([^"]+)"/g)) {
-    if (!/^(?:https?:)?\/\//.test(match[1])) refs.add(match[1]);
+  for (const match of html.matchAll(/<(?:script|link|img)\b[^>]*\b(?:src|href)="([^"]+)"/g)) {
+    if (!/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(match[1])) refs.add(path.posix.join(base, match[1]));
   }
   return refs;
 }
@@ -125,6 +129,7 @@ if (TARGET === "safari") {
 const references = new Set([
   ...manifestReferences(manifest),
   ...htmlReferences(path.join(OUT, "popup.html")),
+  ...EXTRA_PAGES.flatMap((page) => [page, ...(fs.existsSync(path.join(OUT, page)) ? htmlReferences(path.join(OUT, page)) : [])]),
   ...importScriptsReferences(path.join(OUT, "background.js")),
 ]);
 const missing = [...references].filter((ref) => !fs.existsSync(path.join(OUT, ref)));

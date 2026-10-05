@@ -36,11 +36,11 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Fetch queues pause before requests when website access is denied, keeping their position and counters.\n" +
-    "• Tap Allow access inside Fetch & Import to request the supporting sites together and continue the queue.\n" +
-    "• A paused panel can be closed; no retry alarms or popup polling run while waiting for permission.\n" +
-    "• Older failed entries retry once after the remaining queue, without repeating successful fetches.\n" +
-    "• Progress and caches are retained; AniList stays disabled on mobile.";
+    "• After an install or update, Safari opens a Website access page with the one tap to allow the tracker's sites.\n" +
+    "• If Safari leaves them on Ask, Open Safari Settings goes through this app straight to the extension's settings (iOS 26.2+).\n" +
+    "• Fetch & Import can be hidden while it runs or stopped at any time; it no longer holds the popup.\n" +
+    "• Online work pauses while access is missing and resumes by itself once it is allowed; progress is kept.\n" +
+    "• AniList stays disabled on mobile.";
 
   return {
     name: appName,

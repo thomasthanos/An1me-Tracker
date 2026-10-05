@@ -282,6 +282,49 @@ async function panel(browser, device, { access, grant = true, optional = null })
       await p.context.close();
     });
 
+    await test("a running import can be hidden or stopped instead of holding the popup until it ends", async () => {
+      const p = await panel(browser, PHONE, { access: true });
+      const running = { runId: "run-1", status: "running", fetchTotal: 40, queueIndex: 3, processed: 3, failed: 2, logs: [] };
+      await p.page.evaluate((running) => {
+        const ui = window.AnimeTracker.FillerFetchUI;
+        window.__stops = 0;
+        ui.onStop = async () => { window.__stops++; ui.applyBackgroundState({ ...running, status: "completed", stopped: true }); };
+        ui.applyBackgroundState(running);
+      }, running);
+      const buttons = () => p.page.evaluate(() => ({
+        hide: document.querySelector(".ffui-close").hidden ? null : document.querySelector(".ffui-close").textContent,
+        stop: !document.querySelector(".ffui-stop").hidden,
+        open: window.AnimeTracker.FillerFetchUI.state.isOpen,
+        label: document.querySelector(".ffui-progress-label").textContent,
+      }));
+      assert.deepEqual(await buttons(), { hide: "Hide", stop: true, open: true, label: "3 / 40 — Working…" });
+      const fits = await p.page.evaluate(() => {
+        const header = document.querySelector(".ffui-header").getBoundingClientRect();
+        return [...document.querySelectorAll(".ffui-header button")].every((b) => {
+          const r = b.getBoundingClientRect();
+          return r.right <= header.right && r.left >= header.left && r.height >= 44;
+        });
+      });
+      assert.equal(fits, true, "both buttons sit inside the header and are full touch targets");
+
+      await p.page.click(".ffui-close");
+      assert.equal((await buttons()).open, false, "Hide closes the panel while the run carries on");
+      assert.equal(await p.page.evaluate(() => window.AnimeTracker.FillerFetchUI.isHiddenRun("run-1")), true);
+      assert.equal(await p.page.evaluate(() => window.AnimeTracker.FillerFetchUI.isHiddenRun("run-2")), false);
+
+      await p.page.evaluate(async (running) => { const ui = window.AnimeTracker.FillerFetchUI; await ui.open(); ui.applyBackgroundState(running); }, running);
+      await p.page.mouse.click(5, 5);
+      assert.equal((await buttons()).open, false, "tapping outside hides a running import too");
+
+      await p.page.evaluate(async (running) => { const ui = window.AnimeTracker.FillerFetchUI; await ui.open(); ui.applyBackgroundState(running); }, running);
+      await p.page.click(".ffui-stop");
+      await p.page.waitForTimeout(50);
+      const stopped = await buttons();
+      assert.equal(await p.page.evaluate(() => window.__stops), 1);
+      assert.deepEqual(stopped, { hide: "Done", stop: false, open: true, label: "Stopped — 3 of 40 checked" });
+      await p.context.close();
+    });
+
     await test("with the notice up and a long title, the panel keeps its layout on a phone", async () => {
       const p = await panel(browser, PHONE, { access: false });
       await p.page.evaluate(() => window.AnimeTracker.FillerFetchUI.applyBackgroundState({

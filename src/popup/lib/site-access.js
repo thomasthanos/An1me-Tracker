@@ -213,16 +213,57 @@
 
   const setupGenerations = new WeakMap();
 
-  async function renderSetup(containers) {
+  // The An1me Tracker app opens the extension's own page in Settings when Safari hands it this link (iOS app 8.2.10+).
+  const APP_SETTINGS_URL = "an1metracker://safari-settings";
+  // Set once Safari has been asked and the websites are still not allowed: on iPhone the prompt can answer
+  // without changing anything, and offering the same button again only sent the user round in circles.
+  const PROMPT_FAILED_KEY = "siteAccessPromptFailedAt";
+  let promptFailedInMemory = false;
+
+  function promptFailed() {
+    if (promptFailedInMemory) return true;
+    try { return !!localStorage.getItem(PROMPT_FAILED_KEY); } catch { return false; }
+  }
+
+  function notePromptFailed() {
+    promptFailedInMemory = true;
+    try { localStorage.setItem(PROMPT_FAILED_KEY, String(Date.now())); } catch {}
+  }
+
+  function clearPromptFailed() {
+    promptFailedInMemory = false;
+    try { localStorage.removeItem(PROMPT_FAILED_KEY); } catch {}
+  }
+
+  // The iPhone app can take the user straight to the extension's settings; elsewhere there is no app to ask.
+  function canOpenSettingsFromApp() {
+    return !!globalThis.AnimeTrackerUtils?.isMobileDevice?.() && declaredOptionalOrigins().length > 0;
+  }
+
+  // The websites to allow on this device: every website the tracker uses where Safari gates them (the Safari
+  // build), nothing elsewhere.
+  function setupOrigins() {
+    const access = globalThis.AnimeTrackerWebsiteAccess;
+    if (access?.enabled) return access.origins;
+    return globalThis.AnimeTrackerUtils?.isMobileDevice?.() ? declaredOptionalOrigins() : [];
+  }
+
+  async function missingSetupOrigins() {
+    const origins = setupOrigins();
+    const provider = permissionsApi();
+    const granted = provider ? await Promise.all(origins.map(origin => isAllowed(provider, origin, false))) : origins.map(() => false);
+    return origins.filter((_origin, index) => !granted[index]);
+  }
+
+  // `onRender` hears the websites still missing after every render, including the one after a tap.
+  async function renderSetup(containers, options = {}) {
     const targets = (Array.isArray(containers) ? containers : [containers]).filter(Boolean);
     const tokens = targets.map(container => {
       const token = {}; setupGenerations.set(container, token); return token;
     });
-    const origins = globalThis.AnimeTrackerWebsiteAccess?.enabled || globalThis.AnimeTrackerUtils?.isMobileDevice?.()
-      ? globalThis.AnimeTrackerWebsiteAccess?.enabled ? globalThis.AnimeTrackerWebsiteAccess.origins : declaredOptionalOrigins() : [];
     const provider = permissionsApi();
-    const granted = provider ? await Promise.all(origins.map(origin => isAllowed(provider, origin, false))) : origins.map(() => false);
-    const missing = origins.filter((_origin, index) => !granted[index]);
+    const missing = await missingSetupOrigins();
+    if (!missing.length) clearPromptFailed();
     targets.forEach((container, index) => {
       if (setupGenerations.get(container) !== tokens[index] || !container.isConnected) return;
       container.replaceChildren(); container.hidden = !missing.length;
@@ -239,47 +280,91 @@
       const list = element("ul");
       missing.forEach(origin => list.append(element("li", null, hostLabel(origin))));
       details.append(list); container.append(details);
+
+      const fromApp = canOpenSettingsFromApp();
+      const settings = element("a", "site-access-link", "Open Safari Settings");
+      settings.href = APP_SETTINGS_URL;
       const steps = element("ol", "site-access-steps");
-      steps.append(element("li", null, `Open ${SETTINGS_PATH}.`),
-        element("li", null, "Under Permissions, choose Allow for the websites listed above."),
-        element("li", null, "Return to Safari and reopen the tracker."));
+      steps.append(element("li", null, fromApp ? `Tap Open Safari Settings, or open ${SETTINGS_PATH}.` : `Open ${SETTINGS_PATH}.`),
+        element("li", null, "Under Permissions, set each website listed above to Allow."),
+        element("li", null, "Come back to Safari. This card checks again by itself."));
       const requestable = missing.filter(origin => declaredOptionalOrigins().includes(origin));
-      steps.hidden = typeof provider?.api?.request === "function" && requestable.length > 0;
-      if (steps.hidden) {
-        const button = element("button", "site-access-btn", "Allow website access");
+      const canRequest = typeof provider?.api?.request === "function" && requestable.length > 0;
+      container.append(steps, settings);
+      let button = null;
+      // Settings first once a prompt has not worked, or where the extension cannot ask at all; the prompt
+      // then stays below as a second try.
+      const showSettings = (show) => {
+        steps.hidden = !show;
+        settings.hidden = !show || !fromApp;
+        if (show) details.open = true;
+        button?.classList.toggle("is-secondary", show);
+      };
+      if (canRequest) {
+        button = element("button", "site-access-btn", "Allow website access");
         button.type = "button";
         button.addEventListener("click", () => {
           if (button.disabled) return;
           button.disabled = true;
           button.textContent = "Waiting for Safari…";
           button.setAttribute("aria-busy", "true");
-          request(requestable, allowed => {
+          request(requestable, async allowed => {
             if (setupGenerations.get(container) !== tokens[index] || !container.isConnected) return;
-            if (allowed) { void globalThis.AnimeTrackerWebsiteAccess?.refresh(); void renderSetup(targets); }
-            else {
+            if (!allowed) {
+              notePromptFailed();
               button.disabled = false; button.textContent = "Allow website access";
-              button.removeAttribute("aria-busy"); steps.hidden = false;
+              button.removeAttribute("aria-busy"); showSettings(true);
+              return;
             }
+            // Safari can say yes and still leave the websites on Ask. Check what it actually did.
+            const stillMissing = (await missingSetupOrigins()).filter(origin => requestable.includes(origin));
+            if (stillMissing.length) notePromptFailed();
+            void globalThis.AnimeTrackerWebsiteAccess?.refresh();
+            void renderSetup(targets, options);
           });
         });
         container.append(button);
       }
-      container.append(steps);
+      showSettings(!canRequest || promptFailed());
     });
+    if (typeof options.onRender === "function") options.onRender(missing);
     return missing;
   }
 
-  function mountSetup(containers) {
+  const mountedSetups = new Set();
+
+  function refreshSetup() {
+    for (const refresh of mountedSetups) refresh();
+  }
+
+  function mountSetup(containers, { onRender = null } = {}) {
     const targets = (Array.isArray(containers) ? containers : [containers]).filter(Boolean);
     let disposed = false;
-    const refresh = () => { if (!disposed) void renderSetup(targets); };
+    const refresh = () => {
+      if (!disposed) void renderSetup(targets, { onRender: missing => { if (!disposed && typeof onRender === "function") onRender(missing); } });
+    };
     const provider = globalThis.AnimeTrackerWebsiteAccess?.enabled || globalThis.AnimeTrackerUtils?.isMobileDevice?.() ? permissionsApi() : null;
     const events = [provider?.api?.onAdded, provider?.api?.onRemoved].filter(Boolean);
     events.forEach(event => event.addListener?.(refresh));
+    // Websites are allowed in the Settings app, which sends no permission event back: check again when the
+    // page is shown again instead.
+    const recheck = () => {
+      if (document.visibilityState === "hidden") return;
+      void globalThis.AnimeTrackerWebsiteAccess?.refresh?.();
+      refresh();
+    };
+    if (provider) {
+      document.addEventListener("visibilitychange", recheck);
+      window.addEventListener("pageshow", recheck);
+    }
+    mountedSetups.add(refresh);
     const dispose = () => {
       disposed = true;
+      mountedSetups.delete(refresh);
       targets.forEach(container => setupGenerations.delete(container));
       events.forEach(event => event.removeListener?.(refresh));
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("pageshow", recheck);
       window.removeEventListener("beforeunload", dispose);
     };
     window.addEventListener("beforeunload", dispose, { once: true });
@@ -294,5 +379,6 @@
   }
 
   window.AnimeTracker = window.AnimeTracker || {};
-  window.AnimeTracker.SiteAccess = Object.freeze({ GROUPS, SETTINGS_PATH, hostLabel, blockedOrigins, request, askIfOptional, render, renderSetup, mountSetup });
+  window.AnimeTracker.SiteAccess = Object.freeze({ GROUPS, SETTINGS_PATH, APP_SETTINGS_URL, hostLabel, blockedOrigins, request,
+    askIfOptional, render, renderSetup, mountSetup, refreshSetup, notePromptFailed });
 })();

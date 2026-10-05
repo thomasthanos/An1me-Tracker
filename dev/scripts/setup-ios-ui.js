@@ -38,6 +38,32 @@ function stampVersion(html, version) {
   return { html: out, stamped };
 }
 
+// The link the Safari extension opens to send the user to its website settings (see ios/SceneDelegate.swift).
+const URL_SCHEME = "an1metracker";
+
+// Adds the app's URL scheme to an XML Info.plist, once. Returns false for a plist it cannot edit (binary) and for
+// one that already declares URL types, which it leaves alone.
+function addUrlScheme(plist, identifier) {
+  if (!/<plist\b/.test(plist) || plist.includes("<key>CFBundleURLTypes</key>")) return null;
+  const end = plist.lastIndexOf("</dict>");
+  if (end < 0) return null;
+  const entry = [
+    "\t<key>CFBundleURLTypes</key>",
+    "\t<array>",
+    "\t\t<dict>",
+    "\t\t\t<key>CFBundleURLName</key>",
+    `\t\t\t<string>${identifier}</string>`,
+    "\t\t\t<key>CFBundleURLSchemes</key>",
+    "\t\t\t<array>",
+    `\t\t\t\t<string>${URL_SCHEME}</string>`,
+    "\t\t\t</array>",
+    "\t\t</dict>",
+    "\t</array>",
+    "",
+  ].join("\n");
+  return plist.slice(0, end) + entry + plist.slice(end);
+}
+
 function findFilesByName(dir, targetName) {
   const results = [];
   if (!fs.existsSync(dir)) return results;
@@ -77,6 +103,8 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
   }
 
   let viewControllersCount = 0;
+  let sceneDelegatesCount = 0;
+  let urlSchemesCount = 0;
   let htmlFilesCount = 0;
   let cssFilesCount = 0;
   let assetCatalogsCount = 0;
@@ -93,6 +121,30 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
         viewControllersCount++;
       }
     }
+  }
+
+  // 1b. Replace the host app's SceneDelegate.swift so it can take the extension's link
+  const srcScene = path.join(IOS_SRC, "SceneDelegate.swift");
+  if (fs.existsSync(srcScene)) {
+    for (const dest of findFilesByName(buildDir, "SceneDelegate.swift")) {
+      if (dest.includes("Extension")) continue;
+      fs.copyFileSync(srcScene, dest);
+      console.log(`[setup-ios-ui] Injected SceneDelegate at: ${dest}`);
+      sceneDelegatesCount++;
+    }
+  }
+
+  // 1c. Register the app's URL scheme in the host app's Info.plist
+  for (const plistPath of findFilesByName(buildDir, "Info.plist")) {
+    if (plistPath.includes("Extension") || /\.(?:xcodeproj|xcassets|app|appex)(?:\/|\\)/.test(plistPath)) continue;
+    const updated = addUrlScheme(fs.readFileSync(plistPath, "utf8"), process.env.BUNDLE_ID || "io.github.thomasthanos.An1me-Tracker");
+    if (updated === null) {
+      console.warn(`[setup-ios-ui] Left ${plistPath} as it is (not an XML plist, or URL types already declared)`);
+      continue;
+    }
+    fs.writeFileSync(plistPath, updated);
+    console.log(`[setup-ios-ui] Registered ${URL_SCHEME}:// in: ${plistPath}`);
+    urlSchemesCount++;
   }
 
   // 2. Inject AppLogo into Assets.xcassets
@@ -161,9 +213,11 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
     }
   }
 
-  console.log(`[setup-ios-ui] Done. Updated ${viewControllersCount} ViewController(s), ${htmlFilesCount} HTML, ${cssFilesCount} CSS, and ${assetCatalogsCount} asset catalog(s).`);
+  console.log(`[setup-ios-ui] Done. Updated ${viewControllersCount} ViewController(s), ${sceneDelegatesCount} SceneDelegate(s), ${urlSchemesCount} Info.plist URL scheme(s), ${htmlFilesCount} HTML, ${cssFilesCount} CSS, and ${assetCatalogsCount} asset catalog(s).`);
   return {
     viewControllers: viewControllersCount,
+    sceneDelegates: sceneDelegatesCount,
+    urlSchemes: urlSchemesCount,
     htmlFiles: htmlFilesCount,
     cssFiles: cssFilesCount,
     assetCatalogs: assetCatalogsCount,
@@ -175,4 +229,4 @@ if (require.main === module) {
   setupUI(buildDir);
 }
 
-module.exports = { setupUI, findFilesByName, findAssetCatalogs, manifestVersion, stampVersion };
+module.exports = { setupUI, findFilesByName, findAssetCatalogs, manifestVersion, stampVersion, addUrlScheme, URL_SCHEME };

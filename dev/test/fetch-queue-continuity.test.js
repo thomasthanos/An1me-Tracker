@@ -261,5 +261,55 @@ function installedWorker(local, sync) {
       for (const key of Object.keys(original)) assert.deepEqual(store[key], original[key], `${reason} changed ${key}`);
     }
   });
+  await test('Stop ends a running queue where it is, drops the item in flight and nothing restarts it', async () => {
+    const store = { animeData: { one: {}, two: {}, three: {} } };
+    const w = worker(store);
+    let release;
+    w.c.AnimeTrackerAnimeResolver = { resolve: async slug => { w.calls.push({ slug }); await new Promise(resolve => { release = resolve; });
+      return { infoResult: { status: 'fetched', entry: info() }, fillerResult: { status: 'fetched', entry: filler() } }; } };
+    await w.c.startLibraryRepair({ origin: 'manual', auto: false }); await flush();
+    assert.equal(w.calls.length, 1, 'the first item is in flight');
+    const response = await new Promise(resolve => w.c.handlers.STOP_LIBRARY_REPAIR({}, {}, resolve));
+    assert.equal(response.success, true);
+    assert.equal(response.state.status, 'completed'); assert.equal(response.state.stopped, true);
+    release(); await flush();
+    assert.deepEqual(w.calls.map(c => c.slug), ['one'], 'no item after Stop');
+    assert.equal(store.metadataRepairState.stopped, true);
+    assert.equal(store.metadataRepairState.processed, 0, 'the item in flight is not counted into a stopped run');
+    assert.equal(store.pendingBackgroundMetadataRepair, false);
+    await w.c.resumeLibraryRepair({ checkAccess: true }); await w.c.maybeStartPendingMetadataRepair(); await flush();
+    assert.deepEqual(w.calls.map(c => c.slug), ['one'], 'a later wake-up or grant does not restart it');
+  });
+  await test('Stop also ends a queue paused for website access, so a later grant does not resume it', async () => {
+    const store = { metadataRepairState: { runId: 'paused-access', status: 'running', uiMode: 'modal', origin: 'manual', waitingForAccess: true,
+      blockedOrigins: ['https://www.animefillerlist.com/*'], pendingManualRetry: true, items: [{ slug: 'one' }, { slug: 'two' }],
+      fetchTotal: 2, queueIndex: 0, processed: 0, failed: 0, updatedAt: new Date().toISOString() }, pendingBackgroundMetadataRepair: true };
+    const w = worker(store);
+    const response = await new Promise(resolve => w.c.handlers.STOP_LIBRARY_REPAIR({}, {}, resolve));
+    assert.equal(response.state.status, 'completed');
+    assert.equal(response.state.waitingForAccess, false); assert.equal(response.state.pendingManualRetry, false);
+    await w.c.resumeLibraryRepair({ checkAccess: true }); await w.c.maybeStartPendingMetadataRepair(); await flush();
+    assert.deepEqual(w.calls, []);
+  });
+  await test('the popup Stop asks the worker and shows the stopped run', async () => {
+    const store = { animeData: { one: {}, two: {} } };
+    const w = worker(store, () => new Promise(() => {}));
+    await w.c.startLibraryRepair({ origin: 'manual', auto: false }); await flush();
+    const p = popup(store, message => new Promise(resolve => w.c.handlers[message.type](message, {}, resolve)));
+    await p.AT.MetadataRepair.stopFetch();
+    assert.equal(p.rendered.at(-1).stopped, true);
+    assert.equal(p.rendered.at(-1).status, 'completed');
+  });
+  await test('a run the user hid is not thrown back up when the popup opens again', async () => {
+    const state = { runId: 'hidden-run', status: 'running', uiMode: 'modal', origin: 'manual', fetchTotal: 9, queueIndex: 2, processed: 2,
+      updatedAt: new Date().toISOString() };
+    for (const hidden of [false, true]) {
+      const p = popup({ metadataRepairState: state }, async () => ({ success: true }));
+      let opened = 0;
+      Object.assign(p.AT.FillerFetchUI, { state: { isOpen: false }, open: async () => { opened++; }, isHiddenRun: runId => hidden && runId === 'hidden-run' });
+      await p.AT.MetadataRepair.syncMetadataRepairStateFromStorage({ autoOpenRunning: true });
+      assert.equal(opened, hidden ? 0 : 1);
+    }
+  });
   process.exitCode = failures ? 1 : 0;
 })();

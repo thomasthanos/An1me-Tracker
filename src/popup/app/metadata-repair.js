@@ -279,7 +279,9 @@
 
     const uiMode = getMetadataRepairUiMode(state);
     const isSilent = uiMode === "silent" && !ensureOpen;
-    const shouldOpen = ensureOpen || (autoOpenRunning && state.status === "running" && uiMode === "modal");
+    // A run the user hid stays hidden on later popup opens; its progress is still on the status line.
+    const shouldOpen = ensureOpen || (autoOpenRunning && state.status === "running" && uiMode === "modal" &&
+      !FillerFetchUI.isHiddenRun?.(state.runId));
     if (!ensureOpen && FillerFetchUI.state.autoMode && (uiMode === "status" || uiMode === "silent") && FillerFetchUI.state.isOpen) {
       FillerFetchUI.close();
     }
@@ -355,7 +357,8 @@
       }
       const isNewRun = previousStatus !== "completed" || previousState?.runId !== state.runId;
       if (!isSilent) {
-        const label = state.failed > 0 ? `Import Complete (${state.failed} need retry)` : "Import Complete";
+        const label = state.stopped === true ? "Import stopped" :
+          state.failed > 0 ? `Import Complete (${state.failed} need retry)` : "Import Complete";
         setMetadataRepairStatus(label, true);
       }
       if (isNewRun) {
@@ -508,6 +511,18 @@
     return metadataRepairPromise;
   }
 
+  // Stop pressed in the panel: end the background run and show where it stopped.
+  async function stopFetch() {
+    try {
+      const response = await sendRuntimeMessage({ type: "STOP_LIBRARY_REPAIR" }, 15000);
+      if (!response?.success) throw new Error(response?.error || "Could not stop the import");
+      await applyMetadataRepairState(response.state || null, { ensureOpen: AT.FillerFetchUI.state.isOpen });
+    } catch (error) {
+      PopupLogger.warn("RepairAll", "Stop failed:", error);
+      AT.UIHelpers?.showToast?.(error?.message || "Could not stop the import", { type: "error", duration: 3500 });
+    }
+  }
+
   AT.MetadataRepair = {
     _init(d) {
       elements = d.elements;
@@ -548,5 +563,6 @@
     syncMetadataRepairStateFromStorage,
     maybePromptPostUpdateFetch,
     fetchAllFillers,
+    stopFetch,
   };
 })();

@@ -25,6 +25,7 @@ function worker(initial = {}, response = 'abort') {
       alarms: { create: (name, options) => alarms.push({ name, options }), clear: async () => true }, tabs: { query: async () => [] } },
     dlog() {}, migrateFromSyncToLocal: async () => {}, reconcileSmartNotificationAlarm: async () => {}, ensureLibraryAutoRefreshAlarm() {}, ensureAiringScheduleAlarm() {},
     reapOrphanAn1meGatewayTab: async () => {}, LIBRARY_STARTUP_CATCHUP_ALARM: 'libraryStartupCatchup', getFirebaseUser: async () => null,
+    websiteAccessAllowed: async () => true,
   }); c.self = c;
   for (const file of ['src/common/utils.js', 'src/common/data/title-match.js', 'src/common/data/cache-policy.js', 'src/common/data/merge-utils.js']) vm.runInContext(read(file), c);
   vm.runInContext('const isLikelyMovieSlug = AnimeTrackerMergeUtils.isLikelyMovieSlug;', c);

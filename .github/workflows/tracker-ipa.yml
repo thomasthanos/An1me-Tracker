@@ -91,6 +91,9 @@ jobs:
           app="$(find build/DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)"
           appex="$(find "$app/PlugIns" -maxdepth 1 -name '*.appex' -print -quit)"
           test -n "$app" && test -n "$appex"
+          # The extension sends the user to its Settings page through this link (an1metracker://safari-settings).
+          scheme="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$app/Info.plist" 2>/dev/null || true)"
+          if [ "$scheme" != "an1metracker" ]; then echo "::error::The app does not register an1metracker://"; exit 1; fi
           manifest="$(find "$appex" -name manifest.json -print -quit)"
           node -e '
             const m = require(process.argv[1]);

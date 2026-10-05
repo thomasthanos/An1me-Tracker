@@ -17,3 +17,35 @@ for (const reason of ["install", "update"]) {
     assert.deepEqual(h.store.videoProgress, seed.videoProgress);
   });
 }
+
+const SAFARI_DENIED = ["https://firestore.googleapis.com/*", "https://www.animefillerlist.com/*"];
+const setupPage = "chrome-extension://test/src/setup/access.html";
+
+for (const reason of ["install", "update"]) {
+  test(`${reason} with websites still on Ask opens the access page once for this version, without prompting`, async () => {
+    const h = cloudWorker({}, {}, { safariDenied: SAFARI_DENIED });
+    const created = [];
+    let prompts = 0;
+    h.context.chrome.tabs = { create: async (info) => { created.push(info.url); return { id: created.length }; } };
+    h.context.chrome.permissions.request = async () => { prompts++; return true; };
+    for (const listener of h.installedListeners) listener({ reason, previousVersion: "8.2.9" });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(created, [setupPage]);
+    assert.equal(prompts, 0);
+    // The same version updating again (or the worker replaying the event) does not open it a second time.
+    for (const listener of h.installedListeners) listener({ reason: "update", previousVersion: "8.2.9" });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(created, [setupPage]);
+  });
+}
+
+test("with every website allowed, or on Chrome, an install or update opens no page", async () => {
+  for (const options of [{ safariDenied: [] }, {}]) {
+    const h = cloudWorker({}, {}, options);
+    const created = [];
+    h.context.chrome.tabs = { create: async (info) => { created.push(info.url); return { id: 1 }; } };
+    for (const listener of h.installedListeners) listener({ reason: "update", previousVersion: "8.2.9" });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(created, [], JSON.stringify(options));
+  }
+});
