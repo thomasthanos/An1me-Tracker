@@ -12,6 +12,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.12] — 2026-10-05
+
+### Changed
+
+- **One button for website access on iPhone.** 8.2.11 only sent you to Settings. **Allow website access** on
+  the tracker now asks Safari for every website the tracker uses (sign-in, cloud sync, metadata, fillers, covers,
+  Skip Outro) in one prompt; Safari only shows that prompt for websites the extension declares optional, so the
+  Safari build declares them that way again. **Fetch & Import** asks the same way from its tap.
+- Settings is only the fallback: if Safari does not allow them, **Open Safari Settings** appears under the button,
+  and the single **All Websites** switch there (kept in the manifest for this) allows everything at once. Either
+  route lifts the pause; the tracking site's own row is no longer part of it.
+- The separate **Website access** page that opened after installing or updating is gone.
+
 ## [8.2.11] — 2026-10-05
 
 ### Changed

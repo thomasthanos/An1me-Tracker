@@ -163,6 +163,10 @@ async function panel(browser, device, { access, grant = true, optional = null })
       const safari = await ask(FILLER);
       assert.deepEqual(safari.requests.map((r) => r.origins), [FILLER]);
       assert.equal(safari.answer, true);
+      // The Safari build also declares the all-websites pattern (Settings' switch); Safari does not grant it from a
+      // request, so the tap asks for the services only.
+      const withSwitch = await ask([...FILLER, "<all_urls>"]);
+      assert.deepEqual(withSwitch.requests.map((r) => r.origins), [FILLER]);
       const chrome = await ask(null);
       assert.deepEqual(chrome.requests, [], "no prompt where the sites are required");
       assert.equal(chrome.answer, true);

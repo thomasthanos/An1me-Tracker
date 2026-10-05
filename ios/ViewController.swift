@@ -533,7 +533,7 @@ struct An1meTrackerAppView: View {
             ),
             GuideStep(
                 title: "Μόνιμη πρόσβαση στο an1me.to",
-                detail: "Στα «Δικαιώματα» βάλε «All Websites» → «Allow». Είναι ένας διακόπτης για όλα: progress, sync, εικόνες, fillers και Skip Outro."
+                detail: "Αν το Safari δεν δέχτηκε το «Allow website access», εδώ στα «Δικαιώματα» βάλε «All Websites» → «Allow». Είναι ένας διακόπτης για όλα: sync, εικόνες, fillers και Skip Outro."
             ),
             otherSitesStep
         ]
@@ -541,8 +541,8 @@ struct An1meTrackerAppView: View {
 
     private var otherSitesStep: GuideStep {
         GuideStep(
-            title: "All Websites → Allow, ένας διακόπτης",
-            detail: "Μετά την εγκατάσταση ή ενημέρωση το Safari ανοίγει μόνο του τη σελίδα «Website access». Πάτα «Open Safari Settings»: ανοίγει αυτή η εφαρμογή και σε πάει στη σελίδα της επέκτασης. Εκεί, στα «Δικαιώματα», βάλε «All Websites» → «Allow» και γύρνα στο Safari. Το ίδιο κάνει και το κουμπί «Ρυθμίσεις Safari» εδώ."
+            title: "Όλα τα sites με ένα κουμπί",
+            detail: "Άνοιξε το Tracker από το μενού επεκτάσεων του Safari και πάτα «Allow website access», μετά «Allow» στο αίτημα του Safari: ζητάει μαζί όλα τα sites (sync, εικόνες, fillers, Skip Outro). Αν το Safari δεν τα επιτρέψει, πάτα «Open Safari Settings» και βάλε «All Websites» → «Allow»."
         )
     }
 
