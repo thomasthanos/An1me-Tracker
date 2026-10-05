@@ -51,6 +51,12 @@
     return romajiTitle(value).replace(SEASON_TAIL_RE, " ").replace(YEAR_TAIL_RE, " ").replace(/\s+/g, " ").trim();
   }
 
+  // Four characters or more, so two short unrelated titles cannot collapse into each other.
+  function sameWithoutSpaces(a, b) {
+    const left = a.replace(/ /g, "");
+    return left.length >= 4 && left === b.replace(/ /g, "");
+  }
+
   function tokenize(value) {
     return normalizeTitle(value)
       .split(" ")
@@ -95,6 +101,10 @@
     const b = normalizeTitle(right);
     if (!a || !b) return 0;
     if (a === b) return 1;
+
+    // The same title with different word breaks - "Dandadan" and "DAN DA DAN" - is one show. Only whole
+    // titles compare equal here, so a title that merely contains another still goes through containment.
+    if (sameWithoutSpaces(a, b)) return 0.99;
 
     const romajiA = romajiTitle(left);
     if (romajiA && romajiA === romajiTitle(right)) return 0.99;
@@ -162,6 +172,7 @@
   // "fuzzy"    - matched on similarity alone
   function matchKind(left, right) {
     if (normalizeTitle(left) === normalizeTitle(right)) return "exact";
+    if (sameWithoutSpaces(normalizeTitle(left), normalizeTitle(right))) return "variant";
     const romajiLeft = romajiTitle(left);
     if (romajiLeft && romajiLeft === romajiTitle(right)) return "variant";
     const baseLeft = baseTitle(left);

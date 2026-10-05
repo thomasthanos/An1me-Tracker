@@ -124,6 +124,13 @@ function isEpisodeTypesCacheFresh(entry, infoEntry) {
   return self.AnimeTrackerCachePolicy.isFillerFresh(entry, infoEntry);
 }
 
+// The row has little room, so only a short reason fits, but "unavailable" alone gave no way to tell a
+// blocked site from a bad answer.
+function withShortReason(label, reason) {
+  const text = String(reason || "").replace(/\s+/g, " ").trim();
+  return text && text.length <= 24 ? `${label} (${text})` : label;
+}
+
 function formatMetadataRepairDetail(infoResult, fillerResult) {
   const parts = [];
 
@@ -144,12 +151,16 @@ function formatMetadataRepairDetail(infoResult, fillerResult) {
     parts.push("movie/OVA");
   } else if (fillerResult?.status === "failed") {
     const rawErr = String(fillerResult.error || "");
-    if (/504|timeout/i.test(rawErr)) {
+    if (/afl_index_unavailable/i.test(rawErr)) {
+      parts.push(withShortReason("filler site unreachable", rawErr.replace(/^.*afl_index_unavailable:?\s*/i, "")));
+    } else if (/jikan_circuit_open/i.test(rawErr)) {
+      parts.push("filler paused, retry later");
+    } else if (/504|timeout/i.test(rawErr)) {
       parts.push("filler timed out");
     } else if (/429|rate_limited|busy/i.test(rawErr)) {
       parts.push("filler rate limited");
     } else {
-      parts.push("filler unavailable");
+      parts.push(withShortReason("filler unavailable", rawErr));
     }
   }
 
@@ -798,6 +809,8 @@ async function startLibraryRepair(options = {}) {
   const isTargeted = Array.isArray(options.onlySlugs) && options.onlySlugs.length > 0;
   const requestedAutoMode = options.auto === true ? true : options.auto === false ? false : null;
   const requestedOrigin = normalizeMetadataRepairOrigin(options.origin, isTargeted, requestedAutoMode);
+  // The user pressed Fetch & Import (or retry): do not refuse them with a pause left by an earlier failure.
+  if (requestedOrigin === "manual" && typeof resetFillerFetchBreakers === "function") resetFillerFetchBreakers();
 
   let existing = await getMetadataRepairState();
   if (existing?.status === "running") {

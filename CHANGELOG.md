@@ -12,6 +12,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.2] — 2026-10-05
+
+### Fixed
+
+- Keep the Continue Watching shelf full width, directly under the hero. When the page anchor it is
+  mounted beside (the site's share widget or the hero) sits in a flex row or a grid, the shelf became one
+  more column: squeezed, offset to the right and pushed to the top of the page next to the hero, mostly on
+  phones. It now climbs out of any row layout and is placed after the row that held the anchor.
+- Stop an unreachable AnimeFillerList from failing the whole library in Fetch & Import. A failed index
+  load used to be read as "no shows listed": every show went to Jikan, was cached as having no filler,
+  and one Jikan timeout opened a one-hour circuit, so dozens of shows ended as "filler unavailable". An
+  unreachable index is now reported as such (with the HTTP status or network error), requested once per
+  sweep, and nothing is cached as a miss. Prior filler data is kept.
+- A manual Fetch & Import run clears the failure memory and the Jikan circuit, so a retry is never refused
+  by an earlier bad moment.
+- Jikan timeouts on mobile are 5s (search) and 7s (episodes), up from 2.5s and 3.5s, which a phone on mobile
+  data regularly missed.
+- Titles that differ only in word breaks ("Dandadan" and "DAN DA DAN") match as the same show instead of
+  falling through to Jikan.
+- Failed rows say why (filler site unreachable, filler paused, or a short reason) instead of one generic
+  "filler unavailable".
+
+### Added
+
+- `dev/test/continue-watching-layout.test.js` checks the shelf position in a real browser at phone size across
+  six page layouts, and `dev/test/filler-fetch-resilience.test.js` covers the filler failure paths.
+
 ## [8.2.1] — 2026-10-04
 
 ### Fixed
