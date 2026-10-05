@@ -48,7 +48,9 @@ const AN1ME_TAB_OPT_IN_KEY = "an1meGatewayTabEnabled";
 // opt-in nothing ever set. Set the storage key to false to forbid it. Not on phones: Safari on iOS
 // has no hidden tabs, so the user would watch an1me.to pages open by themselves; there the gateway
 // only borrows a tab the user already has open.
-const AN1ME_TAB_CREATE_DEFAULT = !AnimeTrackerUtils.isMobileDevice();
+// Asked when a tab is needed rather than once at load: an iPad reports a Mac, and the worker only learns it is
+// mobile once the runtime reports the platform. Opening hidden tabs there would show them to the user.
+const an1meTabCreateDefault = () => !AnimeTrackerUtils.isMobileDevice();
 const AN1ME_DEFAULT_TIMEOUT_MS = 15000;
 // A slow page is the normal reason a first attempt times out (the episode index for a
 // 1000-episode series is genuinely large), so the retry gets a longer budget, not a shorter one.
@@ -67,7 +69,9 @@ let _an1meAcquiring = null;
 
 let _an1meDirectFailStreak = 0;
 let _an1meDirectRetryAt = 0;
-let _an1meTabOptIn = AN1ME_TAB_CREATE_DEFAULT;
+// null: no stored choice, so the device default applies (an1meTabCreationAllowed).
+let _an1meTabOptIn = null;
+const an1meTabCreationAllowed = () => (_an1meTabOptIn === null ? an1meTabCreateDefault() : _an1meTabOptIn);
 let _an1meLastChallengeLogAt = 0;
 let _an1meSuppressedChallengeLogs = 0;
 
@@ -89,13 +93,13 @@ try {
     .get([AN1ME_TAB_OPT_IN_KEY])
     .then((stored) => {
       const value = stored?.[AN1ME_TAB_OPT_IN_KEY];
-      _an1meTabOptIn = value === undefined ? AN1ME_TAB_CREATE_DEFAULT : value === true;
+      _an1meTabOptIn = value === undefined ? null : value === true;
     })
     .catch(() => {});
   chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace !== "local" || !changes[AN1ME_TAB_OPT_IN_KEY]) return;
     const value = changes[AN1ME_TAB_OPT_IN_KEY].newValue;
-    _an1meTabOptIn = value === undefined ? AN1ME_TAB_CREATE_DEFAULT : value === true;
+    _an1meTabOptIn = value === undefined ? null : value === true;
   });
 } catch {}
 
@@ -272,7 +276,7 @@ async function acquireAn1meTab() {
       }
     }
 
-    if (!_an1meTabOptIn) return null;
+    if (!an1meTabCreationAllowed()) return null;
 
     let created;
     try {
@@ -634,7 +638,7 @@ try {
       usingTabId: _an1meTabId,
       tabOwnedByUs: _an1meTabOwned,
       leases: _an1meLeases,
-      tabCreationAllowed: _an1meTabOptIn,
+      tabCreationAllowed: an1meTabCreationAllowed(),
       inflight: _an1meInflight.size,
       ..._an1meCounters,
     };

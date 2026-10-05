@@ -17,8 +17,10 @@ const METADATA_REPAIR_MODAL_FETCH_THRESHOLD = 8;
 // "from scratch" rather than a top-up.
 const METADATA_REPAIR_MODAL_FETCH_RATIO = 0.6;
 const METADATA_REPAIR_ORIGINS = new Set(["manual", "sign-in", "targeted", "background"]);
-const isMobileUA = AnimeTrackerUtils.isMobileDevice();
-const METADATA_REPAIR_MAX_ATTEMPTS = isMobileUA ? 1 : 2;
+// Asked at each use rather than once at load: in the worker an iPad is only known as mobile once the runtime
+// has reported the platform (see AnimeTrackerUtils.rememberPlatformOs).
+const isMobileUA = () => AnimeTrackerUtils.isMobileDevice();
+const metadataRepairMaxAttempts = () => (isMobileUA() ? 1 : 2);
 const METADATA_REPAIR_RETRY_BASE_DELAY_MS = 1500;
 
 function normalizeMetadataRepairOrigin(value, isTargeted = false, isAuto = null) {
@@ -85,7 +87,7 @@ function isRetryableMetadataRepairError(error) {
 
 async function runMetadataRepairWithRetry(task, options = {}) {
   const {
-    attempts = METADATA_REPAIR_MAX_ATTEMPTS,
+    attempts = metadataRepairMaxAttempts(),
     baseDelayMs = METADATA_REPAIR_RETRY_BASE_DELAY_MS,
     shouldRetry = isRetryableMetadataRepairError,
   } = options;
@@ -162,8 +164,8 @@ function formatMetadataRepairDetail(infoResult, fillerResult) {
     parts.push("movie/OVA");
   } else if (fillerResult?.status === "failed") {
     const rawErr = String(fillerResult.error || "");
-    if (/afl_index_unavailable/i.test(rawErr)) {
-      parts.push(withShortReason("filler site unreachable", rawErr.replace(/^.*afl_index_unavailable:?\s*/i, "")));
+    if (/afl_(?:index|page)_unavailable/i.test(rawErr)) {
+      parts.push(withShortReason("filler site unreachable", rawErr.replace(/^.*afl_(?:index|page)_unavailable:?\s*/i, "")));
     } else if (/jikan_circuit_open/i.test(rawErr)) {
       parts.push("filler paused, retry later");
     } else if (/jikan_offline/i.test(rawErr)) {
@@ -227,7 +229,7 @@ async function buildLibraryRepairPlan(animeData, options = {}) {
   const forceInfoRefresh = options.forceInfoRefresh === true;
   const forceFillerRefresh = options.forceFillerRefresh === true;
   const retryFailures = options.retryFailures === true;
-  const isMobile = options.isMobile === true || isMobileUA;
+  const isMobile = options.isMobile === true || isMobileUA();
   const onlySlugs = Array.isArray(options.onlySlugs) && options.onlySlugs.length ? new Set(options.onlySlugs) : null;
   const prioritySlugs = new Set(Array.isArray(options.prioritySlugs) ? options.prioritySlugs : []);
   const entries = Object.entries(animeData || {})
@@ -428,6 +430,49 @@ function repairAnimeInfoCache(slug, forceRefresh = true) {
 
 const episodeTypesRepairInflight = new Map();
 
+// Reuse an already-cached MAL id if AniSkip resolved one, so the Jikan search can be skipped entirely. Read
+// straight from the bundle rather than via getMalIdForSlug, which would kick off exactly the search we are
+// trying to avoid. Only an id the AniSkip lookup confirmed by title match: unmarked entries came from a blind
+// first-search-result pick, and reusing one here put another show's filler data on this entry.
+async function readConfirmedMalId(slug) {
+  try {
+    const bundleRead = await bgStorageGet(["malIdForSlugBundle"]);
+    const malEntry = bundleRead.malIdForSlugBundle?.[slug];
+    return malEntry?.matched === true ? Number(malEntry.malId) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// AnimeFillerList could not be reached: Safari can block it on a phone, Cloudflare can challenge it, or the
+// site is down. Jikan carries MAL's filler flags and is often reachable when AnimeFillerList is not, so it
+// fills the gap, with three limits. Only a positive answer is used (no answer stays a retryable failure,
+// never "no filler"). Data already cached from AnimeFillerList, which also tells mixed canon apart, is kept
+// rather than replaced. And the entry is marked so it is refreshed sooner, to move back to AnimeFillerList.
+async function fetchJikanForUnreachableAfl(error, { slug, title, info, cached, matchesInfoTotal }) {
+  if (!(error?.aflIndexUnavailable === true || error?.aflUnreachable === true) || !title) return null;
+  if (typeof fetchJikanEpisodes !== "function") return null;
+  if (self.AnimeTrackerCachePolicy.isFillerUsableSnapshot(cached) && cached._source !== "jikan") return null;
+  try {
+    const types = await fetchJikanEpisodes(title, {
+      malId: await readConfirmedMalId(slug),
+      extraKeys: typeof collectFillerMatchKeys === "function" ? collectFillerMatchKeys(slug, title, info) : [],
+    });
+    if (!types || !matchesInfoTotal(types)) return null;
+    return {
+      ...types,
+      schemaVersion: self.AnimeTrackerCachePolicy.EPISODE_TYPES_SCHEMA_VERSION,
+      cachedAt: Date.now(),
+      _source: "jikan",
+      _fillerSlug: slug,
+      aflFallback: true,
+    };
+  } catch {
+    // Jikan failed too: report the AnimeFillerList failure, which is the one the user can act on.
+    return null;
+  }
+}
+
 async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = true, mediaType = null, mediaTypeUpdatedAt = null) {
   const key = `episodeTypes_${slug}`;
   const infoKey = `animeinfo_${slug}`;
@@ -534,20 +579,8 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
 
     if (episodeTypes && !matchesInfoTotal(episodeTypes)) episodeTypes = null;
     if (!episodeTypes && title) {
-      // Reuse an already-cached MAL id if AniSkip resolved one, so the Jikan search can be
-      // skipped entirely. Read straight from the bundle rather than via getMalIdForSlug, which
-      // would kick off exactly the search we are trying to avoid.
-      let cachedMalId = 0;
-      try {
-        const bundleRead = await bgStorageGet(["malIdForSlugBundle"]);
-        // Only an id the AniSkip lookup confirmed by title match. Unmarked entries came from a blind
-        // first-search-result pick, and reusing one here put another show's filler data on this entry.
-        const malEntry = bundleRead.malIdForSlugBundle?.[slug];
-        cachedMalId = malEntry?.matched === true ? Number(malEntry.malId) || 0 : 0;
-      } catch {}
-
       const jikanTypes = await fetchJikanEpisodes(title, {
-        malId: cachedMalId,
+        malId: await readConfirmedMalId(slug),
         extraKeys: collectFillerMatchKeys(slug, title, info),
       });
       // An empty filler array is a valid all-canon result; the object and episode-total match are the validity checks.
@@ -560,6 +593,16 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
   } catch (error) {
     // Offline: touch nothing, the same as for the info entry above.
     if (isBrowserOffline()) throw error;
+    const fallback = await fetchJikanForUnreachableAfl(error, { slug, title, info, cached, matchesInfoTotal });
+    if (fallback) {
+      await bgStorageSet({ [key]: fallback });
+      return {
+        status: "fetched",
+        entry: fallback,
+        fillerCount: fallback.filler?.length || 0,
+        totalEpisodes: fallback.totalEpisodes || null,
+      };
+    }
     // Transient failure: cache a short retryable backoff so it isn't re-fetched every sweep. Keep prior data if any.
     // retryAt (not cachedAt) carries the backoff timestamp so prior valid data keeps its original cachedAt
     // and stays usable/displayable during the backoff window.
@@ -831,7 +874,7 @@ async function runMetadataRepairBatch(options = {}) {
       }
 
       await setMetadataRepairState(state);
-      await AnimeTrackerUtils.sleep(gentle ? METADATA_REPAIR_PLAYBACK_DELAY_MS : isMobileUA ? 1500 : METADATA_REPAIR_INTER_ITEM_DELAY_MS);
+      await AnimeTrackerUtils.sleep(gentle ? METADATA_REPAIR_PLAYBACK_DELAY_MS : isMobileUA() ? 1500 : METADATA_REPAIR_INTER_ITEM_DELAY_MS);
     }
   } catch (error) {
     console.error("[BG] Library repair failed:", error);

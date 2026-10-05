@@ -21,7 +21,7 @@ function worker(responses, initial = {}, env = {}) {
   vm.runInContext(read("src/common/data/cache-policy.js"), c);
   vm.runInContext(read("src/background/fetchers/aniskip.js"), c);
   const s = read("src/background/fetchers/filler-discovery.js");
-  vm.runInContext("const FILLER_MATCH_THRESHOLD = 0.82;\n" + s.slice(s.indexOf("async function fetchJikanEpisodes"), s.indexOf("try {\n  globalThis.fillerStats")), c);
+  vm.runInContext("const FILLER_MATCH_THRESHOLD = 0.82;\n" + s.slice(s.indexOf("const JIKAN_MOBILE_SEARCH_TIMEOUT_MS"), s.indexOf("try {\n  globalThis.fillerStats")), c);
   return { c, store, calls: () => calls, advance: ms => now += ms };
 }
 const response = (status, data) => ({ ok: status >= 200 && status < 300, status, headers: { get: () => null }, json: async () => data });
@@ -102,6 +102,16 @@ const match = response(200, { data: [{ mal_id: 20, title: "Naruto" }] });
     const h = worker([response(404)], outroCache(1300));
     assert.equal(await h.c.fetchAniSkipOutroStart("bleach", "Bleach", 5, 1440), null);
     assert.equal(h.store.aniSkipOutroBundle["30:5"].outroStart, null);
+  });
+  await test("Jikan requests wait for their turn, about one a second", async () => {
+    const h = worker([match, response(200, { data: [{ mal_id: 1 }, { mal_id: 2, filler: true }], pagination: { has_next_page: false } })]);
+    const sentAt = [];
+    const send = h.c.fetch;
+    h.c.fetch = (...args) => { sentAt.push(performance.now()); return send(...args); };
+    const types = await h.c.fetchJikanEpisodes("Naruto");
+    assert.deepEqual([...types.filler], [2]);
+    assert.equal(sentAt.length, 2, "a search, then the episode page");
+    assert.ok(sentAt[1] - sentAt[0] >= 950, `the episode page waited ${Math.round(sentAt[1] - sentAt[0])}ms`);
   });
   await test("only legacy negative filler caches expire; valid episode data stays warm", () => {
     const h = worker([]); const p = h.c.AnimeTrackerCachePolicy;

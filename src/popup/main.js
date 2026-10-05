@@ -598,11 +598,15 @@
   function renderSmartNotifSetting(enabled, status = null) {
     const btn = document.getElementById(TOGGLE_SETTINGS.smartNotif.btnId);
     const subtitle = document.getElementById(TOGGLE_SETTINGS.smartNotif.subtitleId);
-    // Safari cannot show extension notifications, so the alert has nowhere to go.
-    if (status?.supported === false) {
+    // Safari cannot show extension notifications, so the alert has nowhere to go. The popup can see that
+    // for itself, before (or without) the background's answer.
+    if (status?.supported === false || AT.SettingsView?.alertsUnavailable?.() === true) {
       renderToggle("smartNotif", false);
       if (btn) {
-        btn.disabled = true;
+        // aria-disabled rather than disabled, like the other switches a phone cannot use: a tap still reaches
+        // the click handler, which says why instead of doing nothing.
+        btn.setAttribute("aria-disabled", "true");
+        btn.dataset.mobileDisabled = "true";
         btn.dataset.unsupported = "true";
       }
       if (subtitle) subtitle.textContent = "Not available on this browser";
@@ -1751,7 +1755,15 @@
         e.stopPropagation();
         if (smartNotifToggleInFlight) return;
         const btn = document.getElementById("settingsSmartNotif");
-        if (!btn || btn.dataset.unsupported === "true") return;
+        if (!btn || btn.dataset.unsupported === "true" || AT.SettingsView?.alertsUnavailable?.() === true) {
+          if (btn) {
+            AT.UIHelpers?.showToast?.("New episode alerts need notifications, which this browser does not give extensions", {
+              type: "info",
+              duration: 2800,
+            });
+          }
+          return;
+        }
         const currentlyEnabled = btn.dataset.enabled === "true";
         const nextEnabled = !currentlyEnabled;
         smartNotifToggleInFlight = true;

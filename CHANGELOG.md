@@ -12,6 +12,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.4] — 2026-10-05
+
+### Fixed
+
+- Filler data no longer depends on AnimeFillerList alone. When it cannot be reached (Safari blocking the
+  site on a phone, a Cloudflare challenge, or the site being down), a show with no filler data yet is filled
+  from Jikan (MyAnimeList's filler flags) instead of staying "needs retry". Only a positive answer with the
+  same episode count is used: no answer is never cached as "no filler", and data already cached from
+  AnimeFillerList, which also tells mixed canon apart, is kept rather than replaced. The stand-in is checked
+  again after three days so it moves back to AnimeFillerList once that answers. A show page that cannot be
+  read falls back the same way.
+- Fetch & Import rows say why AnimeFillerList failed: **no site access** when the browser does not let the
+  extension reach it (on iPhone: set All Websites to Allow), **blocked by Cloudflare** for a challenge, or
+  the HTTP status or network error.
+- Jikan requests are spaced about a second apart, under Jikan's rate limit, so a sweep that leans on it is
+  not answered with 429s.
+- Very long series (One Piece, Detective Conan) get every episode from Jikan instead of stopping at 1000
+  and failing as incomplete.
+- Fetch & Import rows can be read on a phone. Each reason was squeezed beside the show's title and cut to
+  "info cached • filler site unr…"; it now sits whole on its own line under the title, and the feed shows
+  about seven rows on a phone instead of three. The desktop popup gets the same layout at its usual height.
+- The episode-complete card, the Resume prompt and the "Caught up early?" prompt stay on the screen of a
+  narrow phone or an iPhone with Safari's page zoom up. The "Caught up early?" prompt was wider than every
+  iPhone (340px plus padding) and hung off the left edge.
+- New Episode Alerts shows as unavailable in Safari as soon as Settings opens, and a tap says why. It used to
+  look switchable until the background answered, and stayed that way when a suspended iPhone worker answered
+  late.
+- An iPad is treated as a mobile device by the background too. Safari on iPad reports a Mac, and a service
+  worker has no touch-point count to tell them apart, so the background opened hidden an1me.to tabs (which an
+  iPad shows), kept AniList running and used desktop timeouts there. It now asks the extension runtime for
+  the platform.
+
 ## [8.2.3] — 2026-10-05
 
 ### Fixed

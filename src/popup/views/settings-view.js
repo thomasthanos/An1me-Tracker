@@ -139,8 +139,17 @@
         `;
   }
 
+  // Safari gives extensions no notifications API, so the alerts switch has nothing to turn on. Known here
+  // straight away: waiting for the background to say so left the switch looking live whenever the iPhone's
+  // suspended worker answered late.
+  const ALERTS_UNAVAILABLE_SUBTITLE = "Not available on this browser";
+  function alertsUnavailable() {
+    return typeof globalThis.chrome?.notifications?.create !== "function";
+  }
+
   function renderPreferencesSection(state) {
     const isMobile = !!(globalThis.AnimeTrackerUtils?.isMobileDevice?.());
+    const noAlerts = alertsUnavailable();
     const items = [
       renderToggleItem({
         id: "settingsCopyGuard",
@@ -156,8 +165,9 @@
         subtitleId: "settingsSmartNotifSubtitle",
         iconKey: "bell",
         title: "New Episode Alerts",
-        subtitle: toggleSubtitle("settingsSmartNotif", state.smartNotif),
+        subtitle: noAlerts ? ALERTS_UNAVAILABLE_SUBTITLE : toggleSubtitle("settingsSmartNotif", state.smartNotif),
         enabled: state.smartNotif,
+        disabled: noAlerts,
       }),
       renderToggleItem({
         id: "settingsAutoSkipFiller",
@@ -726,7 +736,10 @@
     const btn = document.getElementById(id);
     if (!btn) return;
     const isMobile = !!(globalThis.AnimeTrackerUtils?.isMobileDevice?.());
-    const isMobileDisabledKey = isMobile && (id === "settingsCopyGuard" || id === "settingsSkiptime" || id === "settingsAuto4kServer");
+    const isMobileDisabledKey =
+      (isMobile && (id === "settingsCopyGuard" || id === "settingsSkiptime" || id === "settingsAuto4kServer")) ||
+      (id === "settingsSmartNotif" && alertsUnavailable());
+    if (id === "settingsSmartNotif" && alertsUnavailable()) subtitle = ALERTS_UNAVAILABLE_SUBTITLE;
     const prev = btn.getAttribute("aria-pressed") === "true";
     const en = !isMobileDisabledKey && !!enabled;
     btn.dataset.enabled = en ? "true" : "false";
@@ -754,7 +767,7 @@
   }
 
   window.AnimeTracker = window.AnimeTracker || {};
-  window.AnimeTracker.SettingsView = { render, updateToggle, toggleSubtitle, initializeSpeedControl };
+  window.AnimeTracker.SettingsView = { render, updateToggle, toggleSubtitle, initializeSpeedControl, alertsUnavailable };
 
   const initialContainer = document.getElementById("settingsView");
   if (initialContainer) {

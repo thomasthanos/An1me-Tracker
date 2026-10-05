@@ -381,6 +381,18 @@ const Notifications = {
                     0%, 100% { left: -100% }
                     50% { left: 200% }
                 }
+                /* 280px plus padding was wider than a narrow phone, or an iPhone with Safari's page zoom up,
+                   and the prompt hung off both edges. */
+                @media (max-width: 480px) {
+                    #anime-tracker-resume-prompt {
+                        box-sizing: border-box;
+                        min-width: 0;
+                        width: max-content;
+                        max-width: calc(100vw - 24px);
+                        padding: 16px 18px;
+                    }
+                    #anime-tracker-resume-prompt .at-btn { padding: 11px 14px; }
+                }
             `,
     });
     (doc.head || doc.documentElement).appendChild(style);
@@ -598,6 +610,24 @@ const Notifications = {
                 @keyframes atProgress {
                     0% { width: 100% }
                     100% { width: 0% }
+                }
+                /* A fixed 340px card 30px from the right edge started off-screen on narrow phones and on
+                   iPhones with Safari's page zoom up; there it spans the width with a small margin. */
+                @media (max-width: 480px) {
+                    #anime-tracker-notification-stack {
+                        right: 16px;
+                        left: 16px;
+                        bottom: 16px;
+                        max-width: none;
+                    }
+                    .at-notification-item {
+                        max-width: none;
+                        padding: 16px 18px;
+                        gap: 14px;
+                    }
+                    /* The card is now as wide as the screen; let the title use that room. */
+                    .at-notif-text { min-width: 0; }
+                    .at-notif-text span { max-width: 100%; }
                 }
                 @media (prefers-reduced-motion: reduce) {
                     .at-notification-item,
@@ -873,6 +903,19 @@ const Notifications = {
                 .at-backlog-no:hover { background: var(--at-bg-no-hover); color: var(--at-text-primary); transform: translateY(-2px) scale(1.02); }
                 .at-backlog-btn:active { transform: translateY(1px) scale(0.97); transition-duration: .1s; }
 
+                /* 340px plus padding (386px in all) hung off the left edge of every iPhone: max-width capped
+                   only the content box. On a phone the prompt spans the width with a small margin. */
+                @media (max-width: 480px) {
+                    .at-backlog-prompt {
+                        box-sizing: border-box;
+                        left: 16px;
+                        right: 16px;
+                        bottom: 16px;
+                        width: auto;
+                        max-width: none;
+                    }
+                    .at-backlog-title { max-width: 100%; }
+                }
                 @media (prefers-reduced-motion: reduce) {
                     .at-backlog-prompt,
                     .at-backlog-prompt.at-hiding { animation: none !important; transition: opacity .18s linear; }
