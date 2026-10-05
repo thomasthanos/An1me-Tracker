@@ -213,10 +213,14 @@
       needsReauth,
     });
     await AT.refreshSmartNotificationStatus?.();
-    // Filler sites the browser keeps the extension off (on an iPhone, left on Ask): say which, and how to allow them.
-    void AT.SiteAccess?.render(document.getElementById("settingsSiteAccess"), {
-      onGranted: () => AT.UIHelpers?.showToast?.("Access allowed: Fetch & Import can reach the filler sites", { type: "success", duration: 2600 }),
-    });
+    const accessContainer = document.getElementById("settingsSiteAccess");
+    if (globalThis.AnimeTrackerUtils?.isMobileDevice?.()) {
+      void AT.SiteAccess?.renderSetup(accessContainer);
+    } else {
+      void AT.SiteAccess?.render(accessContainer, {
+        onGranted: () => AT.UIHelpers?.showToast?.("Access allowed: Fetch & Import can reach the filler sites", { type: "success", duration: 2600 }),
+      });
+    }
 
     container.scrollTop = 0;
     if (mainContent) mainContent.scrollTop = 0;

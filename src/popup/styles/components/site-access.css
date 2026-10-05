@@ -17,7 +17,7 @@
 .site-access strong { color: var(--t1); font-weight: 600; }
 .site-access-btn {
   align-self: flex-start;
-  min-height: 36px;
+  min-height: 44px;
   padding: 6px 16px;
   color: rgb(20, 14, 4);
   background: rgb(236, 184, 90);
@@ -30,3 +30,9 @@
 }
 .site-access-btn:active { transform: translateY(1px); }
 .settings-view .site-access { margin-bottom: 12px; }
+.site-access-setup { margin-bottom: 12px; text-align: left; }
+.site-access-title { margin: 0; font-size: 13px; font-weight: 700; color: var(--t1); }
+.site-access-hosts { font-size: 11.5px; color: var(--t2); }
+.site-access-hosts summary { cursor: pointer; min-height: 24px; }
+.site-access-hosts ul { margin: 6px 0 0; padding-left: 18px; max-height: 100px; overflow-y: auto; overflow-wrap: anywhere; }
+.site-access-btn:disabled { cursor: wait; opacity: .65; }

@@ -538,25 +538,5 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.equal((await h.resolve("noragami", { forceFillerRefresh: true })).fillerResult.status, "fetched");
   });
 
-  await test("after install or update, Safari is asked for the filler sites it declares optional, once and only if needed", async () => {
-    const ask = async ({ optional, granted }) => {
-      const h = worker();
-      const requests = [];
-      h.c.chrome.runtime.getManifest = () => ({ version: "8.2.7", optional_host_permissions: optional });
-      h.c.chrome.permissions = {
-        contains: async () => granted,
-        request: async (request) => { requests.push([...request.origins]); return true; },
-      };
-      const result = await h.c.requestFillerSiteAccess();
-      return { result, requests };
-    };
-    const filler = ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"];
-    const safari = await ask({ optional: filler, granted: false });
-    assert.deepEqual(safari.requests, [filler], "both sites in one request");
-    assert.equal(safari.result, true);
-    assert.deepEqual((await ask({ optional: filler, granted: true })).requests, [], "nothing asked when already allowed");
-    assert.deepEqual((await ask({ optional: undefined, granted: false })).requests, [], "Chrome requires them: nothing to ask");
-  });
-
   process.exitCode = failures ? 1 : 0;
 })();

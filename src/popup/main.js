@@ -2500,6 +2500,8 @@
 
   async function init() {
     const { FirebaseSync, Storage, FillerFetchUI } = AT;
+    // Check once on popup open and on real permission events. No background polling or fetches.
+    AT.SiteAccess?.mountSetup([document.getElementById("authSiteAccess"), document.getElementById("mobileSiteAccess")]);
 
     try {
       const _popupAlivePort = chrome.runtime.connect({ name: "popupAlive" });

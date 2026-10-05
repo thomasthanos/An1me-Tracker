@@ -5,7 +5,7 @@ const root = path.join(__dirname, "../../..");
 const clone = value => value === undefined ? undefined : structuredClone(value);
 function cloudWorker(initial = {}, cloud = {}, options = {}) {
   let now = options.now ?? Date.parse("2026-10-04T12:00:00Z"), failNextPatch = false, failPatches = false;
-  const store = clone(initial), remote = clone(cloud), alarms = new Map(options.alarms || []), requests = [];
+  const store = clone(initial), remote = clone(cloud), alarms = new Map(options.alarms || []), requests = [], installedListeners = [];
   class Clock extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } }
   const settle = (value, callback) => typeof callback === "function" ? (queueMicrotask(() => callback(value)), undefined) : Promise.resolve(value);
   const event = () => ({ addListener() {}, removeListener() {}, hasListener: () => false });
@@ -13,7 +13,7 @@ function cloudWorker(initial = {}, cloud = {}, options = {}) {
     apply: (_, __, args) => settle(undefined, args.find(value => typeof value === "function")) });
   const chrome = new Proxy({
     runtime: { id: "test", lastError: null, getManifest: () => JSON.parse(fs.readFileSync(path.join(root, "manifest.json"))),
-      getURL: file => "chrome-extension://test/" + file, onMessage: event(), onConnect: event(), onInstalled: event(), onStartup: event(), sendMessage: () => Promise.resolve() },
+      getURL: file => "chrome-extension://test/" + file, onMessage: event(), onConnect: event(), onInstalled: { addListener: listener => installedListeners.push(listener) }, onStartup: event(), sendMessage: () => Promise.resolve() },
     storage: { local: { get: (keys, callback) => {
       const list = keys == null ? Object.keys(store) : typeof keys === "string" ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys);
       return settle(clone(Object.fromEntries(list.filter(key => key in store).map(key => [key, store[key]]))), callback);
@@ -46,7 +46,7 @@ function cloudWorker(initial = {}, cloud = {}, options = {}) {
   const run = file => vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, { filename: file });
   sandbox.importScripts = (...files) => files.forEach(run);
   run("background.js");
-  return { store, remote, alarms, requests, context, call, now: () => now, advance: ms => now += ms,
+  return { store, remote, alarms, requests, installedListeners, context, call, now: () => now, advance: ms => now += ms,
     failNextPatch: () => failNextPatch = true,
     failPatches: value => failPatches = value,
     request: (name, message = {}) => new Promise(resolve => call("messageHandlers." + name, { ...message, waitForCompletion: true }, {}, resolve)),

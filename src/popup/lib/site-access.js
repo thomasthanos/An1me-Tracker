@@ -1,13 +1,5 @@
-// site-access.js — whether the browser lets the extension reach the filler sites, and how to allow them.
-//
-// Safari lists every host from the manifest under the extension's settings, each Allow, Ask or Deny; there is
-// no "All Websites" switch for an extension that names its hosts. A host left on Ask still answers requests
-// that its own CORS headers allow, which is why sign-in, cloud sync and Jikan keep working there. AnimeFillerList
-// sends no CORS headers, so it can only be read with Allow, and every filler lookup fails as "no site access"
-// until then. Jikan is asked for too: with Allow its real errors (a 429, a 5xx) come through instead of a bare
-// "Load failed". Chrome grants hosts at install but lets the user withhold them per site; the check covers it.
-// Safari shows its own prompt for hosts the manifest declares optional (the Safari build declares these two that
-// way, see dev/scripts/package.js) once the extension requests them; for required hosts it shows nothing.
+// Safari's supporting hosts are optional in the packaged manifest so an explicit tap can request them together.
+// Setup only checks permission state; it does no fetching, polling or storage migration.
 (function () {
   "use strict";
 
@@ -18,8 +10,11 @@
   const SETTINGS_PATH = "Settings → Apps → Safari → Extensions → An1me.to Tracker";
 
   function permissionsApi() {
+    // browser.* uses promises only; chrome.* accepts callbacks. Safari exposes the former too.
+    const browserApi = globalThis.browser?.permissions;
+    if (typeof browserApi?.contains === "function") return { api: browserApi, promiseOnly: true };
     const api = globalThis.chrome?.permissions;
-    return typeof api?.contains === "function" ? api : null;
+    return typeof api?.contains === "function" ? { api, promiseOnly: false } : null;
   }
 
   // The name Safari shows for the host in the extension's settings.
@@ -29,58 +24,70 @@
 
   // Whether the browser says the extension may reach `origin`. Any doubt (an error, no answer) counts as allowed:
   // a false alarm would send the user hunting for a setting that is already right.
-  function isAllowed(api, origin) {
+  function isAllowed(provider, origin, unknown = true) {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(true), 1500);
-      const done = (granted) => { clearTimeout(timer); resolve(granted !== false); };
+      const timer = setTimeout(() => resolve(unknown), 1500);
+      const done = (granted) => { clearTimeout(timer); resolve(typeof granted === "boolean" ? granted : unknown); };
       try {
-        const pending = api.contains({ origins: [origin] }, done);
-        if (pending && typeof pending.then === "function") pending.then(done, () => done(true));
+        const details = { origins: [origin] };
+        const pending = provider.promiseOnly ? provider.api.contains(details) : provider.api.contains(details, done);
+        if (pending && typeof pending.then === "function") pending.then(done, () => done(unknown));
       } catch {
-        done(true);
+        done(unknown);
       }
     });
   }
 
   // The needed origins the browser keeps the extension off, in GROUPS order. Empty without a permissions API.
   async function blockedOrigins() {
-    const api = permissionsApi();
-    if (!api) return [];
+    const provider = permissionsApi();
+    if (!provider) return [];
     const all = GROUPS.flatMap((group) => group.origins);
-    const allowed = await Promise.all(all.map((origin) => isAllowed(api, origin)));
+    const allowed = await Promise.all(all.map((origin) => isAllowed(provider, origin)));
     return all.filter((_origin, index) => !allowed[index]);
   }
 
   // Must run straight from a click: browsers only show the permission prompt for a user gesture. Calls back
   // once, with true when granted; false when refused, unsupported or failed.
   function request(origins, callback) {
-    const api = permissionsApi();
+    const provider = permissionsApi();
     let settled = false;
+    let timer = null;
     // A browser can answer through both the callback and the promise; act on the first answer only.
     const settle = (granted) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       callback(granted === true);
     };
-    if (typeof api?.request !== "function" || !origins.length) {
+    if (typeof provider?.api?.request !== "function" || !origins.length) {
       settle(false);
       return;
     }
     try {
-      const pending = api.request({ origins }, settle);
+      // A missing callback must not leave the access button disabled forever. Late grants
+      // are picked up by the permission event listener even after this bounded wait.
+      timer = setTimeout(() => settle(false), 30_000);
+      const details = { origins };
+      const pending = provider.promiseOnly ? provider.api.request(details) : provider.api.request(details, settle);
       if (pending && typeof pending.then === "function") pending.then(settle, () => settle(false));
     } catch {
       settle(false);
     }
   }
 
-  // The filler origins this build declares optional, which Safari will prompt for when requested.
-  function optionalOrigins() {
+  function declaredOptionalOrigins() {
     let declared = [];
     try {
-      declared = globalThis.chrome?.runtime?.getManifest?.()?.optional_host_permissions || [];
+      const runtime = globalThis.browser?.runtime || globalThis.chrome?.runtime;
+      declared = runtime?.getManifest?.()?.optional_host_permissions || [];
     } catch {}
-    return GROUPS.flatMap((group) => group.origins).filter((origin) => declared.includes(origin));
+    return [...new Set(Array.isArray(declared) ? declared.filter(origin => typeof origin === "string") : [])];
+  }
+
+  function optionalOrigins() {
+    const declared = declaredOptionalOrigins();
+    return GROUPS.flatMap((group) => group.origins).filter(origin => declared.includes(origin));
   }
 
   // A desktop browser shows its prompt for any host the user withheld. Safari on iPhone and iPad prompts only for
@@ -95,7 +102,7 @@
   // shows its prompt only for those not granted yet, and answers at once for the rest. Calls back once, with
   // true when everything asked for is allowed; at once with true where nothing is optional (Chrome).
   function askIfOptional(callback) {
-    const origins = optionalOrigins();
+    const origins = declaredOptionalOrigins();
     if (!origins.length) {
       callback(true);
       return;
@@ -158,7 +165,7 @@
     container.append(fallback);
 
     button.addEventListener("click", () => {
-      request(blocked, (granted) => {
+      request(phone ? declaredOptionalOrigins() : blocked, (granted) => {
         if (!granted) {
           fallback.hidden = false;
           return;
@@ -170,6 +177,73 @@
     return blocked;
   }
 
+  const setupGenerations = new WeakMap();
+
+  async function renderSetup(containers) {
+    const targets = (Array.isArray(containers) ? containers : [containers]).filter(Boolean);
+    const tokens = targets.map(container => {
+      const token = {}; setupGenerations.set(container, token); return token;
+    });
+    const origins = globalThis.AnimeTrackerUtils?.isMobileDevice?.() ? declaredOptionalOrigins() : [];
+    const provider = permissionsApi();
+    const granted = provider ? await Promise.all(origins.map(origin => isAllowed(provider, origin, false))) : origins.map(() => false);
+    const missing = origins.filter((_origin, index) => !granted[index]);
+    targets.forEach((container, index) => {
+      if (setupGenerations.get(container) !== tokens[index] || !container.isConnected) return;
+      container.replaceChildren(); container.hidden = !missing.length;
+      if (!missing.length) return;
+      const doc = container.ownerDocument;
+      const element = (tag, className, text) => {
+        const node = doc.createElement(tag); if (className) node.className = className;
+        if (text != null) node.textContent = text; return node;
+      };
+      container.append(element("p", "site-access-title", "Safari website access"),
+        element("p", "site-access-text", "Allow the websites used for metadata, covers, Skip Outro and cloud sync in one setup step."));
+      const details = element("details", "site-access-hosts");
+      details.append(element("summary", null, `${missing.length} websites need access`));
+      const list = element("ul");
+      missing.forEach(origin => list.append(element("li", null, hostLabel(origin))));
+      details.append(list); container.append(details);
+      const steps = element("ol", "site-access-steps");
+      steps.append(element("li", null, `Open ${SETTINGS_PATH}.`),
+        element("li", null, "Under Permissions, choose Allow for the websites listed above."),
+        element("li", null, "Return to Safari and reopen the tracker."));
+      steps.hidden = typeof provider?.api?.request === "function";
+      if (steps.hidden) {
+        const button = element("button", "site-access-btn", "Allow website access");
+        button.type = "button";
+        button.addEventListener("click", () => {
+          button.disabled = true;
+          request(missing, allowed => {
+            if (allowed) { void renderSetup(targets); }
+            else { button.disabled = false; steps.hidden = false; }
+          });
+        });
+        container.append(button);
+      }
+      container.append(steps);
+    });
+    return missing;
+  }
+
+  function mountSetup(containers) {
+    const targets = (Array.isArray(containers) ? containers : [containers]).filter(Boolean);
+    let disposed = false;
+    const refresh = () => { if (!disposed) void renderSetup(targets); };
+    const provider = globalThis.AnimeTrackerUtils?.isMobileDevice?.() ? permissionsApi() : null;
+    const events = [provider?.api?.onAdded, provider?.api?.onRemoved].filter(Boolean);
+    events.forEach(event => event.addListener?.(refresh));
+    const dispose = () => {
+      disposed = true;
+      targets.forEach(container => setupGenerations.delete(container));
+      events.forEach(event => event.removeListener?.(refresh));
+      window.removeEventListener("beforeunload", dispose);
+    };
+    window.addEventListener("beforeunload", dispose, { once: true });
+    refresh();
+    return dispose;
+  }
+
   window.AnimeTracker = window.AnimeTracker || {};
-  window.AnimeTracker.SiteAccess = Object.freeze({ GROUPS, SETTINGS_PATH, hostLabel, blockedOrigins, request, askIfOptional, render });
+  window.AnimeTracker.SiteAccess = Object.freeze({ GROUPS, SETTINGS_PATH, hostLabel, blockedOrigins, request, askIfOptional, render, renderSetup, mountSetup });
 })();

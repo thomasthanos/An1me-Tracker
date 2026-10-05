@@ -26,18 +26,20 @@ const RUNTIME_ENTRIES = ["manifest.json", "background.js", "popup.html", "src"];
 // Safari has no identity (Google / AniList OAuth), notifications or side panel APIs.
 const SAFARI_UNSUPPORTED_PERMISSIONS = ["identity", "notifications", "sidePanel"];
 
-// Safari leaves every declared host on Ask until the user agrees, and it shows its own prompt for hosts the
-// extension declares as optional and then requests (permissions.request). The filler sites need that prompt:
-// AnimeFillerList sends no CORS headers, so it cannot be read while on Ask, and without the prompt the only way
-// to allow it was to find each site in Safari's settings. The other hosts answer on Ask and stay required.
-// Chrome grants every host at install, so its manifest keeps them all required.
-const SAFARI_OPTIONAL_HOSTS = ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"];
+// Keep the tracking site required; make every supporting service requestable from a popup tap.
+// AniList API work is disabled on mobile, but its image CDN still supplies library covers.
+// The desktop manifest and its existing permissions remain unchanged.
+const SAFARI_CORE_HOSTS = ["https://an1me.to/*", "https://*.an1me.to/*"];
+const SAFARI_DISABLED_HOSTS = ["https://graphql.anilist.co/*"];
 
 function toSafariManifest(manifest) {
   const safari = { ...manifest, permissions: (manifest.permissions || []).filter((p) => !SAFARI_UNSUPPORTED_PERMISSIONS.includes(p)) };
   delete safari.side_panel;
-  safari.host_permissions = (manifest.host_permissions || []).filter((host) => !SAFARI_OPTIONAL_HOSTS.includes(host));
-  safari.optional_host_permissions = [...new Set([...(manifest.optional_host_permissions || []), ...SAFARI_OPTIONAL_HOSTS])];
+  safari.host_permissions = (manifest.host_permissions || []).filter(host => SAFARI_CORE_HOSTS.includes(host));
+  safari.optional_host_permissions = [...new Set([
+    ...(manifest.optional_host_permissions || []),
+    ...(manifest.host_permissions || []).filter(host => !SAFARI_CORE_HOSTS.includes(host)),
+  ])].filter(host => !SAFARI_DISABLED_HOSTS.includes(host));
   return safari;
 }
 
