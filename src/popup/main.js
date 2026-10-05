@@ -2540,6 +2540,12 @@
     } catch {}
 
     FillerFetchUI.init();
+    let networkWasPaused = globalThis.AnimeTrackerWebsiteAccess?.isPaused() === true;
+    const releaseWebsiteAccess = globalThis.AnimeTrackerWebsiteAccess?.subscribe(state => {
+      if (networkWasPaused && state.allowed) scheduleDeferredListRefresh({ delayMs: 0 });
+      networkWasPaused = !state.allowed;
+    });
+    window.addEventListener("pagehide", () => releaseWebsiteAccess?.(), { once: true });
     // Access to the filler sites was just granted: run Fetch & Import again so the failed shows are retried.
     FillerFetchUI.onAccessGranted = () => {
       fetchAllFillers({ autoStart: true, forceInfoRefresh: false, forceFillerRefresh: false }).catch((error) => {

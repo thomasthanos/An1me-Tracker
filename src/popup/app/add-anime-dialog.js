@@ -266,7 +266,7 @@
       // same host allowlist the library cards use instead of straight into an <img src>.
       const safeCover = AT.UIHelpers?.sanitizeImageUrl?.(info.coverImage) || null;
       if (safeCover) {
-        coverEl.src = safeCover;
+        coverEl.src = globalThis.AnimeTrackerWebsiteAccess?.imageUrl(safeCover) || safeCover;
         coverEl.style.display = "";
       } else {
         coverEl.removeAttribute("src");
@@ -571,7 +571,7 @@
         if (cover) {
           const safeCoverUrl = AT.UIHelpers?.sanitizeImageUrl?.(coverUrl) || null;
           if (safeCoverUrl) {
-            cover.src = safeCoverUrl;
+            cover.src = globalThis.AnimeTrackerWebsiteAccess?.imageUrl(safeCoverUrl) || safeCoverUrl;
             cover.style.display = "";
           } else {
             cover.removeAttribute("src");

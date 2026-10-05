@@ -550,7 +550,7 @@
       const name = escapeHtml(_auth?.viewer?.name || "AniList user");
       const initial = escapeHtml((name[0] || "A").toUpperCase());
       const avatar = _auth?.viewer?.avatar || "";
-      const avatarImg = avatar ? `<img id="anilistAvatar" src="${escapeHtml(avatar)}" alt="">` : "";
+      const avatarImg = avatar ? `<img id="anilistAvatar" src="${escapeHtml(globalThis.AnimeTrackerWebsiteAccess?.imageUrl(avatar) || avatar)}" alt="">` : "";
 
       const isMobile = typeof window.AnimeTrackerUtils !== "undefined" && typeof window.AnimeTrackerUtils.isMobileDevice === "function"
         ? window.AnimeTrackerUtils.isMobileDevice()

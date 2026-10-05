@@ -44,6 +44,10 @@
 
   // The needed origins the browser keeps the extension off, in GROUPS order. Empty without a permissions API.
   async function blockedOrigins() {
+    if (globalThis.AnimeTrackerWebsiteAccess?.enabled) {
+      await globalThis.AnimeTrackerWebsiteAccess.canRun();
+      return globalThis.AnimeTrackerWebsiteAccess.getState().blockedOrigins;
+    }
     const provider = permissionsApi();
     if (!provider) return [];
     const all = GROUPS.flatMap((group) => group.origins);
@@ -62,6 +66,7 @@
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (granted === true) void globalThis.AnimeTrackerWebsiteAccess?.refresh();
       callback(granted === true);
     };
     if (typeof provider?.api?.request !== "function" || !origins.length) {

@@ -15,6 +15,7 @@
   function loadImg(url) {
     return new Promise((resolve) => {
       if (!url) return resolve(null);
+      if (globalThis.AnimeTrackerWebsiteAccess?.isPaused() && /^https?:/i.test(url)) return resolve(null);
       const controller = new AbortController();
       let settled = false;
       let objectUrl = null;
@@ -33,6 +34,7 @@
 
       const viaCrossOrigin = () => {
         if (settled) return;
+        if (globalThis.AnimeTrackerWebsiteAccess?.isPaused()) return finish(null);
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.onload = () => finish(img);
