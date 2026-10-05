@@ -12,6 +12,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.7] — 2026-10-05
+
+### Fixed
+
+- Safari now asks for the filler sites itself. It prompts for a site only when the extension requests one it
+  declares optional, so the iPhone build declares animefillerlist.com and api.jikan.moe that way (every other
+  host stays as it was, and the Chrome build is unchanged). Safari asks for both at once after install or
+  update and when you tap Fetch & Import while they are not allowed yet; the Allow access button in Settings
+  and Fetch & Import asks the same way, and the Settings steps appear only if the prompt is refused. No
+  "All Websites" access is requested.
+
 ## [8.2.6] — 2026-10-05
 
 ### Fixed

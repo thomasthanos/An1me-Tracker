@@ -489,7 +489,7 @@ struct An1meTrackerAppView: View {
             ),
             GuideStep(
                 title: "Δικαιώματα: «Allow» στα sites του filler",
-                detail: "Κάτω από «Permissions» κάθε site έχει δική του επιλογή · δεν υπάρχει «All Websites». Πάτα και βάλε «Allow» (Να επιτρέπεται) σε: \(neededSites). Τα υπόλοιπα δουλεύουν και στο «Ask»."
+                detail: "Το Safari ρωτά μόνο του για animefillerlist.com και api.jikan.moe μετά την εγκατάσταση και στο Fetch & Import · πάτα «Allow». Αν το έκλεισες, κάτω από «Permissions» βάλε «Allow» σε: \(neededSites). Τα υπόλοιπα δουλεύουν και στο «Ask»."
             ),
             otherSitesStep
         ]
@@ -502,7 +502,7 @@ struct An1meTrackerAppView: View {
     private var otherSitesStep: GuideStep {
         GuideStep(
             title: "Έλεγχος από την επέκταση",
-            detail: "Άνοιξε το Tracker στο Safari → Settings. Αν κάποιο site του filler είναι ακόμα σε «Ask», θα το δεις εκεί μαζί με τα βήματα · ο ίδιος έλεγχος υπάρχει και στο Fetch & Import."
+            detail: "Άνοιξε το Tracker στο Safari → Settings. Αν κάποιο site του filler δεν έχει επιτραπεί, θα το δεις εκεί με κουμπί «Allow access» που ρωτά το Safari · το ίδιο υπάρχει και στο Fetch & Import."
         )
     }
 

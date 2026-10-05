@@ -35,15 +35,17 @@ const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch:
 const DESKTOP = { viewport: { width: 420, height: 600 } };
 
 // `access`: what permissions.contains answers: true, false, a list of the allowed origins, or null for no
-// permissions API. `grant`: what request answers.
-async function panel(browser, device, { access, grant = true }) {
+// permissions API. `grant`: what request answers. `optional`: the manifest's optional_host_permissions (the
+// Safari build declares the filler sites there).
+async function panel(browser, device, { access, grant = true, optional = null }) {
   const context = await browser.newContext(device);
   const page = await context.newPage();
   await page.setContent(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body></body></html>`);
-  await page.evaluate(({ access, grant }) => {
+  await page.evaluate(({ access, grant, optional }) => {
     window.__requests = [];
     window.__granted = 0;
     window.chrome = access === null ? {} : {
+      runtime: { getManifest: () => (optional ? { optional_host_permissions: optional } : {}) },
       permissions: {
         contains: (request, callback) => setTimeout(() => callback(Array.isArray(access) ? request.origins.every((o) => access.includes(o)) : access)),
         // Answers through both the callback and a promise, as a browser can.
@@ -54,7 +56,7 @@ async function panel(browser, device, { access, grant = true }) {
         },
       },
     };
-  }, { access, grant });
+  }, { access, grant, optional });
   for (const content of scripts) await page.addScriptTag({ content });
   await page.evaluate(async () => {
     const ui = window.AnimeTracker.FillerFetchUI;
@@ -96,6 +98,46 @@ async function panel(browser, device, { access, grant = true }) {
       assert.doesNotMatch(state.text, /All Websites/, "there is no such switch for this extension");
       assert.doesNotMatch(state.text, /firestore|identitytoolkit|securetoken|sync/i, "sync works on Ask and is not flagged");
       await p.context.close();
+    });
+
+    await test("on a phone with the filler sites optional (the Safari build), Allow access asks Safari for them", async () => {
+      const p = await panel(browser, PHONE, { access: false, grant: true, optional: FILLER });
+      const before = await p.view();
+      assert.equal(before.button, true);
+      assert.equal(before.steps.length, 3, "the steps are there as the fallback");
+      assert.equal(await p.page.$eval(".site-access-steps", (el) => el.hidden), true, "but hidden while the prompt can do it");
+      await p.page.click(".site-access-btn");
+      await p.page.waitForTimeout(100);
+      const after = await p.view();
+      assert.deepEqual(after.requests[0].origins, FILLER);
+      assert.equal(after.granted, 1);
+      assert.equal(after.banner, false);
+      await p.context.close();
+    });
+
+    await test("on a phone a refused prompt brings up the Settings steps", async () => {
+      const p = await panel(browser, PHONE, { access: false, grant: false, optional: FILLER });
+      await p.page.click(".site-access-btn");
+      await p.page.waitForTimeout(100);
+      assert.equal(await p.page.$eval(".site-access-steps", (el) => el.hidden), false);
+      assert.equal((await p.view()).banner, true);
+      await p.context.close();
+    });
+
+    await test("tapping Fetch & Import asks for the optional filler sites, and asks for nothing where they are required", async () => {
+      const ask = async (optional) => {
+        const p = await panel(browser, PHONE, { access: true, optional });
+        await p.page.evaluate(() => new Promise((resolve) => window.AnimeTracker.SiteAccess.askIfOptional((granted) => { window.__answer = granted; resolve(); })));
+        const result = { requests: (await p.view()).requests, answer: await p.page.evaluate(() => window.__answer) };
+        await p.context.close();
+        return result;
+      };
+      const safari = await ask(FILLER);
+      assert.deepEqual(safari.requests.map((r) => r.origins), [FILLER]);
+      assert.equal(safari.answer, true);
+      const chrome = await ask(null);
+      assert.deepEqual(chrome.requests, [], "no prompt where the sites are required");
+      assert.equal(chrome.answer, true);
     });
 
     await test("only the filler sites still blocked are named", async () => {

@@ -63,6 +63,28 @@ function resetFillerFetchBreakers() {
 }
 
 const AFL_ORIGIN_PATTERN = "https://www.animefillerlist.com/*";
+const FILLER_HOST_PATTERNS = [AFL_ORIGIN_PATTERN, "https://api.jikan.moe/*"];
+
+// Safari prompts for the filler sites only when the extension asks, and only for hosts its manifest declares
+// optional (the Safari build does, see dev/scripts/package.js). Asking once after install or update puts that
+// prompt in front of the user, who otherwise had to find each site in Safari's settings. Where the sites are
+// required (Chrome) there is nothing to ask for. Resolves true when the request was made and granted.
+async function requestFillerSiteAccess() {
+  const api = globalThis.chrome?.permissions;
+  if (typeof api?.request !== "function" || typeof api?.contains !== "function") return false;
+  let declared = [];
+  try {
+    declared = chrome.runtime.getManifest().optional_host_permissions || [];
+  } catch {}
+  const origins = FILLER_HOST_PATTERNS.filter((origin) => declared.includes(origin));
+  if (!origins.length) return false;
+  try {
+    if ((await api.contains({ origins })) === true) return false;
+    return (await api.request({ origins })) === true;
+  } catch {
+    return false;
+  }
+}
 
 // False only when the browser says the extension may not reach AnimeFillerList: Safari lets the user
 // limit an extension to some websites, and Chrome to sites they pick. A fetch then fails as a bare

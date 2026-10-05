@@ -1910,6 +1910,15 @@
       }
 
       if (e.target.closest("#settingsFetchFillers")) {
+        // Ask for the filler sites from this tap, before anything is awaited: Safari only prompts for them while
+        // the tap still counts as a user gesture, and answers at once when they are already allowed. The import
+        // starts on the answer, or after a moment if the prompt waits on the user; a later grant still reaches it.
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 1500);
+          const done = () => { clearTimeout(timer); resolve(); };
+          if (AT.SiteAccess?.askIfOptional) AT.SiteAccess.askIfOptional(done);
+          else done();
+        });
         try {
           await fetchAllFillers({
             autoStart: true,
