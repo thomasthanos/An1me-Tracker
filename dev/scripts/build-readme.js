@@ -98,6 +98,38 @@ for(const [name,title,line1,line2,color] of cards){
  <text x="17" y="93" class="muted" font-size="12">${esc(line1)}</text>
  <text x="17" y="110" class="muted" font-size="12">${esc(line2)}</text>`,`${title}. ${line1} ${line2}`);
 }
+// One image per layout prevents GitHub mobile from wrapping six separate cards.
+// Mobile keeps two columns at every width without relying on README custom CSS.
+const mobileLabels = {
+ resume: ['Instant resume', 'Saved timestamps'],
+ track: ['Auto tracking', 'Episodes at 85%'],
+ library: ['Your library', 'Search & backups'],
+ speed: ['Speed boost', 'Hotkeys & touch'],
+ sync: ['Cloud sync', 'Optional account'],
+ filler: ['Skip & filler', 'AniSkip + filler tags']
+};
+function tile(card, compact) {
+ const [name,title,line1,line2,color] = card;
+ const w = compact ? 176 : 280;
+ const h = compact ? 76 : 120;
+ const [label,caption] = mobileLabels[name];
+ return `<rect x="1" y="1" width="${w-2}" height="${h-2}" rx="${compact?11:18}" fill="url(#bg)" stroke="#2c425e"/>
+ <path d="M15 1H${w-15}" stroke="${color}" stroke-opacity=".4"/>
+ <g class="float">${stroke(name,compact?21:33.5,compact?19:33.5,color,compact?.42:.65)}</g>
+ <circle cx="${w-14}" cy="16" r="2" fill="${color}" class="pulse"/>
+ <text x="${compact?12:17}" y="${compact?46:72}" class="ink" font-size="${compact?15:18}" font-weight="650" letter-spacing="-.25">${esc(compact?label:title)}</text>
+ <text x="${compact?12:17}" y="${compact?64:93}" class="muted" font-size="${compact?11.5:12}">${esc(compact?caption:line1)}</text>
+ ${compact?'':`<text x="17" y="110" class="muted" font-size="12">${esc(line2)}</text>`}`;
+}
+for (const compact of [false,true]) {
+ const columns = compact ? 2 : 3;
+ const dx = compact ? 184 : 300;
+ const dy = compact ? 84 : 128;
+ const body = cards.map((card,i)=>`<g transform="translate(${(i%columns)*dx} ${Math.floor(i/columns)*dy})">${tile(card,compact)}</g>`).join('\n');
+ svg(`features-${compact?'mobile':'desktop'}.svg`,compact?360:880,compact?244:248,
+  'An1me Tracker features',body,
+  'Exact-second resume, episode tracking at 85%, anime library, speed controls, optional cloud sync and filler / AniSkip support.');
+}
 for(const [name,title,subtitle,symbol,primary] of [
  ['desktop','Get desktop','Chrome / Edge / Brave','arrow',true],
  ['iphone','Get iPhone','Safari + SideStore','phone',false]
@@ -111,4 +143,4 @@ for(const [name,title,subtitle,symbol,primary] of [
 for(const [name,label,width] of [['features','Features',91],['platforms','Platforms',99],['speed','Speed',76],['changelog','Changelog',103],['privacy','Privacy',83]]){
  svg(`nav-${name}.svg`,width,30,label,`<rect x="1" y="1" width="${width-2}" height="28" rx="9" fill="#122036" stroke="#36506f"/><text x="${width/2}" y="19" class="muted" text-anchor="middle" font-size="12" font-weight="600">${label}</text>`);
 }
-console.log(`Rebuilt README hero, mobile hero, 6 feature cards and 7 buttons for ${version}.`);
+console.log(`Rebuilt README hero, mobile hero, 6 feature cards, 2 compact feature grids and 7 buttons for ${version}.`);

@@ -36,12 +36,10 @@ Keep your anime library with you, on desktop and iPhone.
 ## Built around your watchlist
 
 <p align="center">
-  <img src=".github/assets/readme/feature-resume.svg" width="280" alt="Exact-second resume — saved playback timestamps">
-  <img src=".github/assets/readme/feature-track.svg" width="280" alt="Hands-free episode tracking at 85% playback">
-  <img src=".github/assets/readme/feature-library.svg" width="280" alt="Anime library with covers, search, categories and JSON backup">
-  <img src=".github/assets/readme/feature-speed.svg" width="280" alt="Integrated playback speed controls for desktop and iPhone">
-  <img src=".github/assets/readme/feature-sync.svg" width="280" alt="Optional cross-device library and resume sync">
-  <img src=".github/assets/readme/feature-filler.svg" width="280" alt="Filler episode tags and AniSkip outro skip">
+<picture>
+  <source media="(max-width: 600px)" srcset=".github/assets/readme/features-mobile.svg">
+  <img src=".github/assets/readme/features-desktop.svg" width="880" alt="Resume, auto tracking, library, speed boost, optional cloud sync and filler support">
+</picture>
 </p>
 
 **Watch → save → come back.** Open [an1me.to](https://an1me.to), play an episode and let the tracker save your progress. Continue Watching brings you back to your saved timestamp; episodes become watched at 85% playback.
