@@ -63,6 +63,16 @@ function createMetadataRepairRunId() {
 }
 
 
+// True only when the browser itself reports no connectivity. A network that is up but blocks one host (the
+// AnimeFillerList failure on iOS) still reports online and keeps its own failure handling.
+function isBrowserOffline() {
+  try {
+    return typeof navigator !== "undefined" && navigator.onLine === false;
+  } catch {
+    return false;
+  }
+}
+
 function isRetryableMetadataRepairError(error) {
   if (error?.deferRetry === true) return false;
   const message = String(error?.message || "").toLowerCase();
@@ -382,6 +392,9 @@ async function repairAnimeInfoCacheUncoalesced(slug, forceRefresh = true) {
       return { status: "unavailable", entry: notFoundEntry };
     }
     if (message.includes("an1me_unreachable")) throw error;
+    // Offline says nothing about this entry. Leave the cache exactly as it was, so it keeps serving what it
+    // has and is not stamped with a retry time it did not earn.
+    if (isBrowserOffline()) throw error;
 
     // Transient failure (timeout/5xx): cache a short retryable backoff so a giant page (e.g. One Piece) isn't re-scraped every sweep. Keep prior data if any.
     const backoffEntry =
@@ -542,6 +555,8 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
       }
     }
   } catch (error) {
+    // Offline: touch nothing, the same as for the info entry above.
+    if (isBrowserOffline()) throw error;
     // Transient failure: cache a short retryable backoff so it isn't re-fetched every sweep. Keep prior data if any.
     // retryAt (not cachedAt) carries the backoff timestamp so prior valid data keeps its original cachedAt
     // and stays usable/displayable during the backoff window.
@@ -659,9 +674,21 @@ async function _isWatchTabOpen() {
   }
 }
 
+// Offline: stop where we are instead of walking the whole queue into failures. The queue, its position and every
+// cache entry stay untouched; the fallback alarm and the online event pick the run up again.
+async function pauseMetadataRepairForNetwork(state) {
+  if (state.waitingForNetwork !== true) {
+    await setMetadataRepairState({ ...state, waitingForNetwork: true, updatedAt: new Date().toISOString() });
+  }
+  scheduleMetadataRepairFallback(2);
+}
+
 async function runMetadataRepairBatch(options = {}) {
   if (metadataRepairInProgress) return false;
   metadataRepairInProgress = true;
+  // Set when this pass stops for lack of a connection. The pending-repair hook below must not restart a run that is
+  // deliberately waiting, or the two would call each other in a tight loop.
+  let pausedForNetwork = false;
 
   try {
     let state = await getMetadataRepairState();
@@ -679,6 +706,16 @@ async function runMetadataRepairBatch(options = {}) {
       if (!state || state.status !== "running") {
         await chrome.alarms.clear(METADATA_REPAIR_ALARM);
         return false;
+      }
+
+      if (isBrowserOffline()) {
+        pausedForNetwork = true;
+        await pauseMetadataRepairForNetwork(state);
+        return false;
+      }
+      if (state.waitingForNetwork === true) {
+        state = { ...state, waitingForNetwork: false };
+        await setMetadataRepairState(state);
       }
 
       const items = Array.isArray(state.items) ? state.items : [];
@@ -730,6 +767,14 @@ async function runMetadataRepairBatch(options = {}) {
         const message = raw.includes("an1me_unreachable") ? "an1me.to unreachable" : raw;
         infoResult = { status: "failed", error: message };
         fillerResult = { status: "failed", error: message };
+      }
+
+      // The connection dropped while this item was in flight. Its failure says nothing about the item, so do not
+      // count it or move past it: stop here and run the same item again once the connection is back.
+      if (isBrowserOffline() && (infoResult.status === "failed" || fillerResult.status === "failed")) {
+        pausedForNetwork = true;
+        await pauseMetadataRepairForNetwork(state);
+        return false;
       }
 
       logEntry = buildMetadataRepairLog(item.slug, item.title || item.slug, infoResult, fillerResult);
@@ -799,9 +844,11 @@ async function runMetadataRepairBatch(options = {}) {
     metadataRepairInProgress = false;
     // Runs after the in-progress guard is released so a queued repair can actually start;
     // cheap no-op when the pending flag isn't set.
-    maybeStartPendingMetadataRepair().catch((error) => {
-      console.error("[BG] Failed to trigger pending repair after batch:", error);
-    });
+    if (!pausedForNetwork) {
+      maybeStartPendingMetadataRepair().catch((error) => {
+        console.error("[BG] Failed to trigger pending repair after batch:", error);
+      });
+    }
   }
 }
 
@@ -955,6 +1002,13 @@ async function resumeLibraryRepair() {
   }
   return state;
 }
+
+// Back online: continue a run that paused for lack of a connection right away rather than waiting for the alarm.
+try {
+  self.addEventListener?.("online", () => {
+    resumeLibraryRepair().catch(() => {});
+  });
+} catch {}
 
 // Serializes every read-then-write of pendingRepairSlugs. They used to run unlocked: two library
 // changes in quick succession each read the same list and the second write dropped the first slug, and

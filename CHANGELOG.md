@@ -12,6 +12,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [Unreleased]
+
+### Fixed
+
+- Losing the connection during Fetch & Import no longer costs cached data. With the browser offline, the
+  queue now pauses instead of trying the next show: nothing is fetched, no "retry later" stamp is written
+  over a cache entry that was still fresh, and the failures are not counted as outcomes. Work resumes by
+  itself when the connection returns (the `online` event, or the two-minute fallback alarm), so shows that
+  were fetched before the drop are not fetched again.
+- The popup says "Waiting for connection…" while the run is paused offline, in place of a show title that
+  looks stuck.
+
 ## [8.2.2] — 2026-10-05
 
 ### Fixed
