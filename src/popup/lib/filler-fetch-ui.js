@@ -71,6 +71,9 @@ const FillerFetchUI = {
                 </div>
               </div>
 
+              <!-- Sites the browser keeps the extension off (filled by SiteAccess) -->
+              <div class="ffui-access site-access" hidden></div>
+
               <!-- Live log -->
               <div id="${logFeed}" class="ffui-log" style="display:none"></div>
 
@@ -79,6 +82,35 @@ const FillerFetchUI = {
         </div>`;
 
     document.body.insertAdjacentHTML("beforeend", html);
+  },
+
+  // Called once the user has allowed access, so the caller can run Fetch & Import again.
+  onAccessGranted: null,
+
+  // Shows which needed sites the browser keeps the extension off, with Allow access. Every filler lookup fails
+  // as "no site access" until they are allowed, which only the user can do.
+  async checkSiteAccess() {
+    const banner = document.querySelector(".ffui-access");
+    const SiteAccess = window.AnimeTracker?.SiteAccess;
+    if (!banner || !SiteAccess) return;
+    await SiteAccess.render(banner, { onGranted: () => this.onAccessGranted?.() });
+  },
+
+  // A row that failed for lack of access is proof enough, even where the permissions API cannot say which
+  // sites: say so, with the Settings path for the filler sites.
+  _showAccessFallback() {
+    const banner = document.querySelector(".ffui-access");
+    if (!banner || !banner.hidden) return;
+    const SiteAccess = window.AnimeTracker?.SiteAccess;
+    const hosts = (SiteAccess?.GROUPS.find((group) => group.id === "filler")?.origins || []).map((origin) => SiteAccess.hostLabel(origin));
+    const text = document.createElement("p");
+    text.className = "site-access-text";
+    text.textContent = "The browser is not letting the extension reach the filler sites, so filler data cannot be fetched.";
+    const path = document.createElement("p");
+    path.className = "site-access-path";
+    path.textContent = `In ${SiteAccess?.SETTINGS_PATH || "the extension's settings"}, set each of these to Allow: ${hosts.join(", ")}.`;
+    banner.replaceChildren(text, path);
+    banner.hidden = false;
   },
 
   attachEventListeners() {
@@ -126,6 +158,7 @@ const FillerFetchUI = {
     overlay.style.display = "flex";
     overlay.setAttribute("aria-hidden", "false");
     requestAnimationFrame(() => container?.focus?.());
+    this.checkSiteAccess().catch(() => {});
   },
 
   close() {
@@ -264,6 +297,8 @@ const FillerFetchUI = {
     this._setStat("skipped", this.state.skipped);
     this._setStat("failed", this.state.failed);
     this._renderLogs(Array.isArray(state.logs) ? state.logs : []);
+    // A row that failed for lack of access is proof enough, even where the permissions API cannot say so.
+    if ((state.logs || []).some((entry) => /no site access/i.test(String(entry?.detail || "")))) this._showAccessFallback();
 
     const { processed, total } = progress;
     const pct = state.status === "completed" ? 100 : total > 0 ? Math.min(100, (processed / total) * 100) : 0;

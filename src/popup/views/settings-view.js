@@ -610,6 +610,7 @@
       container.innerHTML = `
                 <div class="settings-view-inner">
                     ${renderHeader(user, needsReauth)}
+                    <div id="settingsSiteAccess" class="site-access" hidden></div>
                     ${renderPreferencesSection(state)}
                     ${renderSpeedControlSection()}
                     ${renderConnectionsSection()}

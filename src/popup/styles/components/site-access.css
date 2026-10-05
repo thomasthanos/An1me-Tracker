@@ -1,0 +1,31 @@
+/* The notice for sites the browser keeps the extension off (SiteAccess), in Fetch & Import and in Settings. */
+.site-access {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(236, 184, 90, 0.08);
+  border: 1px solid rgba(236, 184, 90, 0.30);
+}
+.site-access[hidden] { display: none; }
+.site-access-text, .site-access-path { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--t1); }
+.site-access-path { color: var(--t2); font-size: 11px; overflow-wrap: anywhere; }
+.site-access-path[hidden] { display: none; }
+.site-access-list { margin: 0; padding-left: 18px; font-size: 11.5px; line-height: 1.5; color: var(--t2); overflow-wrap: anywhere; }
+.site-access-list strong { color: var(--t1); font-weight: 600; }
+.site-access-btn {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 6px 16px;
+  color: rgb(20, 14, 4);
+  background: rgb(236, 184, 90);
+  border: none;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.site-access-btn:active { transform: translateY(1px); }
+.settings-view .site-access { margin-bottom: 12px; }

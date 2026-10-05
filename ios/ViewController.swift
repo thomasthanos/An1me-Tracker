@@ -225,12 +225,27 @@ private func handleAppAction(_ action: String) {
 
 private func openSafariSettings() {
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    if let extURL = URL(string: "App-Prefs:Safari&path=WEB_EXTENSIONS"), UIApplication.shared.canOpenURL(extURL) {
-        UIApplication.shared.open(extURL, options: [:], completionHandler: nil)
-    } else if let safariURL = URL(string: "App-Prefs:Safari"), UIApplication.shared.canOpenURL(safariURL) {
-        UIApplication.shared.open(safariURL, options: [:], completionHandler: nil)
-    } else if let appSettingsURL = URL(string: UIApplication.openSettingsURLString) {
-        UIApplication.shared.open(appSettingsURL, options: [:], completionHandler: nil)
+    // The Settings pages to try, most specific first. iOS 18 moved Safari under Settings → Apps and
+    // addresses it by bundle ID; older versions use the SAFARI key. The last one, this app's own page,
+    // always opens.
+    let candidates = [
+        "App-prefs:com.apple.mobilesafari&path=WEB_EXTENSIONS",
+        "App-prefs:SAFARI&path=WEB_EXTENSIONS",
+        "App-prefs:com.apple.mobilesafari",
+        "App-prefs:SAFARI",
+        UIApplication.openSettingsURLString,
+    ]
+    // canOpenURL answers false for these Settings URLs unless the scheme is listed under
+    // LSApplicationQueriesSchemes, which this generated app does not do, so every tap used to
+    // fall straight through to the app's own, empty settings page. open() needs no listing,
+    // and its completion says whether Settings took the URL, so each candidate is tried in turn.
+    openFirst(candidates.compactMap { URL(string: $0) })
+}
+
+private func openFirst(_ urls: [URL]) {
+    guard let url = urls.first else { return }
+    UIApplication.shared.open(url, options: [:]) { opened in
+        if !opened { openFirst(Array(urls.dropFirst())) }
     }
 }
 
@@ -249,8 +264,8 @@ struct An1meTrackerAppView: View {
 
     // One set of checkmarks per guide, so switching tabs no longer
     // inherits progress from the other method.
-    @State private var inSafariDone: [Bool] = [false, false, false]
-    @State private var inSettingsDone: [Bool] = [false, false, false]
+    @State private var inSafariDone: [Bool] = [false, false, false, false]
+    @State private var inSettingsDone: [Bool] = [false, false, false, false]
 
     private var doneSteps: [Bool] {
         guideTab == 0 ? inSafariDone : inSettingsDone
@@ -420,8 +435,8 @@ struct An1meTrackerAppView: View {
             // The pill doubles as the progress readout.
             SectionHeader(
                 title: "Οδηγός ενεργοποίησης",
-                trailing: completedCount == 3 ? "Έτοιμο" : "\(completedCount)/3",
-                trailingTint: completedCount == 3 ? Theme.green : Theme.text3
+                trailing: completedCount == guideSteps.count ? "Έτοιμο" : "\(completedCount)/\(guideSteps.count)",
+                trailingTint: completedCount == guideSteps.count ? Theme.green : Theme.text3
             )
 
             guideTabs
@@ -458,7 +473,8 @@ struct An1meTrackerAppView: View {
                 GuideStep(
                     title: "Δώσε μόνιμη άδεια",
                     detail: "Πάτα ξανά το εικονίδιο στο an1me.to και διάλεξε «Να επιτρέπεται πάντα σε αυτόν τον ιστότοπο»."
-                )
+                ),
+                otherSitesStep
             ]
         }
 
@@ -472,10 +488,22 @@ struct An1meTrackerAppView: View {
                 detail: "Άνοιξε τις «Επεκτάσεις», βρες το An1me Tracker και γύρισε τον διακόπτη σε ON."
             ),
             GuideStep(
-                title: "Δικαιώματα ιστοσελίδας",
-                detail: "Στα δικαιώματα για το an1me.to, διάλεξε «Να επιτρέπεται»."
-            )
+                title: "Δικαιώματα: όλα σε «Allow»",
+                detail: "Κάτω από «Permissions» κάθε site έχει δική του επιλογή · δεν υπάρχει «All Websites». Βάλε «Allow» (Να επιτρέπεται) σε: \(neededSites)."
+            ),
+            otherSitesStep
         ]
+    }
+
+    /// The hosts the extension reaches besides an1me.to. iOS lists each one separately, and one left on
+    /// "Ask" blocks what it serves: cloud sync and sign-in, filler data, Skip Outro.
+    private let neededSites = "an1me.to, firestore.googleapis.com, identitytoolkit.googleapis.com, securetoken.googleapis.com, animefillerlist.com, api.jikan.moe, api.aniskip.com"
+
+    private var otherSitesStep: GuideStep {
+        GuideStep(
+            title: "Έλεγχος από την επέκταση",
+            detail: "Άνοιξε το Tracker στο Safari → Settings. Αν κάποιο site είναι ακόμα σε «Ask», θα το δεις εκεί: πάτα «Allow access» για να τα επιτρέψεις όλα μαζί."
+        )
     }
 
     private var guideTabs: some View {

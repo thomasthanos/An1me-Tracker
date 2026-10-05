@@ -603,6 +603,9 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
         totalEpisodes: fallback.totalEpisodes || null,
       };
     }
+    // No site access is a browser setting, not this show's state. Like offline, leave the entry as it was: a retry
+    // stamp would make the show wait up to 15 minutes after the user allows access, and look still broken.
+    if (/no site access/i.test(String(error?.message || ""))) throw error;
     // Transient failure: cache a short retryable backoff so it isn't re-fetched every sweep. Keep prior data if any.
     // retryAt (not cachedAt) carries the backoff timestamp so prior valid data keeps its original cachedAt
     // and stays usable/displayable during the backoff window.
@@ -1058,6 +1061,12 @@ async function resumeLibraryRepair() {
 function forgetFailuresFromOutage() {
   if (typeof resetFillerFetchBreakers === "function") resetFillerFetchBreakers();
 }
+
+// Access to a filler site was just granted (the Allow button, or a browser prompt): failures remembered while
+// it was blocked say nothing any more.
+try {
+  chrome.permissions?.onAdded?.addListener?.(() => forgetFailuresFromOutage());
+} catch {}
 
 // Back online: continue a run that paused for lack of a connection right away rather than waiting for the alarm.
 try {
