@@ -3,6 +3,7 @@
 // cleanup, and alarm-driven retries. Shared fetchers/jobs loaded via importScripts.
 importScripts(
   "src/common/utils.js",
+  "src/common/website-access.js",
   "src/common/data/library-keys.js",
   "src/common/data/speed-preferences.js",
   "src/common/logger.js",
@@ -26,6 +27,13 @@ importScripts(
 );
 
 const FIREBASE_API_KEY = (self.firebaseConfig && self.firebaseConfig.apiKey) || "";
+async function websiteAccessAllowed() {
+  return !self.AnimeTrackerWebsiteAccess || await self.AnimeTrackerWebsiteAccess.canRun();
+}
+function websiteAccessPausedResult(kind = null) {
+  return { success: false, paused: true, queued: true, state: "waitingForAccess", kind,
+    error: "SITE_ACCESS_REQUIRED", blockedOrigins: self.AnimeTrackerWebsiteAccess?.getState().blockedOrigins || [] };
+}
 const FIREBASE_PROJECT_ID = (self.firebaseConfig && self.firebaseConfig.projectId) || "";
 if (!FIREBASE_API_KEY || !FIREBASE_PROJECT_ID) {
   console.error("[BG] Firebase config missing — Firestore I/O will fail");
@@ -686,6 +694,7 @@ const LIBRARY_AUTO_REFRESH_MINUTES = 180;
 const LIBRARY_STARTUP_CATCHUP_ALARM = "libraryStartupCatchup";
 
 async function ensureLibraryAutoRefreshAlarm() {
+  if (!(await websiteAccessAllowed())) return;
   try {
     const existing = await chrome.alarms.get(LIBRARY_AUTO_REFRESH_ALARM);
     if (existing && Number(existing.periodInMinutes) === LIBRARY_AUTO_REFRESH_MINUTES) return;
@@ -978,6 +987,7 @@ const PROGRESS_SYNC_DEFAULT_DELAY_MIN = 5;
 // debounce that never fired while a video was playing: a 2h movie pushed no resume position until
 // 5 minutes after it stopped.
 async function armProgressSyncAlarmNoLater(delayInMinutes) {
+  if (!(await websiteAccessAllowed())) return;
   try {
     const target = Date.now() + delayInMinutes * 60 * 1000;
     const existing = await chrome.alarms.get(PROGRESS_SYNC_ALARM);
@@ -995,6 +1005,7 @@ const PROGRESS_SYNC_RETRY_ALARM = "progressSyncRetry";
 const FULL_SYNC_PERIODIC_ALARM = "fullSyncPeriodic";
 const FULL_SYNC_PERIODIC_MINUTES = 4;
 async function ensureFullSyncPeriodicAlarm() {
+  if (!(await websiteAccessAllowed())) return;
   try {
     const existing = await chrome.alarms.get(FULL_SYNC_PERIODIC_ALARM);
     if (existing && Number(existing.periodInMinutes) === FULL_SYNC_PERIODIC_MINUTES) return;
@@ -1070,6 +1081,7 @@ function _retryStateFor(kind) {
 }
 
 async function armSyncRetry(kind, reason) {
+  if (!(await websiteAccessAllowed())) return;
   const kindKey = syncRetryKindKey(kind);
   const generation = _syncRetryGenerations[kindKey];
   await hydrateSyncRetryAttempts();
@@ -1190,6 +1202,7 @@ async function finishSuccessfulSync({ kind, user, reason, wrote, fullGeneration 
 }
 
 async function finishFailedSync({ kind, user, reason, error }) {
+  if (error?.code === "SITE_ACCESS_REQUIRED") return websiteAccessPausedResult(kind);
   await persistCloudSyncStatus("error", {
     kind,
     uid: user?.uid || null,
@@ -1411,6 +1424,7 @@ function _bgRefreshRejectionCode(httpStatus, errorBody) {
 }
 
 async function refreshFirebaseToken(refreshToken) {
+  if (!(await websiteAccessAllowed())) return { ...websiteAccessPausedResult("auth"), permanent: false, tokens: null };
   if (!refreshToken) return { tokens: null, permanent: true, error: "no_refresh_token" };
   const activeTokens = (await bgStorageGet(["firebase_tokens"])).firebase_tokens || null;
   if (!activeTokens?.refreshToken) return { tokens: null, permanent: false, error: "signed_out" };
@@ -1544,6 +1558,7 @@ const AUTH_REFRESH_BACKOFF_MIN = [1, 5, 15, 60];
 // successful request, which on a phone meant cloud sync switched off for good. Now the worker keeps
 // retrying on a capped backoff, and every sync that needs a token retries on demand as well.
 async function _bgOnRefreshTransient(reason, expectedRefreshToken = null) {
+  if (!(await websiteAccessAllowed())) return;
   const helper = self.AnimeTrackerAuthTokens;
   if (!helper) return;
   try {
@@ -1659,6 +1674,7 @@ async function fetchCloudData(user, token, reason = "read") {
 const CLOUD_POLL_SKIPPED = "cloud_poll_skipped";
 
 async function pollCloudData(reason = "consumer-connected", { force = false, requireAuth = false } = {}) {
+  if (!(await websiteAccessAllowed())) return CLOUD_POLL_SKIPPED;
   if (_cloudPollInFlight) {
     if (!force || _cloudPollInFlightForced) return _cloudPollInFlight;
     const awaited = _cloudPollInFlight;
@@ -1870,6 +1886,7 @@ function enqueueFirestoreWrite(fn) {
 
 async function syncProgressOnly(reason = "progress", options = {}) {
   if (options.markPending !== false) markProgressSyncPending(reason);
+  if (!(await websiteAccessAllowed())) return websiteAccessPausedResult("progress");
   if (options.respectRetry === true) {
     try {
       const retry = await chrome.alarms.get(PROGRESS_SYNC_RETRY_ALARM);
@@ -2028,6 +2045,7 @@ function fsFieldPathSegment(name) {
 }
 
 async function performFullSync(reason, runFullGeneration, runProgressGeneration) {
+  if (!(await websiteAccessAllowed())) return websiteAccessPausedResult("full");
   const user = await getFirebaseUser();
   if (!user) {
     const outcome = { success: false, error: "not_authenticated", kind: "full", reason };
@@ -2344,6 +2362,7 @@ function syncToFirebase(reason = "sync", options = {}) {
 let scheduledFullSync = null;
 
 function scheduleFullSync(reason = "scheduled", delayMs = 500) {
+  if (self.AnimeTrackerWebsiteAccess?.isPaused()) return syncToFirebase(reason);
   markSyncPending(reason);
   if (fullSyncRunPromise) {
     return syncToFirebase(reason, { markPending: false });
@@ -2804,6 +2823,7 @@ async function persistPendingSidecars(state) {
 }
 
 function scheduleSidecarRetry(state) {
+  if (self.AnimeTrackerWebsiteAccess?.isPaused()) return;
   const pending = Object.values(state || {}).filter(Boolean);
   if (pending.length === 0) {
     try {
@@ -2842,6 +2862,7 @@ async function markSidecarAttemptFailed(kind, state, record, error) {
 }
 
 async function flushSidecarRecord(kind, state) {
+  if (!(await websiteAccessAllowed())) return websiteAccessPausedResult(kind);
   const config = SIDECAR_SYNC_CONFIG[kind];
   const record = state?.[kind];
   if (!config || !record) return { success: true, acknowledged: true, skipped: true, kind };
@@ -2898,6 +2919,7 @@ async function flushSidecarRecord(kind, state) {
     scheduleSidecarRetry(state);
     return { success: true, acknowledged: true, pending: false, kind };
   } catch (error) {
+    if (error?.code === "SITE_ACCESS_REQUIRED") return websiteAccessPausedResult(kind);
     return markSidecarAttemptFailed(kind, state, record, error?.message || error);
   }
 }
@@ -3439,6 +3461,10 @@ function updateSpeedControlPreferences(message) {
 }
 
 const messageHandlers = {
+  GET_WEBSITE_ACCESS(_message, _sender, sendResponse) {
+    self.AnimeTrackerWebsiteAccess.refresh().then(state => sendResponse({ success: true, state }));
+    return true;
+  },
   UPDATE_SPEED_CONTROL_PREFERENCES(message, _sender, sendResponse) {
     updateSpeedControlPreferences(message).then(sendResponse)
       .catch(error => sendResponse({ success: false, error: error?.message || String(error) }));
@@ -3914,7 +3940,7 @@ chrome.runtime.onStartup.addListener(() => {
   // Alarms do not fire while the browser is closed, so after a restart the library can be hours
   // stale. Refresh it in the background shortly after startup - the whole point is that this
   // happens before the user opens the popup, not because they did.
-  chrome.alarms.create(LIBRARY_STARTUP_CATCHUP_ALARM, { delayInMinutes: 1 });
+  websiteAccessAllowed().then(allowed => { if (allowed) chrome.alarms.create(LIBRARY_STARTUP_CATCHUP_ALARM, { delayInMinutes: 1 }); });
 
   // Ensure cloud sync survives browser restart
   (async () => {
@@ -3944,9 +3970,13 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
+chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === AN1ME_IDLE_CLOSE_ALARM) {
     handleAn1meGatewayAlarm(alarm.name).catch((e) => console.log("[BG] an1me gateway tab cleanup failed:", e?.message || e));
+    return;
+  }
+  if (alarm.name !== DAILY_CLEANUP_ALARM && !(await websiteAccessAllowed())) {
+    await chrome.alarms.clear(alarm.name);
     return;
   }
 
@@ -4047,6 +4077,34 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 migrateFromSyncToLocal().catch((error) => {
   console.warn("[Anime Tracker] Legacy migration bootstrap failed:", error?.message || error);
+});
+
+let accessResumeTail = Promise.resolve();
+self.AnimeTrackerWebsiteAccess.subscribe(state => {
+  if (!self.AnimeTrackerWebsiteAccess.enabled) return;
+  accessResumeTail = accessResumeTail.then(async () => {
+    // Use current state: a grant/removal may supersede a queued callback.
+    if (self.AnimeTrackerWebsiteAccess.isPaused()) {
+      const names = [METADATA_REPAIR_ALARM, LIBRARY_AUTO_REFRESH_ALARM, LIBRARY_STARTUP_CATCHUP_ALARM,
+        AIRING_SCHEDULE_ALARM, SMART_NOTIF_ALARM, PROGRESS_SYNC_ALARM, PROGRESS_SYNC_RETRY_ALARM,
+        FULL_SYNC_PERIODIC_ALARM, FULL_SYNC_RETRY_ALARM, SIDECAR_SYNC_RETRY_ALARM, AUTH_REFRESH_RETRY_BG_ALARM,
+        "anilistPush", "anilistPushPeriodic"];
+      await Promise.all(names.map(name => chrome.alarms.clear(name).catch(() => {})));
+      if (syncState.debounceTimeout) { clearTimeout(syncState.debounceTimeout); syncState.debounceTimeout = null; }
+      if (scheduledFullSync) { scheduledFullSync.resolve(websiteAccessPausedResult("full")); scheduledFullSync = null; }
+      const repair = await getMetadataRepairState();
+      if (repair?.status === "running") await pauseMetadataRepairForAccess(repair, self.AnimeTrackerWebsiteAccess.getState().blockedOrigins);
+      return;
+    }
+    if (state.checking) return;
+    await Promise.all([ensureLibraryAutoRefreshAlarm(), ensureAiringScheduleAlarm(), ensureFullSyncPeriodicAlarm()]);
+    await resumeLibraryRepair({ checkAccess: true });
+    await maybeStartPendingMetadataRepair();
+    const stored = await bgStorageGet([PENDING_SYNC_KEY, PENDING_PROGRESS_SYNC_KEY, PENDING_SIDECAR_SYNC_KEY]);
+    if (stored[PENDING_SYNC_KEY]) await syncToFirebase("access:resume");
+    else if (stored[PENDING_PROGRESS_SYNC_KEY]) await syncProgressOnly("access:resume");
+    if (stored[PENDING_SIDECAR_SYNC_KEY]) await flushPendingSidecarSyncs();
+  }).catch(error => dlog("[BG] Access pause/resume failed", error?.message));
 });
 
 maybeStartPendingMetadataRepair().catch((error) => {

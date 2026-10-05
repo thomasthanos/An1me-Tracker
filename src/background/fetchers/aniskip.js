@@ -63,6 +63,7 @@ function scheduleSlugMalBundleFlush() {
 }
 
 async function getMalIdForSlug(slug, title) {
+  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return null;
   if (!slug) return null;
   const bundle = await loadSlugMalBundle();
   const cached = bundle[slug];
@@ -143,6 +144,7 @@ async function getMalIdForSlug(slug, title) {
 }
 
 async function fetchAniSkipOutroStart(slug, title, episodeNumber, episodeLength) {
+  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return null;
   if (!slug || !episodeNumber) return null;
   const malId = await getMalIdForSlug(slug, title);
   if (!malId) return null;

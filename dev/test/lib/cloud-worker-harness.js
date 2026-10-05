@@ -25,6 +25,18 @@ function cloudWorker(initial = {}, cloud = {}, options = {}) {
       scheduledTime: Math.max(now + 30000, info.when || now + (info.delayInMinutes ?? info.periodInMinutes ?? 0) * 60000) }),
       get: async name => alarms.get(name), clear: async name => alarms.delete(name), getAll: async () => [...alarms.values()], onAlarm: event() },
   }, { get: (target, key) => key in target ? target[key] : anything() });
+  const deniedSites = new Set(options.safariDenied || []), addedSites = [], removedSites = [];
+  if (Array.isArray(options.safariDenied)) {
+    const manifest = chrome.runtime.getManifest();
+    manifest.optional_host_permissions = manifest.host_permissions.filter(origin =>
+      !origin.includes('an1me.to') && !origin.includes('graphql.anilist.co'));
+    manifest.host_permissions = manifest.host_permissions.filter(origin => origin.includes('an1me.to'));
+    chrome.runtime.getManifest = () => manifest;
+    chrome.permissions = {
+      contains: (details, callback) => settle(details.origins.every(origin => !deniedSites.has(origin)), callback),
+      onAdded: { addListener: fn => addedSites.push(fn) }, onRemoved: { addListener: fn => removedSites.push(fn) },
+    };
+  }
   const sandbox = { console: { log() {}, info() {}, debug() {}, warn() {}, error() {} }, Date: Clock, chrome, URL, URLSearchParams,
     Response, Headers, AbortController, TextEncoder, TextDecoder, structuredClone, crypto, atob, btoa, queueMicrotask,
     setTimeout: (...args) => { const timer = setTimeout(...args); timer.unref?.(); return timer; }, clearTimeout,
@@ -47,6 +59,8 @@ function cloudWorker(initial = {}, cloud = {}, options = {}) {
   sandbox.importScripts = (...files) => files.forEach(run);
   run("background.js");
   return { store, remote, alarms, requests, installedListeners, context, call, now: () => now, advance: ms => now += ms,
+    grantWebsiteAccess: () => { deniedSites.clear(); addedSites.forEach(fn => fn({ origins: chrome.runtime.getManifest().optional_host_permissions })); },
+    revokeWebsiteAccess: origin => { deniedSites.add(origin); removedSites.forEach(fn => fn({ origins: [origin] })); },
     failNextPatch: () => failNextPatch = true,
     failPatches: value => failPatches = value,
     request: (name, message = {}) => new Promise(resolve => call("messageHandlers." + name, { ...message, waitForCompletion: true }, {}, resolve)),

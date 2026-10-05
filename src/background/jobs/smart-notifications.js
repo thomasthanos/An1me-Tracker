@@ -161,6 +161,7 @@ async function deliverPendingEpisodeAlerts(eligible, state) {
 }
 
 async function checkNewEpisodesOnce(disableGeneration) {
+  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return { paused: true };
   const settings = await bgStorageGet([
     SMART_NOTIF_SETTING_KEY,
     "animeData",
@@ -311,6 +312,10 @@ function checkNewEpisodes() {
 }
 
 async function reconcileSmartNotificationAlarmOnce(explicitEnabled) {
+  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) {
+    await chrome.alarms.clear(SMART_NOTIF_ALARM);
+    return { success: true, paused: true, operational: false, alarmActive: false };
+  }
   // Where the browser cannot show notifications (Safari) there is nothing to check for.
   const enabled =
     self.AnimeTrackerNotificationCoordinator?.supported !== false &&

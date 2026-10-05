@@ -27,6 +27,11 @@ const METADATA_REPAIR_HOST_ORIGINS = Object.freeze(["https://www.animefillerlist
 // Local permission checks only. Unknown API answers are not evidence of denial,
 // but cannot undo a pause whose denial was already established.
 async function getMetadataRepairBlockedOrigins(previous = []) {
+  const access = self.AnimeTrackerWebsiteAccess;
+  if (access?.enabled) {
+    await access.canRun();
+    return access.getState().blockedOrigins;
+  }
   const browserApi = globalThis.browser?.permissions;
   const promiseOnly = typeof browserApi?.contains === "function";
   const api = promiseOnly ? browserApi : globalThis.chrome?.permissions;
@@ -364,6 +369,7 @@ let metadataRepairAccessChanged = false;
 const animeInfoRepairInflight = new Map();
 
 async function repairAnimeInfoCacheUncoalesced(slug, forceRefresh = true) {
+  if (self.AnimeTrackerWebsiteAccess?.enabled && !(await self.AnimeTrackerWebsiteAccess.canRun())) throw self.AnimeTrackerWebsiteAccess.deniedError();
   const key = `animeinfo_${slug}`;
   const stored = await bgStorageGet([key]);
   const cached = stored[key];
@@ -497,6 +503,7 @@ async function fetchJikanForUnreachableAfl(error, { slug, title, info, cached, m
 }
 
 async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = true, mediaType = null, mediaTypeUpdatedAt = null) {
+  if (self.AnimeTrackerWebsiteAccess?.enabled && !(await self.AnimeTrackerWebsiteAccess.canRun())) throw self.AnimeTrackerWebsiteAccess.deniedError();
   const key = `episodeTypes_${slug}`;
   const infoKey = `animeinfo_${slug}`;
   const stored = await bgStorageGet([key, infoKey]);

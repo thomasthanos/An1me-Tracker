@@ -51,6 +51,7 @@ function collectAiringCandidates(animeData, mediaMap, previous) {
 }
 
 async function refreshAiringSchedule(options = {}) {
+  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return { paused: true };
   if (AnimeTrackerUtils.isMobileDevice()) return { skipped: true, reason: "mobile_disabled" };
   if (_airingRefreshInFlight) return _airingRefreshInFlight;
 
@@ -112,6 +113,7 @@ async function refreshAiringSchedule(options = {}) {
 }
 
 async function ensureAiringScheduleAlarm() {
+  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return;
   try {
     if (AnimeTrackerUtils.isMobileDevice()) {
       await chrome.alarms.clear(AIRING_SCHEDULE_ALARM);

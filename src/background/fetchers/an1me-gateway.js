@@ -515,6 +515,7 @@ async function an1meTabFetch(url, req, timeoutMs, deadline) {
 }
 
 async function an1meFetchUncoalesced(url, options) {
+  if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) throw self.AnimeTrackerWebsiteAccess.deniedError();
   const req = {
     as: options.as === "dataUrl" ? "dataUrl" : "text",
     method: String(options.method || "GET").toUpperCase(),
