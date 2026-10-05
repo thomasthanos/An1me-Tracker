@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>An1me.to Tracker · Website access</title>
+  <link rel="stylesheet" href="../popup/styles/base/tokens.css">
+  <link rel="stylesheet" href="../popup/styles/components/site-access.css">
+  <link rel="stylesheet" href="access.css">
+</head>
+<body>
+  <!-- Opened by the worker after an install or update that left websites on Ask (see background.js). -->
+  <main class="setup">
+    <header class="setup-header">
+      <img class="setup-icon" src="../icons/icon128.png" alt="" width="56" height="56">
+      <div>
+        <h1 class="setup-title">Website access</h1>
+        <p class="setup-sub">An1me.to Tracker</p>
+      </div>
+    </header>
+    <p class="setup-lead">Safari keeps the tracker off the websites it uses until you allow them. Your progress is saved either way;
+      sync, covers, fillers and Skip Outro wait for this one step.</p>
+    <p id="setupChecking" class="setup-checking">Checking what Safari allows…</p>
+    <div id="setupAccess" class="site-access site-access-setup" hidden></div>
+    <section id="setupDone" class="setup-done" hidden>
+      <p class="setup-done-title">All set</p>
+      <p class="setup-done-text">Every website the tracker uses is allowed. Online features resume on their own.</p>
+      <button type="button" id="setupClose" class="site-access-btn">Close this tab</button>
+    </section>
+  </main>
+  <script src="../common/utils.js"></script>
+  <script src="../common/website-access.js"></script>
+  <script src="../popup/lib/site-access.js"></script>
+  <script src="access.js"></script>
+</body>
+</html>

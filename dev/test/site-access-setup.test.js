@@ -45,6 +45,8 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
           return;
         }
         if (grant === "reject") return Promise.reject(new Error("Safari did not offer a prompt"));
+        // What the iPhone did: answer yes and leave every website on Ask.
+        if (grant === "noop") { if (callback) queueMicrotask(() => callback(true)); return Promise.resolve(true); }
         if (grant === "pending") return new Promise(resolve => { window.__answer = answer => { if (callback) callback(answer); resolve(answer); }; });
         if (grant) details.origins.forEach(origin => granted.add(origin));
         if (callback) queueMicrotask(() => callback(grant));
@@ -58,6 +60,7 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
     window[promiseOnly ? "browser" : "chrome"] = { permissions, runtime };
     window.fetch = () => { throw new Error("Permission setup must not fetch"); };
     window.setInterval = () => { throw new Error("Permission setup must not poll"); };
+    window.__grantInSettings = () => manifest.optional_host_permissions.forEach(origin => granted.add(origin));
     window.__grantOutside = () => { manifest.optional_host_permissions.forEach(origin => granted.add(origin)); for (const fn of window.__events.added) fn({ origins: manifest.optional_host_permissions }); };
   }, { manifest, promiseOnly, grant, allowed });
   await page.addScriptTag({ content: read("src/common/utils.js") });
@@ -195,6 +198,34 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
       assert.equal(await p.page.isVisible("#authSiteAccess"), false);
       await p.page.evaluate(() => window.__dispose());
       assert.deepEqual(await p.page.evaluate(() => [window.__events.added.size, window.__events.removed.size]), [0, 0]);
+      await p.context.close();
+    });
+    await test("Safari answering yes while leaving the websites on Ask leads to Settings, not the same button again", async () => {
+      const p = await setup(browser, { grant: "noop" });
+      assert.equal(await p.page.isVisible("#authSiteAccess .site-access-steps"), false, "the prompt comes first");
+      await p.page.click("#authSiteAccess .site-access-btn");
+      await p.page.waitForTimeout(150);
+      assert.equal(await p.page.isVisible("#authSiteAccess"), true, "nothing was granted, so the card stays");
+      assert.equal(await p.page.isVisible("#authSiteAccess .site-access-steps"), true);
+      const link = p.page.locator("#authSiteAccess .site-access-link");
+      assert.equal(await link.isVisible(), true);
+      assert.equal(await link.getAttribute("href"), "an1metracker://safari-settings");
+      const box = await link.boundingBox();
+      assert.ok(box.height >= 44 && box.x + box.width <= 390, "a full-size tap target inside the sheet");
+      assert.equal(await p.page.evaluate(() => document.querySelector("#authSiteAccess details").open), true, "the websites to allow are listed");
+      // A later render (the popup opened again) leads with Settings too.
+      await p.page.evaluate(() => window.AnimeTracker.SiteAccess.renderSetup(document.getElementById("mobileSiteAccess")));
+      assert.equal(await p.page.evaluate(() => document.querySelector("#mobileSiteAccess .site-access-steps").hidden), false,
+        "the library card (behind sign-in here) leads with Settings as well");
+      assert.equal(await p.page.evaluate(() => window.__requests.length), 1);
+      await p.context.close();
+    });
+    await test("coming back from Settings checks again without a permission event", async () => {
+      const p = await setup(browser, { grant: false });
+      await p.page.evaluate(() => { window.__grantInSettings(); document.dispatchEvent(new Event("visibilitychange")); });
+      await p.page.waitForTimeout(100);
+      assert.equal(await p.page.isVisible("#authSiteAccess"), false);
+      assert.equal(await p.page.evaluate(() => document.getElementById("mobileSiteAccess").hidden), true);
       await p.context.close();
     });
     await test("desktop and already granted mobile installs do not show setup or request access", async () => {

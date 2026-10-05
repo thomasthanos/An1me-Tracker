@@ -44,3 +44,25 @@
 .site-access-hosts summary { cursor: pointer; min-height: 24px; }
 .site-access-hosts ul { margin: 6px 0 0; padding-left: 18px; max-height: 100px; overflow-y: auto; overflow-wrap: anywhere; }
 .site-access-btn:disabled { cursor: wait; opacity: .65; }
+.site-access-steps[hidden], .site-access-link[hidden] { display: none; }
+/* Opens the extension's page in Settings through the An1me Tracker app; the main action once it shows. */
+.site-access-link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 16px;
+  color: rgb(20, 14, 4);
+  background: rgb(236, 184, 90);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.site-access-link:active { transform: translateY(1px); }
+/* Once Settings is the way, the prompt stays as a quieter second try. */
+.site-access-btn.is-secondary {
+  color: var(--t1);
+  background: transparent;
+  border: 1px solid rgba(var(--ink-rgb), 0.18);
+}

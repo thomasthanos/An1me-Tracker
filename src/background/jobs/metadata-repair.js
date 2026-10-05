@@ -1117,6 +1117,33 @@ async function startLibraryRepair(options = {}) {
   return state;
 }
 
+// The user pressed Stop. The run ends where it is: what it already fetched stays cached, and nothing restarts it
+// (no pending flag, follow-up sweep, retry pass or alarm) until Fetch & Import is pressed again. The item in flight
+// finishes on its own and is then dropped, because the batch re-reads the state before every write.
+async function stopLibraryRepair() {
+  const state = await getMetadataRepairState();
+  await bgStorageSet({ [PENDING_METADATA_REPAIR_KEY]: false });
+  await chrome.alarms.clear(METADATA_REPAIR_ALARM);
+  if (state?.status !== "running" && state?.followUpPending !== true) return state;
+  const now = new Date().toISOString();
+  const stopped = {
+    ...state,
+    status: "completed",
+    stopped: true,
+    followUpPending: false,
+    pendingSignInSweep: false,
+    pendingManualRetry: false,
+    waitingForAccess: false,
+    waitingForNetwork: false,
+    currentSlug: null,
+    currentTitle: null,
+    completedAt: state.completedAt || now,
+    updatedAt: now,
+  };
+  await setMetadataRepairState(stopped);
+  return stopped;
+}
+
 // A visible popup periodically sends this message while a persisted job is running.
 // Unlike START, it never creates a new sweep or promotes an automatic job to manual.
 async function resumeLibraryRepair({ checkAccess = false } = {}) {

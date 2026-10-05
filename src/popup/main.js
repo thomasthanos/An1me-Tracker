@@ -1920,8 +1920,14 @@
             if (AT.SiteAccess?.askIfOptional) AT.SiteAccess.askIfOptional(resolve);
             else resolve(true);
           });
-          if (!allowed) {
-            AT.UIHelpers?.showToast?.("Website access was not granted. Allow the listed sites in Safari settings, then try again.", { type: "warning", duration: 5000 });
+          // Safari can answer yes and leave the websites on Ask. Starting the queue then only pauses it again, so
+          // check what it actually allowed and send the user to Settings instead.
+          const access = globalThis.AnimeTrackerWebsiteAccess;
+          if (allowed && access?.enabled) await access.refresh();
+          if (!allowed || access?.isPaused?.()) {
+            AT.SiteAccess?.notePromptFailed?.();
+            AT.SiteAccess?.refreshSetup?.();
+            AT.UIHelpers?.showToast?.("Safari did not allow the websites. Open Safari Settings from the website access card and set them to Allow.", { type: "warning", duration: 6000 });
             return;
           }
           await fetchAllFillers({
@@ -2547,6 +2553,7 @@
     });
     window.addEventListener("pagehide", () => releaseWebsiteAccess?.(), { once: true });
     // Access to the filler sites was just granted: run Fetch & Import again so the failed shows are retried.
+    FillerFetchUI.onStop = () => AT.MetadataRepair.stopFetch();
     FillerFetchUI.onAccessGranted = () => {
       fetchAllFillers({ autoStart: true, forceInfoRefresh: false, forceFillerRefresh: false }).catch((error) => {
         PopupLogger.error("RepairAll", "Fetch after granting access failed:", error);

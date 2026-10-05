@@ -12,6 +12,7 @@
 import UIKit
 import WebKit
 import SwiftUI
+import SafariServices
 
 // MARK: - Design tokens
 //
@@ -223,8 +224,51 @@ private func handleAppAction(_ action: String) {
     }
 }
 
+// MARK: - Links into the app
+//
+// The Safari extension opens an1metracker://safari-settings (its website access card and setup page) when the
+// websites it needs are still on Ask; SceneDelegate hands the link here once the app is on screen.
+let trackerURLScheme = "an1metracker"
+
+func handleTrackerURL(_ url: URL) {
+    guard url.scheme?.lowercased() == trackerURLScheme else { return }
+    if url.host?.lowercased() == "safari-settings" {
+        openSafariSettings()
+    }
+}
+
 private func openSafariSettings() {
     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    openExtensionSettingsPage(fallback: openSafariSettingsByURL)
+}
+
+// The bundle ID of the Safari extension inside this app, which Settings uses to find its page.
+private func safariExtensionIdentifier() -> String? {
+    guard let plugIns = Bundle.main.builtInPlugInsURL,
+          let items = try? FileManager.default.contentsOfDirectory(at: plugIns, includingPropertiesForKeys: nil) else { return nil }
+    return items.filter { $0.pathExtension == "appex" }.compactMap { Bundle(url: $0)?.bundleIdentifier }.first
+}
+
+// iOS 26.2 can open the extension's own page in Settings, where its websites are listed with Allow / Ask / Deny:
+// SFSafariSettings.openExtensionsSettings(forIdentifiers:). It is looked up at run time, so the app still builds
+// with an older SDK and older iOS versions go straight to the fallback. The completion reports an error when it
+// could not open the page, and then the fallback runs.
+private func openExtensionSettingsPage(fallback: @escaping () -> Void) {
+    typealias OpenSettings = @convention(c) (AnyObject, Selector, NSArray, @escaping @convention(block) (NSError?) -> Void) -> Void
+    let selector = NSSelectorFromString("openExtensionsSettingsForIdentifiers:completionHandler:")
+    guard let identifier = safariExtensionIdentifier(),
+          let settings: AnyClass = NSClassFromString("SFSafariSettings"),
+          let method = class_getClassMethod(settings, selector) else {
+        fallback()
+        return
+    }
+    let open = unsafeBitCast(method_getImplementation(method), to: OpenSettings.self)
+    open(settings as AnyObject, selector, [identifier] as NSArray) { error in
+        if error != nil { DispatchQueue.main.async(execute: fallback) }
+    }
+}
+
+private func openSafariSettingsByURL() {
     // The Settings pages to try, most specific first. iOS 18 moved Safari under Settings → Apps and
     // addresses it by bundle ID; older versions use the SAFARI key. The last one, this app's own page,
     // always opens.
@@ -498,7 +542,7 @@ struct An1meTrackerAppView: View {
     private var otherSitesStep: GuideStep {
         GuideStep(
             title: "Όλα τα απαραίτητα sites με ένα πάτημα",
-            detail: "Άνοιξε το Tracker από το μενού επεκτάσεων του Safari και πάτα «Allow website access», έπειτα «Allow» στο αίτημα του Safari. Ζητά μαζί πρόσβαση για metadata, εικόνες, Skip Outro και cloud sync. Το κουμπί υπάρχει και πριν το sign-in και στα Settings. Αν δεν εμφανιστεί αίτημα, ακολούθησε τις οδηγίες για χειροκίνητο «Allow»."
+            detail: "Μετά την εγκατάσταση ή ενημέρωση το Safari ανοίγει μόνο του τη σελίδα «Website access». Πάτα «Allow website access» και «Allow» στο αίτημα του Safari. Αν τα sites μείνουν σε Ask, πάτα «Open Safari Settings»: ανοίγει αυτή η εφαρμογή και σε πάει κατευθείαν στη σελίδα της επέκτασης, όπου βάζεις Allow σε κάθε site."
         )
     }
 

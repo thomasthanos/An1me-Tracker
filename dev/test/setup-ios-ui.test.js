@@ -64,3 +64,49 @@ test("setupUI injects SwiftUI ViewController, AppLogo imageset, and web resource
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("setupUI gives the host app the extension's link: its scene delegate and URL scheme, not the extension's", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ios-ui-url-"));
+  try {
+    const appDir = path.join(tmpDir, "An1me Tracker/iOS (App)");
+    const extDir = path.join(tmpDir, "An1me Tracker/iOS (Extension)");
+    fs.mkdirSync(appDir, { recursive: true });
+    fs.mkdirSync(extDir, { recursive: true });
+    const plist = (body) => `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n${body}</dict>\n</plist>\n`;
+    const appPlist = plist("\t<key>UIApplicationSceneManifest</key>\n\t<dict>\n\t\t<key>UIApplicationSupportsMultipleScenes</key>\n\t\t<false/>\n\t</dict>\n");
+    const extPlist = plist("\t<key>NSExtension</key>\n\t<dict>\n\t</dict>\n");
+    fs.writeFileSync(path.join(appDir, "Info.plist"), appPlist);
+    fs.writeFileSync(path.join(extDir, "Info.plist"), extPlist);
+    fs.writeFileSync(path.join(appDir, "SceneDelegate.swift"), "// template");
+    fs.writeFileSync(path.join(extDir, "SceneDelegate.swift"), "// extension");
+
+    const result = setupUI(tmpDir);
+    assert.equal(result.sceneDelegates, 1);
+    assert.equal(result.urlSchemes, 1);
+
+    const scene = fs.readFileSync(path.join(appDir, "SceneDelegate.swift"), "utf8");
+    assert.match(scene, /openURLContexts/);
+    assert.match(scene, /handleTrackerURL/);
+    assert.equal(fs.readFileSync(path.join(extDir, "SceneDelegate.swift"), "utf8"), "// extension");
+    assert.equal(fs.readFileSync(path.join(extDir, "Info.plist"), "utf8"), extPlist);
+
+    const updated = fs.readFileSync(path.join(appDir, "Info.plist"), "utf8");
+    assert.match(updated, /<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>an1metracker<\/string>/);
+    assert.ok(updated.indexOf("CFBundleURLTypes") > updated.indexOf("</dict>"), "added at the top level, after the nested dict");
+    assert.ok(updated.trimEnd().endsWith("</dict>\n</plist>"));
+
+    // Running again (the workflow re-runs on a regenerated project, but be safe) adds nothing twice.
+    setupUI(tmpDir);
+    assert.equal(fs.readFileSync(path.join(appDir, "Info.plist"), "utf8").split("CFBundleURLTypes").length, 2);
+
+    // The scheme the app registers is the one the extension links to.
+    const siteAccess = fs.readFileSync(path.join(__dirname, "../../src/popup/lib/site-access.js"), "utf8");
+    assert.match(siteAccess, /"an1metracker:\/\/safari-settings"/);
+    const swift = fs.readFileSync(path.join(__dirname, "../../ios/ViewController.swift"), "utf8");
+    assert.match(swift, /trackerURLScheme = "an1metracker"/);
+    assert.match(swift, /"safari-settings"/);
+    assert.match(swift, /openExtensionsSettingsForIdentifiers:completionHandler:/);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
