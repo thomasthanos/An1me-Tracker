@@ -249,6 +249,8 @@
                 position: relative;
                 width: 100%; max-width: 100%;
                 margin: 0;
+                grid-column: 1 / -1;
+                float: none; clear: both;
                 padding: 12px 14px;
                 background:
                     radial-gradient(ellipse at top right, rgba(79,195,247,0.10) 0%, transparent 55%),
@@ -926,13 +928,39 @@
     return null;
   }
 
+  // True when `el` lays its children out side by side (a flex row or any grid).
+  function isRowLayout(el) {
+    try {
+      const cs = getComputedStyle(el);
+      if (cs.display === "flex" || cs.display === "inline-flex") return !/column/.test(cs.flexDirection || "");
+      return cs.display === "grid" || cs.display === "inline-grid";
+    } catch {
+      return false;
+    }
+  }
+
+  // The shelf is a full-width block. As a child of a flex row or grid it becomes one more column beside
+  // its neighbours: the hero shrinks, the shelf is squeezed and offset, and on a phone it ends up at the
+  // top next to the hero. So climb out of every row layout and place it after the row that held the
+  // anchor, which keeps it directly below the hero at full width.
+  function insertInFlow(section, parent, before) {
+    let host = parent;
+    let reference = before;
+    for (let depth = 0; host && host.parentNode && host !== document.body && host !== document.documentElement && depth < 8; depth++) {
+      if (!isRowLayout(host)) break;
+      reference = host.nextSibling;
+      host = host.parentNode;
+    }
+    host.insertBefore(section, reference);
+  }
+
   function mountSection(section) {
     const shareNode = findShareAnchor();
     if (shareNode) {
       const parent = shareNode.parentNode;
       const next = shareNode.nextSibling;
       shareNode.remove();
-      parent.insertBefore(section, next);
+      insertInFlow(section, parent, next);
       mountedViaShare = true;
       return true;
     }
@@ -942,21 +970,12 @@
     if (container) {
       const hero = findHeroAnchor(container);
       if (hero && hero.parentNode) {
-        hero.parentNode.insertBefore(section, hero.nextSibling);
+        insertInFlow(section, hero.parentNode, hero.nextSibling);
         return true;
       }
 
-      let isRowish = false;
-      try {
-        const cs = getComputedStyle(container);
-        isRowish =
-          cs.display === "flex" || cs.display === "inline-flex"
-            ? !/column/.test(cs.flexDirection || "")
-            : cs.display === "grid" || cs.display === "inline-grid";
-      } catch {}
-
-      if (isRowish && container.parentNode) {
-        container.parentNode.insertBefore(section, container);
+      if (isRowLayout(container) && container.parentNode) {
+        insertInFlow(section, container.parentNode, container);
       } else {
         container.insertBefore(section, container.firstChild);
       }
@@ -994,7 +1013,7 @@
       const parent = shareNode.parentNode;
       const next = shareNode.nextSibling;
       shareNode.remove();
-      if (parent) parent.insertBefore(ourSection, next);
+      if (parent) insertInFlow(ourSection, parent, next);
       mountedViaShare = true;
     });
   }
