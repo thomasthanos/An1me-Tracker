@@ -2523,6 +2523,12 @@
     } catch {}
 
     FillerFetchUI.init();
+    // Access to the filler sites was just granted: run Fetch & Import again so the failed shows are retried.
+    FillerFetchUI.onAccessGranted = () => {
+      fetchAllFillers({ autoStart: true, forceInfoRefresh: false, forceFillerRefresh: false }).catch((error) => {
+        PopupLogger.error("RepairAll", "Fetch after granting access failed:", error);
+      });
+    };
     AT.AiringCountdown.start();
     await AT.SettingsView.initializeSpeedControl();
 

@@ -12,6 +12,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.5] — 2026-10-05
+
+### Fixed
+
+- Fetch & Import can now fix "no site access" by itself. On an iPhone, Safari can let the extension reach
+  an1me.to but not AnimeFillerList or Jikan, and every show then ended as "filler site unreachable (no site
+  access)" with nothing to do from the panel. The panel now says so and offers **Allow access**, which asks
+  the browser for both sites straight from the tap and runs the import again once allowed. If the prompt is
+  refused or not offered, it shows the Settings path (All Websites → Allow).
+- A show that failed for lack of access is no longer stamped "retry later", so it is fetched the moment access
+  is granted instead of up to 15 minutes later; granting access also clears the remembered failure for
+  automatic runs.
+
 ## [8.2.4] — 2026-10-05
 
 ### Fixed

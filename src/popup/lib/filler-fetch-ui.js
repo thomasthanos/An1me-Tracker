@@ -71,6 +71,13 @@ const FillerFetchUI = {
                 </div>
               </div>
 
+              <!-- The browser does not let the extension reach the filler sites -->
+              <div class="ffui-access" hidden>
+                <p class="ffui-access-text">The browser is not letting the extension reach AnimeFillerList and Jikan, so filler data cannot be fetched.</p>
+                <button type="button" class="ffui-access-btn">Allow access</button>
+                <p class="ffui-access-path" hidden>On iPhone: Settings → Apps → Safari → Extensions → An1me.to Tracker → All Websites → Allow, then run Fetch &amp; Import again.</p>
+              </div>
+
               <!-- Live log -->
               <div id="${logFeed}" class="ffui-log" style="display:none"></div>
 
@@ -81,9 +88,77 @@ const FillerFetchUI = {
     document.body.insertAdjacentHTML("beforeend", html);
   },
 
+  // The filler sources the background fetches from. Safari lets the user keep an extension off them (and
+  // Chrome off chosen sites); every lookup then fails as "no site access", which only the user can lift.
+  FILLER_ORIGINS: ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"],
+
+  // Called once the user has allowed access, so the caller can run Fetch & Import again.
+  onAccessGranted: null,
+
+  _permissionsApi() {
+    const api = globalThis.chrome?.permissions;
+    return typeof api?.contains === "function" ? api : null;
+  },
+
+  _showAccessBanner(show, { explain = false } = {}) {
+    const banner = document.querySelector(".ffui-access");
+    if (!banner) return;
+    banner.hidden = !show;
+    const path = banner.querySelector(".ffui-access-path");
+    // The settings path is the way that always works on an iPhone; show it there, or once a request failed.
+    if (path) path.hidden = !(explain || globalThis.AnimeTrackerUtils?.isMobileDevice?.());
+  },
+
+  // Shows the banner when the browser says the extension may not reach a filler source. Any doubt (no API,
+  // an error, no answer) leaves it hidden: the rows still say what failed.
+  async checkSiteAccess() {
+    const api = this._permissionsApi();
+    if (!api) return true;
+    const granted = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(true), 1500);
+      const done = (value) => { clearTimeout(timer); resolve(value !== false); };
+      try {
+        const pending = api.contains({ origins: this.FILLER_ORIGINS }, done);
+        if (pending && typeof pending.then === "function") pending.then(done, () => done(true));
+      } catch {
+        done(true);
+      }
+    });
+    this._showAccessBanner(!granted);
+    return granted;
+  },
+
+  // Must run straight from the tap: browsers only show the permission prompt for a user gesture.
+  _requestSiteAccess() {
+    const api = this._permissionsApi();
+    if (typeof api?.request !== "function") {
+      this._showAccessBanner(true, { explain: true });
+      return;
+    }
+    let settled = false;
+    // Safari can answer through both the callback and the promise; act on the first answer only.
+    const settle = (granted) => {
+      if (settled) return;
+      settled = true;
+      if (granted === true) {
+        this._showAccessBanner(false);
+        if (typeof this.onAccessGranted === "function") this.onAccessGranted();
+      } else {
+        this._showAccessBanner(true, { explain: true });
+      }
+    };
+    try {
+      const pending = api.request({ origins: this.FILLER_ORIGINS }, settle);
+      if (pending && typeof pending.then === "function") pending.then(settle, () => settle(false));
+    } catch {
+      settle(false);
+    }
+  },
+
   attachEventListeners() {
     const overlay = document.getElementById(this.IDS.overlay);
     overlay.querySelector(".ffui-close")?.addEventListener("click", () => this.close());
+    overlay.querySelector(".ffui-access-btn")?.addEventListener("click", () => this._requestSiteAccess());
     const blockOutsideClick = (e) => {
       if (e.target.id !== this.IDS.overlay) return;
       e.preventDefault();
@@ -126,6 +201,7 @@ const FillerFetchUI = {
     overlay.style.display = "flex";
     overlay.setAttribute("aria-hidden", "false");
     requestAnimationFrame(() => container?.focus?.());
+    this.checkSiteAccess().catch(() => {});
   },
 
   close() {
@@ -264,6 +340,8 @@ const FillerFetchUI = {
     this._setStat("skipped", this.state.skipped);
     this._setStat("failed", this.state.failed);
     this._renderLogs(Array.isArray(state.logs) ? state.logs : []);
+    // A row that failed for lack of access is proof enough, even where the permissions API cannot say so.
+    if ((state.logs || []).some((entry) => /no site access/i.test(String(entry?.detail || "")))) this._showAccessBanner(true);
 
     const { processed, total } = progress;
     const pct = state.status === "completed" ? 100 : total > 0 ? Math.min(100, (processed / total) * 100) : 0;

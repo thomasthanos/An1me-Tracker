@@ -25,7 +25,7 @@ const prior = () => ({ canon: [1, 3, 4], filler: [2, 5], mixed: [], anime_canon:
 // One isolated worker per case: the Jikan circuit and the slug cache live in the global scope.
 function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess = null } = {}) {
   const store = structuredClone(seed), calls = { aflIndex: 0, aflShow: 0, jikan: 0, offline: 0 }, timers = [], alarms = [], listeners = {};
-  const mode = { afl, jikan, jikanEpisodes: 28 };
+  const mode = { afl, jikan, jikanEpisodes: 28, siteAccess };
   // The browser's own connectivity flag, which the worker reads as navigator.onLine. Flip it to cut the connection.
   const nav = { userAgent: ua, platform: ua, onLine: true };
   let time = NOW, writes = 0, runaway = false;
@@ -78,7 +78,8 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess
     },
     chrome: {
       // siteAccess false plays a browser where the user has not allowed the extension on AnimeFillerList.
-      ...(siteAccess === null ? {} : { permissions: { contains: (request, callback) => callback(siteAccess) } }),
+      // mode.siteAccess can change mid-test, as when the user allows the extension in Safari's settings.
+      ...(siteAccess === null ? {} : { permissions: { contains: (request, callback) => callback(mode.siteAccess), onAdded: { addListener: (fn) => (listeners.permissionAdded ||= []).push(fn) } } }),
       runtime: { getManifest: () => ({ version: "8.2.1" }) }, alarms: { create: (name, options) => alarms.push({ name, options }), clear: async () => true }, tabs: { query: async () => [] } },
     dlog() {},
   });
@@ -89,7 +90,9 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess
   const resolve = (slug, options = {}) => c.AnimeTrackerAnimeResolver.resolve(slug, { title: Object.fromEntries(SHOWS)[slug] || slug, includeEpisodeTypes: true, ...options });
   // The connection comes back: the flag flips and the worker gets the same online event a browser sends.
   const goOnline = () => { nav.onLine = true; for (const fn of listeners.online || []) fn(); };
-  return { c, store, calls, timers, mode, nav, alarms, resolve, goOnline, writes: () => writes, runaway: () => runaway, advance: (ms) => { time += ms; } };
+  // The user allows the extension on the filler sites: the browser grants it and fires permissions.onAdded.
+  const grantAccess = () => { mode.siteAccess = true; for (const fn of listeners.permissionAdded || []) fn({ origins: ["https://www.animefillerlist.com/*"] }); };
+  return { c, store, calls, timers, mode, nav, alarms, resolve, goOnline, grantAccess, writes: () => writes, runaway: () => runaway, advance: (ms) => { time += ms; } };
 }
 
 let failures = 0;
@@ -502,6 +505,37 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.equal(result.fillerResult.status, "fetched", result.fillerResult.error);
     assert.equal(h.store["episodeTypes_one-piece"].totalEpisodes, 1150);
     assert.equal(h.calls.jikan, 1 + 12, "one search and twelve pages");
+  });
+
+  await test("a show that failed for lack of site access is fetched as soon as access is granted", async () => {
+    const h = worker({ afl: "down", siteAccess: false, seed: { animeData: library() } });
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
+    const blocked = await h.c.getMetadataRepairState();
+    assert.equal(blocked.failed, 4);
+    assert.match(blocked.logs[0].detail, /no site access/);
+    assert.equal(h.store.episodeTypes_noragami, undefined, "no retry stamp was written");
+    // The user taps Allow (or allows the extension in Settings), and runs Fetch & Import again at once.
+    h.mode.siteAccess = true;
+    h.mode.afl = "ok";
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => { const state = await h.c.getMetadataRepairState(); return state?.status === "completed" && state.runId !== blocked.runId; });
+    const after = await h.c.getMetadataRepairState();
+    assert.deepEqual([after.fetched, after.failed], [4, 0], "nothing waits out a retry stamp");
+    // Control: an ordinary network failure still earns its stamp.
+    const network = worker({ afl: "down", siteAccess: true });
+    await network.resolve("noragami");
+    assert.equal(network.store.episodeTypes_noragami.retryable, true);
+  });
+
+  await test("a granted permission clears the remembered failure for the next automatic run", async () => {
+    const h = worker({ afl: "down", siteAccess: false });
+    await h.resolve("noragami");
+    h.mode.afl = "ok";
+    h.mode.siteAccess = true;
+    assert.equal((await h.resolve("noragami", { forceFillerRefresh: true })).fillerResult.status, "failed", "still remembered without the event");
+    h.grantAccess();
+    assert.equal((await h.resolve("noragami", { forceFillerRefresh: true })).fillerResult.status, "fetched");
   });
 
   process.exitCode = failures ? 1 : 0;
