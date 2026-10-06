@@ -185,17 +185,28 @@ function registerSwiftSources(projectFile, absoluteFiles, groupName = APP_FOLDER
 // The generated storyboard connects a WKWebView to ViewController's `webView` outlet. The app has no web
 // surface, so the connection is dropped. The property still exists in Swift, so a project built without
 // this step still launches.
+//
+// The match covers the whole element rather than one line: Xcode wraps long attribute lists, and removing
+// only the first line of a wrapped `<outlet …/>` would leave a dangling attribute behind — a storyboard
+// that no longer compiles, failing the build in a resources phase far from the cause. `[^>]*` spans
+// newlines, so a wrapped element is matched as a unit. A binary storyboard never matches and is left as it
+// is, which is safe because the outlet property still exists.
 function stripWebViewOutlet(buildDir) {
   let stripped = 0;
   for (const storyboard of findFilesByName(buildDir, "Main.storyboard")) {
     if (storyboard.includes("Extension")) continue;
     const source = fs.readFileSync(storyboard, "utf8");
-    const next = source.replace(/^[ \t]*<outlet property="webView"[^\n]*\n/gm, "");
-    if (next !== source) {
-      fs.writeFileSync(storyboard, next);
-      stripped++;
-      console.log(`[setup-ios-ui] Disconnected the WebKit fallback outlet in: ${storyboard}`);
+    const next = source.replace(/[ \t]*<outlet\b[^>]*property="webView"[^>]*\/>[ \t]*\r?\n?/g, "");
+    if (next === source) continue;
+    // Never write a storyboard we did not fully clean up: a leftover attribute means the element was not
+    // self-closing, and a half-edited file is worse than an unedited one.
+    if (next.includes('property="webView"')) {
+      console.warn(`[setup-ios-ui] Left ${storyboard} untouched: the webView outlet is not a self-closing element`);
+      continue;
     }
+    fs.writeFileSync(storyboard, next);
+    stripped += 1;
+    console.log(`[setup-ios-ui] Disconnected the WebKit fallback outlet in: ${storyboard}`);
   }
   return stripped;
 }

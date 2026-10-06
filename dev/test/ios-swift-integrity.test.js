@@ -203,6 +203,45 @@ for (const [file, source] of sources) {
 const duplicates = [...declarations].filter(([, where]) => where.length > 1);
 check("no type is declared twice across the app", duplicates.length === 0, duplicates.map(([name, where]) => `${name}: ${where.join(", ")}`).join("; "));
 
+// ─── ObservableObject conformances actually work ─────────────────────────────────────────────────────
+//
+// This is the check that earned its place: the first version of this app declared four view models as
+// `ObservableObject` with no `@Published` property. The compiler only synthesises `objectWillChange` when
+// there is at least one, so the conformance failed — and the diagnostic was a bare `note:` quoting
+// `var objectWillChange: Self.ObjectWillChangePublisher { get }`, which says nothing about the cause.
+
+const observableTypes = new Set();
+const withoutPublished = [];
+for (const [file, source] of sources) {
+  const headers = source.matchAll(/^([ \t]*)(?:public |internal |private |fileprivate |final |open )*(?:class|struct)\s+([A-Z][A-Za-z0-9_]*)[^\n{]*ObservableObject[^\n{]*\{/gm);
+  for (const header of headers) {
+    const name = header[2];
+    observableTypes.add(name);
+    const body = bodyAfter(source, header[0].trim());
+    if (body === null || !body.includes("@Published")) withoutPublished.push(`${rel(file)} ${name}`);
+  }
+}
+check(
+  "every ObservableObject declares at least one @Published property",
+  withoutPublished.length === 0,
+  `no objectWillChange would be synthesised, so the conformance fails: ${withoutPublished.join(", ")}`,
+);
+
+// A property wrapper whose type is not an ObservableObject fails the same way, one level up.
+const wrappers = [];
+for (const [file, source] of sources) {
+  for (const match of source.matchAll(/@(StateObject|ObservedObject|EnvironmentObject)[^\n]*?:\s*([A-Z][A-Za-z0-9_]*)/g)) {
+    wrappers.push({ wrapper: match[1], type: match[2], where: rel(file) });
+  }
+}
+const badWrappers = wrappers.filter((entry) => !observableTypes.has(entry.type));
+check(
+  "every @StateObject/@ObservedObject/@EnvironmentObject type is an ObservableObject",
+  badWrappers.length === 0,
+  badWrappers.map((entry) => `${entry.where} @${entry.wrapper} ${entry.type}`).join("; "),
+);
+check("the app does observe something", wrappers.length > 0, "no property wrapper was found at all; the scan is probably broken");
+
 // ─── No crashers ─────────────────────────────────────────────────────────────────────────────────────
 
 const unsafe = [];

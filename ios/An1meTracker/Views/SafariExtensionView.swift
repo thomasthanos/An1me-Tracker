@@ -10,11 +10,9 @@ import SwiftUI
 
 struct SafariExtensionView: View {
     @EnvironmentObject private var coordinator: PermissionCoordinator
-    @StateObject private var model: SafariExtensionViewModel
 
-    init(coordinator: PermissionCoordinator) {
-        _model = StateObject(wrappedValue: SafariExtensionViewModel(coordinator: coordinator))
-    }
+    /// Derived on demand from the coordinator the environment publishes.
+    private var model: SafariExtensionViewModel { SafariExtensionViewModel(coordinator: coordinator) }
 
     var body: some View {
         List {

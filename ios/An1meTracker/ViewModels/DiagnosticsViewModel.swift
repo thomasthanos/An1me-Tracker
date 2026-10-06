@@ -5,18 +5,15 @@
 //  Assembles the diagnostics report on demand. Everything it shows is read from the same coordinator the
 //  rest of the app uses, so the screen can never disagree with the dashboard.
 //
+//  A value type: it derives everything from the coordinator and owns nothing. See `HomeViewModel`.
+//
 
 import Foundation
-import SwiftUI
 
 @MainActor
-final class DiagnosticsViewModel: ObservableObject {
+struct DiagnosticsViewModel {
 
-    private let coordinator: PermissionCoordinator
-
-    init(coordinator: PermissionCoordinator) {
-        self.coordinator = coordinator
-    }
+    let coordinator: PermissionCoordinator
 
     var report: DiagnosticsReport { DiagnosticsService.report(coordinator: coordinator) }
     var isChecking: Bool { coordinator.isRefreshing }

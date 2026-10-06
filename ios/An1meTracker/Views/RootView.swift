@@ -22,15 +22,15 @@ struct RootView: View {
 
     var body: some View {
         NavigationStack {
-            HomeView(coordinator: coordinator)
+            HomeView()
                 .navigationDestination(for: AppRoute.self) { route in
                     switch route {
                     case .websiteAccess:
-                        WebsiteAccessView(coordinator: coordinator)
+                        WebsiteAccessView()
                     case .safariExtension:
-                        SafariExtensionView(coordinator: coordinator)
+                        SafariExtensionView()
                     case .diagnostics:
-                        DiagnosticsView(coordinator: coordinator)
+                        DiagnosticsView()
                     case .settings:
                         SettingsView()
                     case .about:

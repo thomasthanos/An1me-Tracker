@@ -6,18 +6,18 @@
 //  the single next step. It never invents a state — when nothing is verified it says so and offers the
 //  verification instead.
 //
+//  This is a value type on purpose. It owns no state: every value below is derived from the coordinator,
+//  which is the object that actually changes and the one the views observe. A class conforming to
+//  `ObservableObject` with nothing `@Published` would have no `objectWillChange` for the compiler to
+//  synthesise, and would not conform at all.
+//
 
 import Foundation
-import SwiftUI
 
 @MainActor
-final class HomeViewModel: ObservableObject {
+struct HomeViewModel {
 
-    private let coordinator: PermissionCoordinator
-
-    init(coordinator: PermissionCoordinator) {
-        self.coordinator = coordinator
-    }
+    let coordinator: PermissionCoordinator
 
     // MARK: - Headline
 
@@ -29,7 +29,6 @@ final class HomeViewModel: ObservableObject {
         if isReady { return "Ready" }
         if coordinator.extensionState.isEnabled == false { return "Action Required" }
         if !coordinator.assessment.state.missingOrigins.isEmpty { return "Action Required" }
-        if coordinator.assessment.state.isAllowed { return "Finish setup" }
         return "Finish setup"
     }
 

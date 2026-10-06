@@ -11,11 +11,10 @@ import UIKit
 
 struct HomeView: View {
     @EnvironmentObject private var coordinator: PermissionCoordinator
-    @StateObject private var model: HomeViewModel
 
-    init(coordinator: PermissionCoordinator) {
-        _model = StateObject(wrappedValue: HomeViewModel(coordinator: coordinator))
-    }
+    /// Derived on demand from the coordinator the environment publishes. Nothing here is stored, so the
+    /// screen cannot show a value that has drifted from the object that owns the state.
+    private var model: HomeViewModel { HomeViewModel(coordinator: coordinator) }
 
     var body: some View {
         ScrollView {

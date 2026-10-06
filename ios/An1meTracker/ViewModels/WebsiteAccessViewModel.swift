@@ -5,18 +5,16 @@
 //  The website-access screen's presenter. Groups come from the generated `HostPermissions` model, so the
 //  app and the extension describe the same websites in the same words.
 //
+//  A value type: it derives everything from the coordinator and owns nothing, so there is no state to
+//  republish. See `HomeViewModel` for why that matters.
+//
 
 import Foundation
-import SwiftUI
 
 @MainActor
-final class WebsiteAccessViewModel: ObservableObject {
+struct WebsiteAccessViewModel {
 
-    private let coordinator: PermissionCoordinator
-
-    init(coordinator: PermissionCoordinator) {
-        self.coordinator = coordinator
-    }
+    let coordinator: PermissionCoordinator
 
     var groups: [GroupAccess] { coordinator.assessment.groups }
     var assessment: AccessAssessment { coordinator.assessment }

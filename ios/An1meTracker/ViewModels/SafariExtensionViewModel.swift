@@ -5,18 +5,15 @@
 //  The Safari-extension screen's presenter: what the app knows about the extension bundle and about the
 //  access it has been granted.
 //
+//  A value type: it derives everything from the coordinator and owns nothing. See `HomeViewModel`.
+//
 
 import Foundation
-import SwiftUI
 
 @MainActor
-final class SafariExtensionViewModel: ObservableObject {
+struct SafariExtensionViewModel {
 
-    private let coordinator: PermissionCoordinator
-
-    init(coordinator: PermissionCoordinator) {
-        self.coordinator = coordinator
-    }
+    let coordinator: PermissionCoordinator
 
     var state: ExtensionEnabledState { coordinator.extensionState }
     var isChecking: Bool { coordinator.isRefreshing }

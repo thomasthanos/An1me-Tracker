@@ -10,12 +10,10 @@ import UIKit
 
 struct DiagnosticsView: View {
     @EnvironmentObject private var coordinator: PermissionCoordinator
-    @StateObject private var model: DiagnosticsViewModel
     @State private var didCopy = false
 
-    init(coordinator: PermissionCoordinator) {
-        _model = StateObject(wrappedValue: DiagnosticsViewModel(coordinator: coordinator))
-    }
+    /// Derived on demand from the coordinator the environment publishes.
+    private var model: DiagnosticsViewModel { DiagnosticsViewModel(coordinator: coordinator) }
 
     var body: some View {
         List {

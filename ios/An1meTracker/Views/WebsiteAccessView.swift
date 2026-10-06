@@ -12,12 +12,10 @@ import SwiftUI
 
 struct WebsiteAccessView: View {
     @EnvironmentObject private var coordinator: PermissionCoordinator
-    @StateObject private var model: WebsiteAccessViewModel
     @State private var showsTechnicalDetails = false
 
-    init(coordinator: PermissionCoordinator) {
-        _model = StateObject(wrappedValue: WebsiteAccessViewModel(coordinator: coordinator))
-    }
+    /// Derived on demand from the coordinator the environment publishes.
+    private var model: WebsiteAccessViewModel { WebsiteAccessViewModel(coordinator: coordinator) }
 
     var body: some View {
         List {

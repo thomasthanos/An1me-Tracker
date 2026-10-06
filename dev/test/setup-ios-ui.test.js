@@ -66,7 +66,28 @@ function projectFixture() {
 `;
 }
 
-function buildFixture() {
+// The generated storyboard connects a WKWebView to ViewController's outlet. `outlet` lets a test choose how
+// Xcode laid that element out, because wrapping is the case that used to be mishandled.
+function storyboardFixture(outlet) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<document>
+	<scenes>
+		<scene>
+			<objects>
+				<viewController id="x" customClass="ViewController">
+					<view key="view" id="v"/>
+					<connections>
+						${outlet}
+					</connections>
+				</viewController>
+			</objects>
+		</scene>
+	</scenes>
+</document>
+`;
+}
+
+function buildFixture({ outlet = '<outlet property="webView" destination="y" id="z"/>' } = {}) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ios-ui-test-"));
   const projectDir = path.join(tmpDir, "An1me Tracker.xcodeproj");
   const appDir = path.join(tmpDir, "An1me Tracker/iOS (App)");
@@ -88,11 +109,7 @@ function buildFixture() {
   fs.writeFileSync(path.join(appDir, "Info.plist"), plist("\t<key>UIApplicationSceneManifest</key>\n\t<dict>\n\t</dict>\n"));
   fs.writeFileSync(path.join(extDir, "Info.plist"), plist("\t<key>NSExtension</key>\n\t<dict>\n\t</dict>\n"));
 
-  // The generated storyboard connects a WKWebView to ViewController's outlet.
-  fs.writeFileSync(
-    path.join(appDir, "Main.storyboard"),
-    `<?xml version="1.0" encoding="UTF-8"?>\n<document>\n\t<scenes>\n\t\t<scene>\n\t\t\t<objects>\n\t\t\t\t<viewController id="x" customClass="ViewController">\n\t\t\t\t\t<connections>\n\t\t\t\t\t\t<outlet property="webView" destination="y" id="z"/>\n\t\t\t\t\t</connections>\n\t\t\t\t</viewController>\n\t\t\t</objects>\n\t\t</scene>\n\t</scenes>\n</document>\n`,
-  );
+  fs.writeFileSync(path.join(appDir, "Main.storyboard"), storyboardFixture(outlet));
   return { tmpDir, projectDir, appDir, extDir, assetsDir };
 }
 
@@ -161,7 +178,6 @@ test("setupUI installs the native app sources, registers them, and unwires the W
 });
 
 test("the extension and the app agree about the URL scheme and the settings selector", () => {
-  // The extension opens this link; the app registers it in its Info.plist during the build.
   const siteAccess = fs.readFileSync(path.join(REPO, "src/popup/lib/site-access.js"), "utf8");
   assert.match(siteAccess, /"an1metracker:\/\/safari-settings"/);
 
