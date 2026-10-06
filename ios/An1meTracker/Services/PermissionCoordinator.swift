@@ -6,6 +6,7 @@
 //  reads this object; nothing recomputes permissions on its own and nothing stores a verdict.
 //
 
+import Combine
 import Foundation
 import SwiftUI
 
