@@ -301,8 +301,10 @@
       }
       const updatedAt = state.updatedAt ? Date.parse(state.updatedAt) : 0;
       const progress = getMetadataRepairProgress(state);
-      // A run paused for lack of a connection is waiting, not stuck, and it resumes by itself.
+      // A run paused for lack of a connection, or for the filler source (Jikan) to answer again, is waiting, not
+      // stuck, and it resumes by itself.
       const waiting = state.waitingForNetwork === true;
+      const waitingForJikan = Number(state.waitingForJikanUntil) > Date.now();
       if (!updatedAt || Date.now() - updatedAt > METADATA_REPAIR_STALE_MS) {
         if (!isSilent) {
           setMetadataRepairStatus(
@@ -340,6 +342,8 @@
       }
       if (waiting) {
         setMetadataRepairStatus("Waiting for connection...");
+      } else if (waitingForJikan) {
+        setMetadataRepairStatus("Filler source busy, continuing shortly...");
       } else if (uiMode === "status") {
         setMetadataRepairStatus(
           progress.remaining > 0 ? `Fetching ${progress.remaining} anime...` : "Fetching data...",

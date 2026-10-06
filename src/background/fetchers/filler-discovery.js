@@ -60,6 +60,7 @@ function resetFillerFetchBreakers() {
   _aflIndexFailure = null;
   globalThis.__jikanCircuitBroken = false;
   globalThis.__jikanCircuitBrokenUntil = 0;
+  globalThis.__jikanTimeouts = 0;
 }
 
 const AFL_ORIGIN_PATTERN = "https://www.animefillerlist.com/*";
@@ -492,10 +493,31 @@ function rebaseEpisodeTypes(episodeTypes, offset, seasonLength) {
   return out;
 }
 
-// A timeout opens the Jikan circuit for an hour, so a limit that a phone on mobile data regularly misses
-// (2.5s and 3.5s used to be) turned one slow answer into an hour of "filler unavailable" for every show.
-const JIKAN_MOBILE_SEARCH_TIMEOUT_MS = 5000;
-const JIKAN_MOBILE_EPISODES_TIMEOUT_MS = 7000;
+// A phone on mobile data, or one streaming the episode being watched, answers slowly; a short limit turned slow
+// answers into failures (2.5s and 3.5s used to be, then 5s and 7s still missed while a video played).
+const JIKAN_MOBILE_SEARCH_TIMEOUT_MS = 8000;
+const JIKAN_MOBILE_EPISODES_TIMEOUT_MS = 10000;
+const JIKAN_SEARCH_TIMEOUT_MS = 5000;
+const JIKAN_EPISODES_TIMEOUT_MS = 7000;
+// One slow answer is not an outage. A single timeout used to close Jikan for an hour, and every show after it
+// failed at once as "filler paused" (63 of 119 in one run). Now two timeouts in a row close it briefly, each
+// further one lengthens the pause up to half an hour, and any answer from Jikan resets the count.
+const JIKAN_TIMEOUTS_BEFORE_PAUSE = 2;
+const JIKAN_PAUSE_STEPS_MS = Object.freeze([2, 5, 10, 20, 30].map((minutes) => minutes * 60 * 1000));
+
+function noteJikanTimeout() {
+  const strikes = (Number(globalThis.__jikanTimeouts) || 0) + 1;
+  globalThis.__jikanTimeouts = strikes;
+  if (strikes < JIKAN_TIMEOUTS_BEFORE_PAUSE) return;
+  const step = Math.min(strikes - JIKAN_TIMEOUTS_BEFORE_PAUSE, JIKAN_PAUSE_STEPS_MS.length - 1);
+  globalThis.__jikanCircuitBroken = true;
+  globalThis.__jikanCircuitBrokenUntil = Date.now() + JIKAN_PAUSE_STEPS_MS[step];
+  (typeof dlog === "function" ? dlog : () => {})(`[AnimeTracker] Jikan timed out ${strikes} times in a row — pausing it`);
+}
+
+function noteJikanAnswer() {
+  globalThis.__jikanTimeouts = 0;
+}
 // Jikan allows about one request a second sustained (3/s, 60/min). Every request, search or episode page,
 // takes the next free slot, so a library sweep that leans on Jikan is not answered with 429s.
 const JIKAN_MIN_GAP_MS = 1000;
@@ -530,7 +552,7 @@ async function fetchJikanEpisodes(title, options = {}) {
       await waitForJikanSlot();
       const searchCtrl = new AbortController();
       const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
-      const searchTimer = setTimeout(() => searchCtrl.abort(), isMobile ? JIKAN_MOBILE_SEARCH_TIMEOUT_MS : 3500);
+      const searchTimer = setTimeout(() => searchCtrl.abort(), isMobile ? JIKAN_MOBILE_SEARCH_TIMEOUT_MS : JIKAN_SEARCH_TIMEOUT_MS);
       let searchRes;
       try {
         searchRes = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=5`, { signal: searchCtrl.signal });
@@ -538,9 +560,7 @@ async function fetchJikanEpisodes(title, options = {}) {
         const isAbort = fetchErr?.name === "AbortError";
         if (isAbort) {
           if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
-          globalThis.__jikanCircuitBroken = true;
-          globalThis.__jikanCircuitBrokenUntil = Date.now() + (60 * 60 * 1000);
-          (typeof dlog === "function" ? dlog : () => {})("[AnimeTracker] Jikan search timed out — opening circuit breaker");
+          noteJikanTimeout();
           throw unavailable("jikan_search_timeout");
         }
         const err = new Error(fetchErr?.message || "jikan_fetch_failed");
@@ -549,6 +569,7 @@ async function fetchJikanEpisodes(title, options = {}) {
       } finally {
         clearTimeout(searchTimer);
       }
+      noteJikanAnswer();
       if (searchRes.status === 404) return null;
       if (!searchRes.ok) {
         const error = new Error(`jikan_search_http_${searchRes.status}`);
@@ -584,21 +605,21 @@ async function fetchJikanEpisodes(title, options = {}) {
       await waitForJikanSlot();
       const epCtrl = new AbortController();
       const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
-      const epTimer = setTimeout(() => epCtrl.abort(), isMobile ? JIKAN_MOBILE_EPISODES_TIMEOUT_MS : 5000);
+      const epTimer = setTimeout(() => epCtrl.abort(), isMobile ? JIKAN_MOBILE_EPISODES_TIMEOUT_MS : JIKAN_EPISODES_TIMEOUT_MS);
       let epRes;
       try {
         epRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, { signal: epCtrl.signal });
       } catch (epErr) {
         if (epErr?.name === "AbortError") {
           if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
-          globalThis.__jikanCircuitBroken = true;
-          globalThis.__jikanCircuitBrokenUntil = Date.now() + (60 * 60 * 1000);
+          noteJikanTimeout();
           throw unavailable("jikan_episodes_timeout");
         }
         throw epErr;
       } finally {
         clearTimeout(epTimer);
       }
+      noteJikanAnswer();
       // 429 used to be folded into "no data" and cached as a miss. It means "ask again later".
       if (epRes.status === 429) {
         const err = new Error("jikan_rate_limited");

@@ -12,6 +12,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.14] — 2026-10-06
+
+### Fixed
+
+- **Fetch & Import no longer fails most of the library after one slow answer.** Shows AnimeFillerList does not
+  list get their filler data from Jikan (MyAnimeList). A single Jikan timeout closed it for a whole hour, so every
+  later show failed at once as **filler paused, retry later** (63 of 119 in one run), most often while an
+  episode was playing and using the connection. Now:
+  - one slow answer does not pause Jikan; two in a row pause it for 2 minutes, then 5, 10, 20 and at most 30,
+    and any answer from Jikan resets the count;
+  - a run that meets a slow or paused Jikan waits at that show (**Filler source busy, continuing shortly**) and
+    continues by itself, instead of counting the rest as failures; a show Jikan keeps timing out on is counted
+    after three waits and the run moves on;
+  - Jikan gets more time to answer (8 and 10 seconds on a phone, 5 and 7 on desktop);
+  - pressing **Fetch & Import** during a wait tries again at once.
+
 ## [8.2.13] — 2026-10-06
 
 ### Fixed

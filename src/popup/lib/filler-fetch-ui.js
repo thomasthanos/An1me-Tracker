@@ -357,7 +357,9 @@ const FillerFetchUI = {
     let label = "Ready to fetch and import your data…";
     if (state.status === "running") {
       const currentTitle = this._waitingForAccess ? "Waiting for website access…" :
-        state.waitingForNetwork === true ? "Waiting for connection…" : state.currentTitle || state.currentSlug || "Working…";
+        state.waitingForNetwork === true ? "Waiting for connection…" :
+        Number(state.waitingForJikanUntil) > Date.now() ? "Filler source busy, continuing shortly…" :
+        state.currentTitle || state.currentSlug || "Working…";
       label = `${processed} / ${total} — ${currentTitle}`;
     } else if (state.status === "completed") {
       if (state.stopped === true) {
