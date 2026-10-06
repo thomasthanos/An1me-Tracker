@@ -150,78 +150,45 @@
   function renderPreferencesSection(state) {
     const isMobile = !!(globalThis.AnimeTrackerUtils?.isMobileDevice?.());
     const noAlerts = alertsUnavailable();
+    // On a phone several toggles are always disabled (battery, touch lag, no notifications API). Showing
+    // them greyed out is noise, so they are dropped there and the count says what is actually left.
     const items = [
-      renderToggleItem({
-        id: "settingsCopyGuard",
-        subtitleId: "settingsCopyGuardSubtitle",
-        iconKey: "copy",
-        title: "Copy Guard",
-        subtitle: toggleSubtitle("settingsCopyGuard", state.copyGuard),
-        enabled: state.copyGuard,
-        disabled: isMobile,
-      }),
-      renderToggleItem({
-        id: "settingsSmartNotif",
-        subtitleId: "settingsSmartNotifSubtitle",
-        iconKey: "bell",
-        title: "New Episode Alerts",
+      { id: "settingsCopyGuard", subtitleId: "settingsCopyGuardSubtitle", iconKey: "copy", title: "Copy Guard",
+        subtitle: toggleSubtitle("settingsCopyGuard", state.copyGuard), enabled: state.copyGuard, disabled: isMobile, hideOnMobile: true },
+      { id: "settingsSmartNotif", subtitleId: "settingsSmartNotifSubtitle", iconKey: "bell", title: "New Episode Alerts",
         subtitle: noAlerts ? ALERTS_UNAVAILABLE_SUBTITLE : toggleSubtitle("settingsSmartNotif", state.smartNotif),
-        enabled: state.smartNotif,
-        disabled: noAlerts,
-      }),
-      renderToggleItem({
-        id: "settingsAutoSkipFiller",
-        subtitleId: "settingsAutoSkipFillerSubtitle",
-        iconKey: "skipFwd",
-        title: "Auto-Skip Fillers",
-        subtitle: toggleSubtitle("settingsAutoSkipFiller", state.autoSkipFiller),
-        enabled: state.autoSkipFiller,
-      }),
-      renderToggleItem({
-        id: "settingsSkiptime",
-        subtitleId: "settingsSkiptimeSubtitle",
-        iconKey: "skipMark",
-        title: "Skiptime Contributor",
-        subtitle: toggleSubtitle("settingsSkiptime", state.skiptimeHelper),
-        enabled: state.skiptimeHelper,
-        disabled: isMobile,
-      }),
-      renderToggleItem({
-        id: "settingsAuto4kServer",
-        subtitleId: "settingsAuto4kServerSubtitle",
-        iconKey: "fourK",
-        title: "Auto-Pick Premium",
-        subtitle: toggleSubtitle("settingsAuto4kServer", state.auto4kServer),
-        enabled: state.auto4kServer,
-        disabled: isMobile,
-      }),
-      renderToggleItem({
-        id: "settingsAutoResume",
-        subtitleId: "settingsAutoResumeSubtitle",
-        iconKey: "skipFwd",
-        title: "Auto-Resume",
-        subtitle: toggleSubtitle("settingsAutoResume", state.autoResume),
-        enabled: state.autoResume,
-      }),
-      renderToggleItem({
-        id: "settingsAdGuard",
-        subtitleId: "settingsAdGuardSubtitle",
-        iconKey: "skipMark",
-        title: "Ad Guard",
-        subtitle: toggleSubtitle("settingsAdGuard", state.adGuard),
-        enabled: state.adGuard,
-      }),
-    ].join("");
+        enabled: state.smartNotif, disabled: noAlerts, hideOnMobile: noAlerts },
+      { id: "settingsAutoSkipFiller", subtitleId: "settingsAutoSkipFillerSubtitle", iconKey: "skipFwd", title: "Auto-Skip Fillers",
+        subtitle: toggleSubtitle("settingsAutoSkipFiller", state.autoSkipFiller), enabled: state.autoSkipFiller, disabled: false, hideOnMobile: false },
+      { id: "settingsSkiptime", subtitleId: "settingsSkiptimeSubtitle", iconKey: "skipMark", title: "Skiptime Contributor",
+        subtitle: toggleSubtitle("settingsSkiptime", state.skiptimeHelper), enabled: state.skiptimeHelper, disabled: isMobile, hideOnMobile: true },
+      { id: "settingsAuto4kServer", subtitleId: "settingsAuto4kServerSubtitle", iconKey: "fourK", title: "Auto-Pick Premium",
+        subtitle: toggleSubtitle("settingsAuto4kServer", state.auto4kServer), enabled: state.auto4kServer, disabled: isMobile, hideOnMobile: true },
+      { id: "settingsAutoResume", subtitleId: "settingsAutoResumeSubtitle", iconKey: "skipFwd", title: "Auto-Resume",
+        subtitle: toggleSubtitle("settingsAutoResume", state.autoResume), enabled: state.autoResume, disabled: false, hideOnMobile: false },
+      { id: "settingsAdGuard", subtitleId: "settingsAdGuardSubtitle", iconKey: "skipMark", title: "Ad Guard",
+        subtitle: toggleSubtitle("settingsAdGuard", state.adGuard), enabled: state.adGuard, disabled: false, hideOnMobile: false },
+    ];
+    const visible = items.filter((item) => !(isMobile && item.hideOnMobile));
+    const rendered = visible
+      .map((item) => renderToggleItem({
+        id: item.id, subtitleId: item.subtitleId, iconKey: item.iconKey, title: item.title,
+        subtitle: item.subtitle, enabled: item.enabled, disabled: item.disabled,
+      }))
+      .join("");
 
     return `
             <section class="settings-card settings-card--preferences">
-                ${sectionHead("gear", "PREFERENCES", "7 settings")}
-                <div class="settings-toggle-list">${items}</div>
+                ${sectionHead("gear", "PREFERENCES", `${visible.length} settings`)}
+                <div class="settings-toggle-list">${rendered}</div>
             </section>
         `;
   }
 
   function renderConnectionsSection() {
+    // AniList is the only connection, and it is disabled on mobile; a card that only said "Disabled on
+    // mobile to save battery" is clutter, so the whole section is dropped there.
+    if (globalThis.AnimeTrackerUtils?.isMobileDevice?.()) return "";
     return `
             <section class="settings-card settings-connections-card" id="settingsConnectionsSection">
                 <div class="settings-head">

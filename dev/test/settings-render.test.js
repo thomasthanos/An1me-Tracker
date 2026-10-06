@@ -25,20 +25,26 @@ test('the real Settings module renders its initial popup container without undec
   h.settings.render(h.container); assert.equal(h.attributes.has('hidden'), false);
   h.rerender(); assert.doesNotThrow(() => h.settings.render(h.container, { user: { email: 'thomas@example.com' }, settings: { autoResume: true } }));
 });
-test('signed-in mobile Settings preserves disabled heavy toggles and hides the desktop password action', () => {
+test('signed-in mobile Settings hides battery-heavy toggles and the desktop password action', () => {
   const h = view(true);
   h.settings.render(h.container, { user: { email: 'thomas@example.com' }, settings: { auto4kServer: true, copyGuard: true, skiptimeHelper: true } });
-  assert.match(h.container.innerHTML, /id="settingsAuto4kServer"[^>]*data-enabled="false"[^>]*aria-disabled="true"/);
-  assert.match(h.container.innerHTML, /id="settingsCopyGuard"[^>]*data-enabled="false"[^>]*aria-disabled="true"/);
-  assert.match(h.container.innerHTML, /id="settingsSkiptime"[^>]*data-enabled="false"[^>]*aria-disabled="true"/);
+  assert.doesNotMatch(h.container.innerHTML, /id="settingsAuto4kServer"/);
+  assert.doesNotMatch(h.container.innerHTML, /id="settingsCopyGuard"/);
+  assert.doesNotMatch(h.container.innerHTML, /id="settingsSkiptime"/);
   assert.doesNotMatch(h.container.innerHTML, /id="settingsSetPassword"/);
+  // The toggles a phone can still use remain, and the header count reflects them. With notifications
+  // present, New Episode Alerts stays too, so four of the seven are left.
+  assert.match(h.container.innerHTML, /id="settingsAutoSkipFiller"/);
+  assert.match(h.container.innerHTML, /id="settingsAutoResume"/);
+  assert.match(h.container.innerHTML, /id="settingsAdGuard"/);
+  assert.match(h.container.innerHTML, /4 settings/);
 });
-test('without a notifications API the alerts switch is shown unavailable at once, not left looking live', () => {
+test('without a notifications API the alerts switch is hidden on mobile, and stays live where the API exists', () => {
   const safari = view(true, { notifications: false });
   safari.settings.render(safari.container, { user: { email: 'thomas@example.com' }, settings: { smartNotif: true } });
-  assert.match(safari.container.innerHTML, /id="settingsSmartNotif"[^>]*data-enabled="false"[^>]*aria-disabled="true"/);
-  assert.match(safari.container.innerHTML, /id="settingsSmartNotifSubtitle">Not available on this browser</);
+  assert.doesNotMatch(safari.container.innerHTML, /id="settingsSmartNotif"/);
   assert.equal(safari.settings.alertsUnavailable(), true);
+  assert.match(safari.container.innerHTML, /3 settings/);
   // Control: where the API exists the switch works and keeps the user's choice, on a phone too.
   const chrome = view(true);
   chrome.settings.render(chrome.container, { user: { email: 'thomas@example.com' }, settings: { smartNotif: true } });
