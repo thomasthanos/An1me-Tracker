@@ -19,10 +19,14 @@ enum RelativeTime {
 
 extension DateFormatter {
     /// Short, locale-aware stamp for the diagnostics screen, where local time is the useful frame.
-    static let diagnosticsStamp: DateFormatter = {
+    ///
+    /// Built per call rather than kept in a `static let`: `DateFormatter` is not `Sendable`, so a shared
+    /// instance is a data race under strict concurrency and does not compile. The diagnostics screen is not
+    /// a hot path, so the cost of a fresh formatter is irrelevant next to that.
+    static var diagnosticsStamp: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .medium
         return formatter
-    }()
+    }
 }

@@ -13,11 +13,15 @@
 import Foundation
 import ObjectiveC
 
-protocol SafariExtensionStatusProviding: AnyObject {
+/// `Sendable` because the coordinator `await`s it from the main actor. A non-`Sendable` service would have
+/// to be sent across an isolation boundary to run its nonisolated async work, which strict concurrency
+/// rejects at compile time.
+protocol SafariExtensionStatusProviding: Sendable {
     func currentState() async -> ExtensionEnabledState
 }
 
-final class SafariExtensionStatusService: SafariExtensionStatusProviding {
+/// A value type with no stored state, and therefore `Sendable` for free.
+struct SafariExtensionStatusService: SafariExtensionStatusProviding {
 
     private typealias GetStateImplementation =
         @convention(c) (AnyObject, Selector, NSString, @escaping @convention(block) (AnyObject?, NSError?) -> Void) -> Void

@@ -26,13 +26,16 @@ final class PermissionCoordinator: ObservableObject {
     init(
         statusService: SafariExtensionStatusProviding = SafariExtensionStatusService(),
         store: PermissionSnapshotStoring = UserDefaultsPermissionSnapshotStore(),
-        settingsLauncher: ExtensionSettingsLaunching = SettingsLauncher()
+        settingsLauncher: ExtensionSettingsLaunching? = nil
     ) {
         let stored = store.load()
         let unknown = ExtensionEnabledState.unknown(.unsupportedSystem(currentVersion: SystemInfo.osVersion))
         self.statusService = statusService
         self.store = store
-        self.settingsLauncher = settingsLauncher
+        // Built here rather than as a default argument. Swift evaluates default arguments in a nonisolated
+        // context, and this initializer is main-actor isolated — which is a compile error under the strict
+        // concurrency the app is built with, not a warning.
+        self.settingsLauncher = settingsLauncher ?? SettingsLauncher()
         self.snapshot = stored
         self.extensionState = unknown
         self.assessment = AccessAssessment.make(extensionEnabled: unknown, snapshot: stored)

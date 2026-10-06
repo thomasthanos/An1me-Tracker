@@ -91,9 +91,21 @@ jobs:
           # lines that actually explain the failure.
           tail -n 15 "$log"
           if [ "$status" -ne 0 ]; then
-            echo "::group::Why the build failed"
-            grep -nE "error:|fatal error:|Command .* failed|does not contain|Multiple commands produce" "$log" | head -n 60 || true
-            echo "::endgroup::"
+            # Printed plainly, and repeated in the job summary. An earlier version wrapped this in
+            # `::group::`, which GitHub collapses in the log view — so the one line anybody needs was
+            # hidden behind a disclosure triangle and a failed build looked like "exit code 65".
+            errors="$(grep -nE -m 40 "error:|fatal error:|Undefined symbols|Multiple commands produce|ld: " "$log" || true)"
+            if [ -z "$errors" ]; then
+              errors="(no error: line found; see the xcodebuild-log artifact)"
+            fi
+            printf '%s\n' "$errors"
+            {
+              echo "### Build failed (exit $status)"
+              echo ""
+              echo '```'
+              printf '%s\n' "$errors"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
             echo "::error::xcodebuild failed with exit $status. The full log is attached to this run."
           fi
           exit "$status"
