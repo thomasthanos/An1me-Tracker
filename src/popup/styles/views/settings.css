@@ -108,26 +108,44 @@
 
 .settings-toggle-list{ display: flex; flex-direction: column; gap: 6px; }
 
-.settings-speed-fields{ display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.settings-speed-fields{ display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
 
-.settings-speed-field{ display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--t2); font-size: 11px; }
+.settings-speed-field{ display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* Micro-label, matching the stat labels elsewhere in the popup. */
+.settings-speed-field > span:first-child{
+  color: var(--t3); font-size: 10px; font-weight: 700;
+  letter-spacing: .6px; text-transform: uppercase;
+}
 
+/* The select box: the popup's glass treatment (soft top highlight over the card colour) instead of a
+   flat fill, and a ring — not a full border swap — while its list is open. */
 .settings-speed-trigger {
   width: 100%;
-  min-height: 44px;
+  min-height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 9px 12px;
+  padding: 7px 8px 7px 11px;
   border: 1px solid var(--b1);
   border-radius: 11px;
-  background: var(--bg-2);
+  background:
+    linear-gradient(180deg, rgba(var(--ink-rgb), 0.055) 0%, transparent 60%),
+    var(--bg-2);
   color: var(--t1);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
   text-align: left;
+  box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.05);
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.settings-speed-trigger:hover:not(:disabled){ border-color: rgba(var(--primary-rgb), 0.34); }
+.settings-speed-trigger[aria-expanded="true"]{
+  border-color: rgba(var(--primary-rgb), 0.52);
+  box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.06), 0 0 0 3px rgba(var(--primary-rgb), 0.12);
 }
 
 .settings-speed-trigger:focus-visible,
@@ -136,23 +154,111 @@
 .settings-speed-trigger:disabled,
 .settings-speed-reset:disabled{ opacity: 0.55; cursor: not-allowed; }
 
-.settings-speed-trigger[aria-expanded="true"]{ border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
-.settings-speed-trigger .settings-speed-chevron{ width: 16px; height: 16px; flex: none; transform: rotate(90deg); color: var(--t2); }
-.settings-speed-trigger[aria-expanded="true"] .settings-speed-chevron{ transform: rotate(-90deg); color: var(--cyan); }
-.settings-speed-menu{ position: fixed; z-index: 10020; box-sizing: border-box; padding: 5px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid rgba(89,194,231,.45); border-radius: 13px; background: var(--bg-2, #101b28); box-shadow: 0 8px 24px rgba(0,0,0,.4); scrollbar-width: thin; color: var(--t1, #edf3ff); }
+/* Chevron in its own chip, so the control has a clear affordance at the trailing edge. */
+.settings-speed-trigger .settings-speed-chevron{
+  width: 20px; height: 20px; padding: 3px; box-sizing: border-box;
+  flex: none; border-radius: 6px;
+  background: rgba(var(--ink-rgb), 0.055);
+  transform: rotate(90deg);
+  color: var(--t3);
+  transition: transform .18s ease, color .18s ease, background .18s ease;
+}
+.settings-speed-trigger:hover .settings-speed-chevron{ color: var(--t2); }
+.settings-speed-trigger[aria-expanded="true"] .settings-speed-chevron{
+  transform: rotate(-90deg);
+  color: var(--cyan);
+  background: rgba(var(--primary-rgb), 0.14);
+}
+
+/* The popout: the same floating glass panel as the context menu and the fetch overlay. */
+.settings-speed-menu {
+  position: fixed;
+  z-index: 10020;
+  box-sizing: border-box;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(var(--primary-rgb), 0.28);
+  border-top-color: rgba(var(--primary-rgb), 0.44);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 78% at 50% -18%, rgba(var(--primary-rgb), 0.13) 0%, transparent 62%),
+    linear-gradient(180deg, rgba(var(--ink-rgb), 0.05) 0%, transparent 42%),
+    rgba(11, 17, 28, 0.97);
+  box-shadow:
+    0 20px 46px -16px rgba(var(--shadow-rgb), 0.9),
+    inset 0 1px 0 rgba(var(--ink-rgb), 0.06);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--ink-rgb), 0.16) transparent;
+  color: var(--t1);
+  animation: speed-menu-in .14s ease;
+}
+.settings-speed-menu::-webkit-scrollbar{ width: 6px; }
+.settings-speed-menu::-webkit-scrollbar-track{ background: transparent; }
+.settings-speed-menu::-webkit-scrollbar-thumb{ border-radius: 999px; background: rgba(var(--ink-rgb), 0.16); }
+@keyframes speed-menu-in{
+  from{ opacity: 0; transform: translateY(-3px); }
+  to  { opacity: 1; transform: none; }
+}
 .settings-speed-menu[hidden]{ display: none!important; }
-.settings-speed-menu [role="option"]{ display: flex; align-items: center; justify-content: space-between; gap: 12px; box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: inherit; text-align: left; cursor: pointer; }
-.settings-speed-menu [role="option"] .settings-icon{ width: 16px; height: 16px; flex: none; opacity: 0; }
+/* 33px rows keep the eight rates on one screen; the previous 44px list pushed the popout past the
+   bottom of the popup. */
+.settings-speed-menu [role="option"]{
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  box-sizing: border-box; width: 100%;
+  min-height: 33px; padding: 6px 9px;
+  border: 0; border-radius: 9px;
+  background: transparent;
+  font: inherit; font-size: 12px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: inherit; text-align: left; cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.settings-speed-menu [role="option"] .settings-icon{
+  width: 15px; height: 15px; flex: none;
+  color: var(--cyan);
+  opacity: 0;
+  transition: opacity .12s ease;
+}
 .settings-speed-menu [aria-selected="true"]{ color: var(--cyan, #57d6ff); }
 .settings-speed-menu [aria-selected="true"] .settings-icon{ opacity: 1; }
-.settings-speed-menu .is-active{ background: rgba(89,194,231,.12); outline: 1px solid rgba(89,194,231,.25); outline-offset: -1px; }
-@media (hover: hover) { .settings-speed-menu [role="option"]:hover{ background: rgba(89,194,231,.12); } }
+.settings-speed-menu .is-active{
+  background: rgba(var(--primary-rgb), 0.11);
+  box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.24);
+}
+@media (hover: hover) { .settings-speed-menu [role="option"]:hover{ background: rgba(var(--primary-rgb), 0.11); } }
+
+/* "Player default" is a mode, not a rate: a hairline sets it apart from the × list. */
+.settings-speed-menu [role="option"][data-speed-choice=""]{ position: relative; margin-bottom: 5px; }
+.settings-speed-menu [role="option"][data-speed-choice=""]::after{
+  content: ''; position: absolute; left: 8px; right: 8px; bottom: -3px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(var(--ink-rgb), 0.11) 18%, rgba(var(--ink-rgb), 0.11) 82%, transparent);
+  pointer-events: none;
+}
 
 .settings-speed-hint{ margin: 0; color: var(--t2); font-size: 10px; line-height: 1.5; }
 
-.settings-speed-audio{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding-top: 5px; border-top: 1px solid var(--b0); color: var(--t2); font-size: 10px; }
+.settings-speed-audio{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--b0); color: var(--t2); font-size: 10px; }
 
-.settings-speed-reset{ padding: 5px 7px; border: 1px solid var(--b1); border-radius: 7px; background: var(--bg-2); color: var(--t1); font: inherit; cursor: pointer; }
+.settings-speed-reset{
+  min-height: 28px; padding: 5px 10px;
+  border: 1px solid var(--b1); border-radius: 8px;
+  background: linear-gradient(180deg, rgba(var(--ink-rgb), 0.05) 0%, transparent 60%), var(--bg-2);
+  color: var(--t1); font: inherit; font-size: 10.5px; font-weight: 600;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease;
+}
+.settings-speed-reset:hover:not(:disabled){ border-color: rgba(var(--primary-rgb), 0.34); }
+
+@media (hover: none) and (pointer: coarse){
+  .settings-speed-menu [role="option"]{ min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .settings-speed-menu{ animation: none; }
+  .settings-speed-trigger .settings-speed-chevron{ transition: none; }
+}
 
 .settings-toggle-row {
   display: flex;
