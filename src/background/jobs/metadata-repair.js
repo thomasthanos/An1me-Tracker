@@ -30,7 +30,10 @@ const METADATA_REPAIR_HOST_ORIGINS = Object.freeze(["https://www.animefillerlist
 const METADATA_REPAIR_ITEM_DEADLINE_MS = 2 * 60 * 1000;
 const METADATA_REPAIR_ITEM_MAX_STARTS = 2;
 const METADATA_REPAIR_TRACE_KEY = "metadataRepairTrace";
-const METADATA_REPAIR_TRACE_MAX = 50;
+// The first steps of a run say why it went the way it did (the first Jikan timeouts scrolled out of a 50-step trace
+// and left only their effect), so they are kept along with the latest ones.
+const METADATA_REPAIR_TRACE_HEAD = 20;
+const METADATA_REPAIR_TRACE_MAX = 120;
 
 // Local permission checks only. Unknown API answers are not evidence of denial,
 // but cannot undo a pause whose denial was already established.
@@ -200,7 +203,10 @@ function traceMetadataRepair(text, { reset = false } = {}) {
         const stored = await bgStorageGet([METADATA_REPAIR_TRACE_KEY]);
         metadataRepairTrace = Array.isArray(stored[METADATA_REPAIR_TRACE_KEY]) ? stored[METADATA_REPAIR_TRACE_KEY] : [];
       }
-      metadataRepairTrace = [...metadataRepairTrace, entry].slice(-METADATA_REPAIR_TRACE_MAX);
+      const next = [...metadataRepairTrace, entry];
+      metadataRepairTrace = next.length > METADATA_REPAIR_TRACE_MAX
+        ? [...next.slice(0, METADATA_REPAIR_TRACE_HEAD), ...next.slice(-(METADATA_REPAIR_TRACE_MAX - METADATA_REPAIR_TRACE_HEAD))]
+        : next;
       await bgStorageSet({ [METADATA_REPAIR_TRACE_KEY]: metadataRepairTrace });
     })
     .catch(() => {});
@@ -549,16 +555,19 @@ async function readConfirmedMalId(slug) {
 }
 
 // AnimeFillerList could not be reached: Safari can block it on a phone, Cloudflare can challenge it, or the
-// site is down. Jikan carries MAL's filler flags and is often reachable when AnimeFillerList is not, so it
-// fills the gap, with three limits. Only a positive answer is used (no answer stays a retryable failure,
-// never "no filler"). Data already cached from AnimeFillerList, which also tells mixed canon apart, is kept
-// rather than replaced. And the entry is marked so it is refreshed sooner, to move back to AnimeFillerList.
+// site is down. MAL's filler flags (through Jikan, or MAL itself when Jikan is down) are often reachable when
+// AnimeFillerList is not, so they fill the gap, with three limits. Only a positive answer is used (no answer
+// stays a retryable failure, never "no filler"). Data already cached from AnimeFillerList, which also tells mixed
+// canon apart, is kept rather than replaced. And the entry is marked so it is refreshed sooner, to move back to
+// AnimeFillerList.
+const MAL_FILLER_SOURCES = new Set(["jikan", "myanimelist"]);
+
 async function fetchJikanForUnreachableAfl(error, { slug, title, info, cached, matchesInfoTotal }) {
   if (!(error?.aflIndexUnavailable === true || error?.aflUnreachable === true) || !title) return null;
-  if (typeof fetchJikanEpisodes !== "function") return null;
-  if (self.AnimeTrackerCachePolicy.isFillerUsableSnapshot(cached) && cached._source !== "jikan") return null;
+  if (typeof fetchMalEpisodeTypes !== "function") return null;
+  if (self.AnimeTrackerCachePolicy.isFillerUsableSnapshot(cached) && !MAL_FILLER_SOURCES.has(cached._source)) return null;
   try {
-    const types = await fetchJikanEpisodes(title, {
+    const { types, source } = await fetchMalEpisodeTypes(title, {
       malId: await readConfirmedMalId(slug),
       extraKeys: typeof collectFillerMatchKeys === "function" ? collectFillerMatchKeys(slug, title, info) : [],
     });
@@ -567,12 +576,12 @@ async function fetchJikanForUnreachableAfl(error, { slug, title, info, cached, m
       ...types,
       schemaVersion: self.AnimeTrackerCachePolicy.EPISODE_TYPES_SCHEMA_VERSION,
       cachedAt: Date.now(),
-      _source: "jikan",
+      _source: source,
       _fillerSlug: slug,
       aflFallback: true,
     };
   } catch {
-    // Jikan failed too: report the AnimeFillerList failure, which is the one the user can act on.
+    // MAL's flags failed too: report the AnimeFillerList failure, which is the one the user can act on.
     return null;
   }
 }
@@ -684,15 +693,15 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
 
     if (episodeTypes && !matchesInfoTotal(episodeTypes)) episodeTypes = null;
     if (!episodeTypes && title) {
-      const jikanTypes = await fetchJikanEpisodes(title, {
+      const malFlags = await fetchMalEpisodeTypes(title, {
         malId: await readConfirmedMalId(slug),
         extraKeys: collectFillerMatchKeys(slug, title, info),
       });
       // An empty filler array is a valid all-canon result; the object and episode-total match are the validity checks.
-      if (jikanTypes && matchesInfoTotal(jikanTypes)) {
-        episodeTypes = jikanTypes;
+      if (malFlags.types && matchesInfoTotal(malFlags.types)) {
+        episodeTypes = malFlags.types;
         fillerSlug = slug;
-        episodeTypesSource = "jikan";
+        episodeTypesSource = malFlags.source;
       }
     }
   } catch (error) {

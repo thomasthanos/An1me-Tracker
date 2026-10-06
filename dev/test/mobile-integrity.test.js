@@ -85,8 +85,9 @@ function repair(responses) {
   const store = {}, calls = [];
   const c = vm.createContext({ console, bgStorageGet: async () => store,
     bgStorageSet: async data => Object.assign(store, data),
-    discoverFillerSlug: async () => null, fetchJikanEpisodes: async () => {
-      calls.push(1); const next = responses.shift(); if (next instanceof Error) throw next; return next;
+    // MyAnimeList's filler flags, through Jikan or MyAnimeList itself (filler-discovery.js).
+    discoverFillerSlug: async () => null, fetchMalEpisodeTypes: async () => {
+      calls.push(1); const next = responses.shift(); if (next instanceof Error) throw next; return { types: next, source: "jikan" };
     } });
   c.self = c;
   vm.runInContext(read("src/common/utils.js"), c); c.AnimeTrackerUtils = { ...c.AnimeTrackerUtils, sleep: async () => {} };

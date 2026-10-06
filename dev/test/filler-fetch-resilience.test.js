@@ -23,12 +23,12 @@ const info = (title) => ({ title, totalEpisodes: 28, latestEpisode: 28, status: 
 const prior = () => ({ canon: [1, 3, 4], filler: [2, 5], mixed: [], anime_canon: [], totalEpisodes: 28, schemaVersion: 3, cachedAt: NOW - 8 * DAY, _source: "afl" });
 
 // One isolated worker per case: the Jikan circuit and the slug cache live in the global scope.
-function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess = null } = {}) {
+function worker({ afl = "ok", jikan = "ok", mal = "down", ua = "iPhone", seed = {}, siteAccess = null } = {}) {
   const store = structuredClone(seed), calls = { aflIndex: 0, aflShow: 0, jikan: 0, offline: 0 }, timers = [], alarms = [], listeners = {};
   // Request timeouts fire at once so a hang ends quickly. A limit of a minute or more (a show's own deadline) waits
   // until the test moves the clock and fires it, as a worker that really waited that long would.
   const longTimers = [];
-  const mode = { afl, jikan, jikanEpisodes: 28, siteAccess };
+  const mode = { afl, jikan, mal, jikanEpisodes: 28, siteAccess };
   // The browser's own connectivity flag, which the worker reads as navigator.onLine. Flip it to cut the connection.
   const nav = { userAgent: ua, platform: ua, onLine: true };
   let time = NOW, writes = 0, runaway = false;
@@ -85,6 +85,31 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess
           return Promise.resolve(new Response(JSON.stringify({ data, pagination: { has_next_page: first + 100 < total } })));
         }
         return Promise.resolve(new Response(JSON.stringify({ data: [] })));
+      }
+      // MyAnimeList itself, read when Jikan cannot answer. Off unless a case turns it on.
+      if (url.startsWith("https://myanimelist.net/")) {
+        calls.mal = (calls.mal || 0) + 1;
+        if (mode.mal !== "ok") return Promise.reject(new TypeError("Load failed"));
+        const keyword = url.match(/search\/prefix\.json\?type=anime&keyword=([^&]+)/);
+        if (keyword) {
+          calls.malSearch = (calls.malSearch || 0) + 1;
+          const name = decodeURIComponent(keyword[1]);
+          return Promise.resolve(new Response(JSON.stringify({ categories: [{ type: "anime", items: [
+            { id: 77, type: "anime", name: "Completely Different Show", payload: { media_type: "TV" } },
+            ...(mode.malSearch === "none" ? [] : [{ id: 901, type: "anime", name, payload: { media_type: "TV" } }]),
+          ] }] })));
+        }
+        const page = url.match(/^https:\/\/myanimelist\.net\/anime\/(\d+)\/_\/episode\?offset=(\d+)$/);
+        if (!page) return Promise.reject(new Error("unexpected request " + url));
+        const first = Number(page[2]), total = mode.malEpisodes || 28;
+        const rows = Array.from({ length: Math.max(0, Math.min(100, total - first)) }, (_, i) => {
+          const number = first + i + 1;
+          const mark = number % 7 === 0 ? "Filler" : number % 10 === 0 ? "Recap" : "";
+          return `<tr class="episode-list-data">\n  <td class="episode-number nowrap" data-raw="${number}">${number}</td>\n` +
+            `  <td class="episode-title fs12">${mark ? `<span class="fl-r di-ib pr4 icon-episode-type-bg">${mark}</span>` : ""}` +
+            `<a href="https://myanimelist.net/anime/${page[1]}/x/episode/${number}" class="fl-l fw-b ">Episode ${number}</a></td>\n</tr>`;
+        }).join("");
+        return Promise.resolve(new Response(`<table class="episode_list ascend"><tbody>${rows}</tbody></table>`));
       }
       return Promise.reject(new Error("unexpected request " + url));
     },
@@ -513,7 +538,76 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.match(text, /Noragami \(try 2\)/);
     assert.match(text, /Run completed/);
     assert.ok(second.store.metadataRepairTrace.every((entry) => Number(entry.at) > 0 && typeof entry.text === "string"));
-    assert.ok(second.store.metadataRepairTrace.length <= 50, "the trace keeps only the latest steps");
+    assert.ok(second.store.metadataRepairTrace.length <= 120, "the trace keeps a bounded number of steps");
+  });
+
+  await test("a long run keeps the start of its trace as well as the latest steps", async () => {
+    const h = worker();
+    await h.c.traceMetadataRepair("Run started: 76 to fetch", { reset: true });
+    for (let step = 1; step <= 300; step++) await h.c.traceMetadataRepair(`step ${step}`);
+    const texts = h.store.metadataRepairTrace.map((entry) => entry.text);
+    assert.equal(texts.length, 120);
+    assert.deepEqual(texts.slice(0, 3), ["Run started: 76 to fetch", "step 1", "step 2"], "how the run began is never pushed out");
+    assert.equal(texts.at(-1), "step 300");
+    assert.equal(texts[20], "step 201", "then the latest hundred");
+  });
+
+  // Jikan is a copy of MyAnimeList's data. When it cannot answer (its API stopped completing connections on
+  // 2026-10-06, and every show only it knew sat waiting at 0 of 76), the same flags are read from MyAnimeList.
+  await test("with Jikan down, MyAnimeList itself gives a show's filler and recap episodes", async () => {
+    const h = worker({ jikan: "down", mal: "ok" });
+    const result = await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(result.fillerResult.status, "fetched");
+    const entry = h.store["episodeTypes_totally-unlisted-show"];
+    assert.equal(entry._source, "myanimelist");
+    assert.equal(entry._fillerSlug, "totally-unlisted-show");
+    assert.deepEqual(entry.filler, [7, 14, 21, 28]);
+    assert.deepEqual(entry.mixed, [10, 20], "recaps are kept apart, as with Jikan");
+    assert.equal(entry.totalEpisodes, 28);
+    assert.equal(entry.canon.length, 22);
+  });
+
+  await test("a long series is read from MyAnimeList a hundred episodes at a time", async () => {
+    const h = worker({ jikan: "hang", mal: "ok" });
+    h.mode.malEpisodes = 230;
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    const entry = h.store["episodeTypes_totally-unlisted-show"];
+    assert.equal(entry.totalEpisodes, 230);
+    assert.equal(entry.filler.length, 32);
+    assert.equal(h.calls.mal, 4, "one search and three pages");
+  });
+
+  await test("a MyAnimeList id AniSkip already confirmed skips the search", async () => {
+    const h = worker({ jikan: "down", mal: "ok", seed: { malIdForSlugBundle: { "totally-unlisted-show": { malId: 901, matched: true } } } });
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(h.store["episodeTypes_totally-unlisted-show"]._source, "myanimelist");
+    assert.equal(h.calls.malSearch || 0, 0);
+  });
+
+  await test("a show MyAnimeList has no match for is recorded as not listed, as a Jikan miss is", async () => {
+    const h = worker({ jikan: "down", mal: "ok" });
+    h.mode.malSearch = "none";
+    const result = await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(result.fillerResult.status, "nofill");
+  });
+
+  await test("with AnimeFillerList unreachable and Jikan down, MyAnimeList fills in", async () => {
+    const h = worker({ afl: "down", jikan: "down", mal: "ok" });
+    const result = await h.resolve("noragami");
+    assert.equal(result.fillerResult.status, "fetched");
+    assert.equal(h.store.episodeTypes_noragami._source, "myanimelist");
+    assert.equal(h.store.episodeTypes_noragami.aflFallback, true);
+  });
+
+  await test("a run of shows only Jikan knows finishes from MyAnimeList while Jikan is down, without waiting", async () => {
+    const h = worker({ jikan: "hang", mal: "ok", seed: unlistedSeed() });
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await state(h))?.status === "completed");
+    await settle();
+    const done = await state(h);
+    assert.deepEqual([done.status, done.processed, done.fetched, done.failed], ["completed", 4, 4, 0]);
+    assert.ok(!(done.waitingForJikanUntil > 0), "no wait for Jikan");
+    assert.match(traceText(h), /MyAnimeList episodes: 28/);
   });
 
   await test("a run that is waiting for the connection is not restarted in a loop by a pending repair flag", async () => {

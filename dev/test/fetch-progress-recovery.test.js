@@ -215,7 +215,7 @@ function repair(initial) {
     const h = repair({ episodeTypes_naruto: old });
     h.c.collectFillerMatchKeys = () => [];
     h.c.discoverFillerSlug = async () => null;
-    h.c.fetchJikanEpisodes = async () => { throw Error('jikan_search_http_504'); };
+    h.c.fetchMalEpisodeTypes = async () => { throw Error('jikan_search_http_504'); };
     await assert.rejects(h.c.repairEpisodeTypesCache('naruto', 'Naruto', true), /jikan_search_http_504/);
     const cached = h.store.episodeTypes_naruto;
     assert.equal(cached.retryable, true); assert.equal(cached.retryError, 'jikan_search_http_504');

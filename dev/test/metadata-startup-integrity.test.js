@@ -17,7 +17,10 @@ function worker(initial = {}, response = 'abort') {
     bgStorageGet: async keys => structuredClone(keys === null ? store : Object.fromEntries(keys.filter(key => key in store).map(key => [key, store[key]]))),
     bgStorageSet: async patch => { writes.push(structuredClone(patch)); Object.assign(store, structuredClone(patch)); },
     bgStorageRemove: async keys => keys.forEach(key => delete store[key]),
-    fetch(url, options) { calls.push(url); assert.ok(url.startsWith('https://api.jikan.moe/'), url);
+    fetch(url, options) {
+      // MyAnimeList, tried when Jikan fails, is down here too, so Jikan's failure is the one that stands.
+      if (url.startsWith('https://myanimelist.net/')) return Promise.reject(new TypeError('Load failed'));
+      calls.push(url); assert.ok(url.startsWith('https://api.jikan.moe/'), url);
       if (response === '503') return Promise.resolve({ ok: false, status: 503 });
       return new Promise((resolve, reject) => { const abort = () => { const error = Error('aborted'); error.name = 'AbortError'; reject(error); };
         if (options.signal.aborted) abort(); else options.signal.addEventListener('abort', abort, { once: true }); }); },

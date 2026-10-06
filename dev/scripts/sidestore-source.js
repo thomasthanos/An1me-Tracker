@@ -36,9 +36,9 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Fetch & Import no longer sits at 0 on one show: a show that does not finish in two minutes, or that the background was stopped on twice, counts as needing a retry and the rest carry on.\n" +
-    "• Details in the Fetch & Import panel lists each step and how long it took, so a screenshot shows where a run stops.\n" +
-    "• A restart of the background no longer pauses sync and Fetch & Import.\n" +
+    "• Fetch & Import works while Jikan is down: filler and recap episodes come from MyAnimeList itself, so it no longer sits at 0 waiting.\n" +
+    "• Details in the Fetch & Import panel keeps how a run began as well as its latest steps.\n" +
+    "• A show that does not finish in two minutes, or that the background was stopped on twice, counts as needing a retry and the rest carry on.\n" +
     "• AniList stays disabled on mobile.";
 
   return {

@@ -711,6 +711,138 @@ async function fetchJikanEpisodes(title, options = {}) {
   }
 }
 
+// Jikan is a copy of MyAnimeList's data, and when it cannot answer the same flags are read from MyAnimeList itself.
+// On 2026-10-06 Jikan's API stopped completing connections, and every show only it knew (not on AnimeFillerList, or
+// listed there with every season numbered together) waited for it: Fetch & Import sat at 0 of 76. MyAnimeList has no
+// API without a key, so this reads its search box's JSON and its episode list pages, a hundred episodes a page, where
+// each filler or recap episode carries a "Filler" or "Recap" tag.
+const MAL_SEARCH_TIMEOUT_MS = 8000;
+const MAL_EPISODES_TIMEOUT_MS = 15000;
+const MAL_EPISODES_PER_PAGE = 100;
+// A page a second and a half apart: a library sweep reads one or two pages a show, and MyAnimeList turns a burst away.
+const MAL_MIN_GAP_MS = 1500;
+let _malNextSlotAt = 0;
+
+async function waitForMalSlot() {
+  const now = Date.now();
+  const at = Math.max(now, _malNextSlotAt);
+  _malNextSlotAt = at + MAL_MIN_GAP_MS;
+  if (at > now) await AnimeTrackerUtils.sleep(at - now);
+}
+
+// One row per episode: its number, and whether MyAnimeList tags it as filler or recap.
+function parseMalEpisodeRows(html) {
+  const rows = [];
+  const rowPattern = /<tr[^>]*\bclass=["'][^"']*\bepisode-list-data\b[^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi;
+  let match;
+  while ((match = rowPattern.exec(String(html || ""))) !== null) {
+    const cells = match[1];
+    const number = Number(cells.match(/class=["'][^"']*\bepisode-number\b[^"']*["'][^>]*data-raw=["'](\d+)["']/i)?.[1] ||
+      cells.match(/class=["'][^"']*\bepisode-number\b[^"']*["'][^>]*>\s*(\d+)\s*</i)?.[1]);
+    if (!Number.isFinite(number) || number <= 0) continue;
+    const tag = cells.match(/icon-episode-type-bg["'][^>]*>\s*(Filler|Recap)\s*</i)?.[1]?.toLowerCase() || null;
+    rows.push({ number, filler: tag === "filler", recap: tag === "recap" });
+  }
+  return rows;
+}
+
+async function fetchMyAnimeListPage(url, timeoutMs, read) {
+  await waitForMalSlot();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: ctrl.signal });
+    if (response.status === 429) throw Object.assign(new Error("myanimelist_rate_limited"), { rateLimited: true });
+    if (!response.ok) throw new Error(`myanimelist_http_${response.status}`);
+    return await readBodyWithin(read(response), ctrl.signal);
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error("myanimelist_timeout");
+    if (/^myanimelist_/.test(String(error?.message || ""))) throw error;
+    throw new Error(`myanimelist_fetch_failed: ${error?.message || error}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Resolves the same shape fetchJikanEpisodes does, or null when MyAnimeList has no match or no episode list.
+async function fetchMyAnimeListEpisodes(title, options = {}) {
+  const requestedAt = Date.now();
+  try {
+    let malId = Number(options.malId) || 0;
+    if (!malId) {
+      traceFillerStep("MyAnimeList search…");
+      const keyword = String(title || "").trim().slice(0, 100);
+      if (keyword.length < 3) return null;
+      const data = await fetchMyAnimeListPage(
+        `https://myanimelist.net/search/prefix.json?type=anime&keyword=${encodeURIComponent(keyword)}&v=1`,
+        MAL_SEARCH_TIMEOUT_MS,
+        (response) => response.json(),
+      );
+      const items = (Array.isArray(data?.categories) ? data.categories : [])
+        .filter((category) => category?.type === "anime")
+        .flatMap((category) => (Array.isArray(category.items) ? category.items : []));
+      traceFillerStep(`MyAnimeList search: ${items.length} results, ${secondsSince(requestedAt)}`);
+      const candidates = items.filter((item) => item?.id && item?.name).map((item) => ({ id: item.id, title: item.name }));
+      const keys = [title, ...(Array.isArray(options.extraKeys) ? options.extraKeys : [])];
+      const match = self.AnimeTrackerTitleMatch.bestMatch(keys, candidates, FILLER_MATCH_THRESHOLD);
+      if (!match) return null;
+      malId = Number(match.id) || 0;
+    }
+    if (!malId) return null;
+
+    const episodesAt = Date.now();
+    traceFillerStep("MyAnimeList episodes…");
+    const episodes = [];
+    let pages = 0;
+    for (; pages < JIKAN_MAX_EPISODE_PAGES; pages++) {
+      const html = await fetchMyAnimeListPage(
+        `https://myanimelist.net/anime/${malId}/_/episode?offset=${pages * MAL_EPISODES_PER_PAGE}`,
+        MAL_EPISODES_TIMEOUT_MS,
+        (response) => response.text(),
+      );
+      const rows = parseMalEpisodeRows(html);
+      episodes.push(...rows);
+      if (rows.length < MAL_EPISODES_PER_PAGE) {
+        pages++;
+        break;
+      }
+      if (pages === JIKAN_MAX_EPISODE_PAGES - 1) throw new Error("myanimelist_episodes_incomplete");
+    }
+    traceFillerStep(`MyAnimeList episodes: ${episodes.length} in ${pages} pages, ${secondsSince(episodesAt)}`);
+    if (episodes.length === 0) return null;
+
+    const episodeTypes = { canon: [], filler: [], mixed: [], anime_canon: [], totalEpisodes: episodes.length };
+    for (const episode of episodes) {
+      if (episode.filler) episodeTypes.filler.push(episode.number);
+      else if (episode.recap) episodeTypes.mixed.push(episode.number);
+      else episodeTypes.canon.push(episode.number);
+    }
+    return episodeTypes;
+  } catch (error) {
+    traceFillerStep(`MyAnimeList failed: ${error?.message || error}, ${secondsSince(requestedAt)}`);
+    throw error;
+  }
+}
+
+// MyAnimeList's filler flags: through Jikan first, which is an API, then from MyAnimeList's own pages when Jikan fails.
+// Offline or without site access neither can answer, so Jikan's error stands. When both fail, Jikan's error is the one
+// reported too, so a run still puts the show back and waits for Jikan as before.
+async function fetchMalEpisodeTypes(title, options = {}) {
+  try {
+    return { types: await fetchJikanEpisodes(title, options), source: "jikan" };
+  } catch (jikanError) {
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    if (offline || jikanError?.code === "SITE_ACCESS_REQUIRED" || /jikan_offline|no site access/i.test(String(jikanError?.message || ""))) {
+      throw jikanError;
+    }
+    try {
+      return { types: await fetchMyAnimeListEpisodes(title, options), source: "myanimelist" };
+    } catch {
+      throw jikanError;
+    }
+  }
+}
+
 try {
   globalThis.fillerStats = async () => {
     const stored = await bgStorageGet([AFL_INDEX_KEY]);

@@ -11,6 +11,22 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.2.17] — 2026-10-06
+
+### Fixed
+
+- **Fetch & Import works while Jikan is down.** The Details trace from 8.2.16 showed why a run sat at **0 / 76**:
+  Jikan's API had stopped completing connections, and every show left needed it, because AnimeFillerList does not
+  list it or lists all its seasons as one show. Each was put back to wait for Jikan, up to three times (2, 5 and 10
+  minutes). Jikan is a copy of MyAnimeList's data, so when it does not answer, the tracker now reads the same filler
+  and recap flags from MyAnimeList itself: its search, then its episode list a hundred episodes a page. Those shows
+  are fetched and the run carries on. Only when MyAnimeList fails too does a show still wait for Jikan.
+
+### Changed
+
+- **Details keeps how a run began.** The trace kept only its latest 50 steps, so the first Jikan failures had
+  scrolled out by the time anyone looked. It now keeps the first 20 steps of a run as well as the latest 100.
+
 ## [8.2.16] — 2026-10-06
 
 ### Fixed
