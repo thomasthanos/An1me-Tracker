@@ -139,3 +139,38 @@ test('the Safari build opens when every service is allowed from the tap, or when
     assert.equal(await (await context.fetch('https://api.jikan.moe/v4/anime')).text(), 'ok');
   }
 });
+
+test('Safari All Websites (getAll) opens the gate even when contains() answers false', async () => {
+  for (const grantedOrigins of [['*://*/*'], ['<all_urls>']]) {
+    const event = { addListener() {}, removeListener() {} };
+    const permissions = { onAdded: event, onRemoved: event,
+      getAll: () => Promise.resolve({ origins: grantedOrigins }), contains: () => Promise.resolve(false) };
+    const context = vm.createContext({ console, URL, AbortController, Request, Response, ReadableStream, setTimeout, clearTimeout,
+      fetch: async () => new Response('ok'),
+      browser: { permissions, runtime: { getManifest: () => ({ version: 'test',
+        host_permissions: ['https://an1me.to/*', 'https://*.an1me.to/*'],
+        optional_host_permissions: [B, A, '<all_urls>'] }) } } });
+    vm.runInContext(source, context);
+    const api = context.AnimeTrackerWebsiteAccess;
+    assert.equal(api.broad, '<all_urls>');
+    assert.equal(await api.canRun(), true, `All Websites reported as ${grantedOrigins[0]}`);
+    assert.equal(await (await context.fetch(A)).text(), 'ok');
+  }
+});
+
+test('Safari getAll lists granted services; a missing one keeps the gate closed', async () => {
+  const event = { addListener() {}, removeListener() {} };
+  const permissions = { onAdded: event, onRemoved: event,
+    getAll: () => Promise.resolve({ origins: ['https://an1me.to/*', B] }), contains: () => Promise.resolve(false) };
+  const manifest = () => ({ version: 'test',
+    host_permissions: ['https://an1me.to/*', 'https://*.an1me.to/*'], optional_host_permissions: [B, A, '<all_urls>'] });
+  const context = vm.createContext({ console, URL, AbortController, Request, Response, ReadableStream, setTimeout, clearTimeout,
+    fetch: async () => new Response('ok'), browser: { permissions, runtime: { getManifest: manifest } } });
+  vm.runInContext(source, context);
+  const api = context.AnimeTrackerWebsiteAccess;
+  assert.equal(await api.canRun(), false, 'one service is not enough');
+  assert.deepEqual([...api.getState().blockedOrigins], [A]);
+  permissions.getAll = () => Promise.resolve({ origins: ['https://an1me.to/*', B, A] });
+  await api.refresh();
+  assert.equal(await api.canRun(), true);
+});

@@ -45,6 +45,26 @@
     });
   }
 
+  // getAll() is the authoritative answer: the actually granted origins. Safari records "All
+  // Websites" as *://*/* even though the manifest names <all_urls>, so this is the only check that
+  // sees the broad grant under either spelling. Resolves to null when it is unavailable or answers
+  // without origins, so callers fall back to contains().
+  async function grantedOrigins() {
+    if (typeof api?.getAll !== "function") return null;
+    return new Promise(resolve => {
+      const timer = setTimeout(() => resolve(null), 1500);
+      const done = result => {
+        clearTimeout(timer);
+        const origins = Array.isArray(result?.origins) ? result.origins.filter(origin => typeof origin === "string") : [];
+        resolve(origins.length ? origins : null);
+      };
+      try {
+        const pending = promiseOnly ? api.getAll() : api.getAll(done);
+        if (pending?.then) pending.then(done, () => done(null));
+      } catch { done(null); }
+    });
+  }
+
   async function readWorkerState() {
     return new Promise(resolve => {
       const timer = setTimeout(() => resolve(null), 2000);
@@ -65,8 +85,13 @@
     const run = (async () => {
       let next;
       if (typeof api?.contains === "function") {
-        const everything = broad && !origins.includes(broad) && await contains(broad);
-        const granted = everything ? origins.map(() => true) : await Promise.all(origins.map(contains));
+        const grantedAll = await grantedOrigins();
+        // getAll() sees the broad grant under either spelling (<all_urls> or Safari's *://*/*),
+        // which contains() can miss. Without getAll(), contains(broad) is the fallback.
+        const everything = broad && (grantedAll ? grantedAll.some(isBroad) : await contains(broad));
+        const granted = everything ? origins.map(() => true) :
+          grantedAll ? origins.map(origin => grantedAll.some(grantedOrigin => grantedOrigin === origin || isBroad(grantedOrigin))) :
+          await Promise.all(origins.map(contains));
         const blockedOrigins = origins.filter((_origin, index) => !granted[index]);
         next = { version: manifest.version, checking: false, allowed: !blockedOrigins.length, blockedOrigins };
       } else if (!worker) {
@@ -115,25 +140,81 @@
       controller.signal.addEventListener('abort', finish, { once: true });
       try {
         const response = await originalFetch.call(root, input, { ...options, signal: controller.signal });
-        // Fetch resolves at headers. Keep cancellation alive until its body has actually
-        // finished, including cloned responses consumed by the cover disk cache.
-        if (response.body?.getReader && typeof root.ReadableStream === 'function' && typeof root.Response === 'function') {
-          const reader = response.body.getReader();
-          const body = new root.ReadableStream({
-            async pull(stream) {
-              try {
-                const chunk = await reader.read();
-                if (chunk.done) { finish(); stream.close(); }
-                else stream.enqueue(chunk.value);
-              } catch (error) { finish(); stream.error(!state.allowed ? deniedError() : error); }
-            },
-            cancel(reason) { finish(); return reader.cancel(reason); },
-          });
-          const wrapped = new root.Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
-          for (const key of ['url', 'type', 'redirected']) Object.defineProperty(wrapped, key, { value: response[key] });
-          return wrapped;
+        // Fetch resolves at headers. Keep cancellation alive while its body is being consumed,
+        // without synthesizing broken Response / ReadableStream objects that corrupt Safari/WebKit decompression.
+        if (typeof Proxy !== "function" || !response || typeof response !== "object") {
+          finish();
+          return response;
         }
-        finish(); return response;
+        let finished = false;
+        const finishOnce = () => {
+          if (finished) return;
+          finished = true;
+          finish();
+        };
+        const safetyTimer = setTimeout(finishOnce, 60000);
+        const trackBody = (promise) => promise.then(
+          (result) => { clearTimeout(safetyTimer); finishOnce(); return result; },
+          (error) => {
+            clearTimeout(safetyTimer);
+            finishOnce();
+            if (!state.allowed) throw deniedError();
+            throw error;
+          }
+        );
+        const wrap = (target) => new Proxy(target, {
+          get(obj, prop) {
+            const val = obj[prop];
+            if (typeof val === "function") {
+              if (prop === "text" || prop === "json" || prop === "blob" || prop === "arrayBuffer" || prop === "formData") {
+                return function (...args) { return trackBody(val.apply(obj, args)); };
+              }
+              if (prop === "clone") {
+                return function (...args) { return wrap(val.apply(obj, args)); };
+              }
+              return val.bind(obj);
+            }
+            if (prop === "body") {
+              const bodyStream = val;
+              if (!bodyStream || typeof bodyStream.getReader !== "function") return bodyStream;
+              return new Proxy(bodyStream, {
+                get(streamTarget, streamProp) {
+                  const streamVal = streamTarget[streamProp];
+                  if (streamProp === "getReader" && typeof streamVal === "function") {
+                    return function (...readerArgs) {
+                      const reader = streamVal.apply(streamTarget, readerArgs);
+                      return new Proxy(reader, {
+                        get(readerTarget, readerProp) {
+                          const readerVal = readerTarget[readerProp];
+                          if (readerProp === "read" && typeof readerVal === "function") {
+                            return function (...readArgs) {
+                              return readerVal.apply(readerTarget, readArgs).then(
+                                (chunk) => {
+                                  if (chunk?.done) { clearTimeout(safetyTimer); finishOnce(); }
+                                  return chunk;
+                                },
+                                (err) => {
+                                  clearTimeout(safetyTimer);
+                                  finishOnce();
+                                  if (!state.allowed) throw deniedError();
+                                  throw err;
+                                }
+                              );
+                            };
+                          }
+                          return typeof readerVal === "function" ? readerVal.bind(readerTarget) : readerVal;
+                        }
+                      });
+                    };
+                  }
+                  return typeof streamVal === "function" ? streamVal.bind(streamTarget) : streamVal;
+                }
+              });
+            }
+            return val;
+          }
+        });
+        return wrap(response);
       }
       catch (error) { finish(); if (!state.allowed) throw deniedError(); throw error; }
       // Successful streams release themselves only when consumed/cancelled, not at headers.

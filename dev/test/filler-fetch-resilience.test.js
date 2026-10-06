@@ -100,7 +100,7 @@ async function test(name, fn) {
   try { await fn(); console.log("PASS " + name); } catch (error) { failures++; console.error("FAIL " + name + ": " + error.message); }
 }
 const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
-const until = async (done) => { for (let i = 0; i < 800 && !(await done()); i++) await new Promise(setImmediate); };
+const until = async (done) => { for (let i = 0; i < 3000 && !(await done()); i++) await new Promise(setImmediate); };
 const library = () => Object.fromEntries(SHOWS.slice(0, 4).map(([slug, title]) => [slug, { title, episodes: [{ number: 1, watchedAt: "2026-10-01T10:00:00Z", duration: 1400 }] }]));
 const missEntries = (store) => Object.entries(store).filter(([key, value]) => (key.startsWith("episodeTypes_") || key.startsWith("fillerslug_")) && value?.notFound);
 

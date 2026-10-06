@@ -422,8 +422,13 @@ async function an1meDirectFetch(url, req, timeoutMs) {
       ...(req.body != null ? { body: req.body } : {}),
     });
 
+    const abortPromise = new Promise((_, reject) => {
+      if (controller.signal.aborted) reject(new DOMException("Aborted", "AbortError"));
+      else controller.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+
     if (req.as === "dataUrl") {
-      const blob = await res.blob();
+      const blob = await Promise.race([res.blob(), abortPromise]);
       if (isAn1meChallengeStatus(res.status)) {
         logAn1meBlocked(url, res.status, blob.size);
         return { kind: "challenge" };
@@ -434,7 +439,7 @@ async function an1meDirectFetch(url, req, timeoutMs) {
       };
     }
 
-    const text = await res.text();
+    const text = await Promise.race([res.text(), abortPromise]);
     if (res.ok && looksLikeChallengeHtml(text)) {
       logAn1meBlocked(url, `${res.status} (interstitial)`, text.length);
       return { kind: "challenge" };

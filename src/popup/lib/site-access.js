@@ -49,6 +49,25 @@
     });
   }
 
+  // getAll() lists the actually granted origins; Safari records "All Websites" as *://*/* even though
+  // the manifest names <all_urls>, which isAllowed()/contains() can miss. Resolves to null when the API
+  // is unavailable or answers without origins, so callers fall back to contains().
+  function grantedOrigins(provider) {
+    if (typeof provider?.api?.getAll !== "function") return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), 1500);
+      const done = (result) => {
+        clearTimeout(timer);
+        const origins = Array.isArray(result?.origins) ? result.origins.filter(origin => typeof origin === "string") : [];
+        resolve(origins.length ? origins : null);
+      };
+      try {
+        const pending = provider.promiseOnly ? provider.api.getAll() : provider.api.getAll(done);
+        if (pending && typeof pending.then === "function") pending.then(done, () => done(null));
+      } catch { done(null); }
+    });
+  }
+
   // The needed origins the browser keeps the extension off, in GROUPS order. Empty without a permissions API.
   async function blockedOrigins() {
     if (globalThis.AnimeTrackerWebsiteAccess?.enabled) {
@@ -279,11 +298,18 @@
     const origins = setupOrigins();
     const provider = permissionsApi();
     if (!provider) return origins;
+    const granted = await grantedOrigins(provider);
+    if (granted) {
+      // getAll() is authoritative: a broad grant (All Websites) covers every service.
+      const everything = allWebsitesOrigin();
+      if (everything && granted.some(isAllWebsites)) return [];
+      return origins.filter(origin => !granted.includes(origin));
+    }
     // All Websites on in Settings covers every one of them.
     const everything = allWebsitesOrigin();
     if (everything && !origins.includes(everything) && await isAllowed(provider, everything, false)) return [];
-    const granted = await Promise.all(origins.map(origin => isAllowed(provider, origin, false)));
-    return origins.filter((_origin, index) => !granted[index]);
+    const allowed = await Promise.all(origins.map(origin => isAllowed(provider, origin, false)));
+    return origins.filter((_origin, index) => !allowed[index]);
   }
 
   // `onRender` hears the websites still missing after every render, including the one after a tap.
