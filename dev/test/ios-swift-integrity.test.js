@@ -242,6 +242,53 @@ check(
 );
 check("the app does observe something", wrappers.length > 0, "no property wrapper was found at all; the scan is probably broken");
 
+// ─── Strict concurrency ──────────────────────────────────────────────────────────────────────────────
+//
+// The app is compiled with strict concurrency, so both of these are errors rather than warnings. Each one
+// cost a CI run to find, which is exactly why they are checked here.
+
+const NON_SENDABLE = [
+  "DateFormatter", "NumberFormatter", "ISO8601DateFormatter", "RelativeDateTimeFormatter",
+  "DateComponentsFormatter", "MeasurementFormatter", "ByteCountFormatter", "PersonNameComponentsFormatter",
+  "JSONEncoder", "JSONDecoder",
+];
+const alternatives = NON_SENDABLE.join("|");
+
+const sharedFormatters = [];
+for (const [file, source] of sources) {
+  for (const pattern of [
+    new RegExp(`static (?:let|var) \\w+[^=\\n]*=\\s*(?:${alternatives})\\s*\\(`, "g"),
+    new RegExp(`static (?:let|var) \\w+\\s*:\\s*(?:${alternatives})\\s*=`, "g"),
+  ]) {
+    for (const match of source.matchAll(pattern)) sharedFormatters.push(rel(file));
+  }
+}
+check(
+  "no non-Sendable formatter is kept in a static",
+  sharedFormatters.length === 0,
+  `a shared, mutable formatter is a data race under strict concurrency: ${sharedFormatters.join(", ")}`,
+);
+
+const mainActorTypes = new Set();
+for (const [, source] of sources) {
+  const declared = source.matchAll(/@MainActor\s*\n\s*(?:public |internal |private |fileprivate |final |open )*(?:class|struct|enum|actor|protocol)\s+([A-Z][A-Za-z0-9_]*)/g);
+  for (const match of declared) mainActorTypes.add(match[1]);
+}
+
+const isolatedDefaults = [];
+for (const [file, source] of sources) {
+  source.split("\n").forEach((line, index) => {
+    if (/^\s*(?:let|var|return|case|guard|if|for|while)\b/.test(line)) return;
+    const match = line.match(/^\s+[a-zA-Z]\w*\s*:\s*[^=\n]+=\s*([A-Z][A-Za-z0-9_]*)\s*\(/);
+    if (match && mainActorTypes.has(match[1])) isolatedDefaults.push(`${rel(file)}:${index + 1} ${match[1]}`);
+  });
+}
+check(
+  "no default argument calls a main-actor-isolated initializer",
+  isolatedDefaults.length === 0,
+  `Swift evaluates default arguments in a nonisolated context: ${isolatedDefaults.join("; ")}`,
+);
+
 // ─── No crashers ─────────────────────────────────────────────────────────────────────────────────────
 
 const unsafe = [];
