@@ -36,10 +36,10 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• The speed button shows on iPhone held upright, in the player's top-right corner, and sits in the control bar beside the quality when the phone is turned.\n" +
-    "• Tooltips and a long-press menu in the tracker, a more compact Fetch & Import header and a redesigned speed settings list.\n" +
-    "• Settings that are always off on a phone (battery-heavy options, alerts without a notifications API) are hidden there.\n" +
-    "• AniList stays disabled on mobile.";
+    "• Native iOS Safari permission flow and verification bridge.\n" +
+    "• Centralized iOS host permissions, diagnostics reporting and website access views.\n" +
+    "• Fixed playback settings cloud sync to preserve local preferences.\n" +
+    "• Polished mobile settings toggles and preference rows.";
 
   return {
     name: appName,

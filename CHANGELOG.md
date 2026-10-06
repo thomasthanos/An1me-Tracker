@@ -11,6 +11,26 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.1] — 2026-10-06
+
+### Added
+
+- **Native iOS Safari permission flow.** A native SwiftUI iOS companion app architecture that reads
+  Safari extension state and website permissions, powered by a URL-scheme bridge (`an1metracker://`)
+  and verification probe flow (`?at_verify=1`) with the extension.
+- **Centralized iOS permissions model and diagnostics.** Host permissions are centralized in
+  `dev/scripts/ios-permissions.js` with structured status views, diagnostics reporting, and website
+  access tracking.
+- **Swift integrity and permission test suites.** Comprehensive regression suites for Swift syntax
+  integrity, permission bridge payloads, and iOS permission state handling.
+
+### Fixed
+
+- **Playback preferences cloud sync.** Cloud playback preferences are properly applied before full
+  library sync without overwriting newer local settings, preventing unnecessary Firestore writes.
+- **Mobile settings toggles layout.** Refined preference rows, toggle styling, and touch usability
+  in the settings view on mobile devices.
+
 ## [8.3.0] — 2026-10-06
 
 ### Added
