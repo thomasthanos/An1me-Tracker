@@ -11,6 +11,34 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.0] — 2026-10-06
+
+### Added
+
+- **Tooltips in the tracker.** One styled tooltip replaces the browser's own title bubble, which could not be styled,
+  appeared late and was clipped at the window's edge, where the Fetch & Import log keeps its explanations.
+- **The tracker's own right-click and long-press menu** on its rows and on the Fetch & Import log, in place of the
+  browser's menu, which offered nothing about them. Its items press the cards' real buttons, so every action keeps
+  its usual confirmation. Elsewhere the browser's menu stays, for copy and paste.
+
+### Fixed
+
+- **The speed button on iPhone.** Upright it never showed, and sideways it sat after fullscreen and stuck out of the
+  control bar. The player's bar on a phone held upright is already full (back, play, forward, volume, the time,
+  quality, settings, fullscreen), and the button, added after fullscreen, was pushed past the edge where the player
+  cuts its bar off. It now goes in the bar, before the quality, as tall and as flat as the controls beside it, when
+  the bar has room, and otherwise in the player's top-right corner, where it shows and hides with the controls. It
+  moves between the two when the phone is turned, and its menu always fits inside the player.
+
+### Changed
+
+- **A more compact Fetch & Import header**, and toasts and menus layered so they show above the panel.
+- **Redesigned speed settings.** The rate list uses shorter rows (40px on a touch screen), so every rate fits on one
+  screen.
+- **Phone settings show only what works there.** Options that are always off on a phone (battery-heavy ones, the
+  desktop password action, alerts where Safari has no notifications) are hidden instead of shown disabled, and the
+  AniList card is not shown on mobile, where AniList is off.
+
 ## [8.2.18] — 2026-10-06
 
 ### Fixed

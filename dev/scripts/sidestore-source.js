@@ -36,9 +36,9 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Filler data on iPhone is read correctly from MyAnimeList's phone pages; shows 8.2.17 wrongly marked as not listed are checked again once.\n" +
-    "• Fetch & Import asks MyAnimeList first, so it no longer waits on Jikan, and a special with no episode list is not retried.\n" +
-    "• Skip Outro can now find shows on iPhone that Fetch & Import has matched on MyAnimeList.\n" +
+    "• The speed button shows on iPhone held upright, in the player's top-right corner, and sits in the control bar beside the quality when the phone is turned.\n" +
+    "• Tooltips and a long-press menu in the tracker, a more compact Fetch & Import header and a redesigned speed settings list.\n" +
+    "• Settings that are always off on a phone (battery-heavy options, alerts without a notifications API) are hidden there.\n" +
     "• AniList stays disabled on mobile.";
 
   return {

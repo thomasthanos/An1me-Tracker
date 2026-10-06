@@ -106,7 +106,9 @@ async function runInBrowser(mobile) {
     equal(!!menu.querySelector('[aria-selected="true"] svg'), true, "selected checkmark is vector");
     const rect = menu.getBoundingClientRect();
     equal(rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth, true, "menu stays in popup viewport");
-    equal(menu.querySelector('[role="option"]').getBoundingClientRect().height >= 44, true, "touch option target");
+    // 8.3.0 keeps every rate on one screen: 33px rows, 40px on a touch screen (settings.css).
+    const coarse = matchMedia("(hover: none) and (pointer: coarse)").matches;
+    equal(menu.querySelector('[role="option"]').getBoundingClientRect().height >= (coarse ? 40 : 33), true, "touch option target");
     trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     equal(menu.hidden, true, "Escape closes"); equal(document.activeElement, trigger, "focus restored");
     equal(window.currentViewMode, 'settings', 'Escape keeps Settings view open with production global shortcuts');

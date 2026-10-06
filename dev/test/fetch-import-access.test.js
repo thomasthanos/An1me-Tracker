@@ -306,10 +306,11 @@ async function panel(browser, device, { access, grant = true, optional = null })
         const header = document.querySelector(".ffui-header").getBoundingClientRect();
         return [...document.querySelectorAll(".ffui-header button")].every((b) => {
           const r = b.getBoundingClientRect();
-          return r.right <= header.right && r.left >= header.left && r.height >= 44;
+          // 8.3.0 made the header compact on purpose: 34px buttons on a touch screen (filler-fetch.css).
+          return r.right <= header.right && r.left >= header.left && r.height >= 34;
         });
       });
-      assert.equal(fits, true, "both buttons sit inside the header and are full touch targets");
+      assert.equal(fits, true, "both buttons sit inside the header and stay comfortable to tap");
 
       await p.page.click(".ffui-close");
       assert.equal((await buttons()).open, false, "Hide closes the panel while the run carries on");
