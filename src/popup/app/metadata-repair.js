@@ -305,7 +305,9 @@
       // stuck, and it resumes by itself.
       const waiting = state.waitingForNetwork === true;
       const waitingForJikan = Number(state.waitingForJikanUntil) > Date.now();
-      if (!updatedAt || Date.now() - updatedAt > METADATA_REPAIR_STALE_MS) {
+      // A wait for Jikan leaves the state untouched for minutes on purpose: it is not a stalled worker, and the
+      // nudge below would end the wait early (a manual start resets the Jikan pause).
+      if (!waitingForJikan && (!updatedAt || Date.now() - updatedAt > METADATA_REPAIR_STALE_MS)) {
         if (!isSilent) {
           setMetadataRepairStatus(
             waiting
@@ -343,7 +345,7 @@
       if (waiting) {
         setMetadataRepairStatus("Waiting for connection...");
       } else if (waitingForJikan) {
-        setMetadataRepairStatus("Filler source busy, continuing shortly...");
+        setMetadataRepairStatus(AT.FillerFetchUI?.jikanWaitLabel?.(state.waitingForJikanUntil) || "Filler source busy, retrying soon...");
       } else if (uiMode === "status") {
         setMetadataRepairStatus(
           progress.remaining > 0 ? `Fetching ${progress.remaining} anime...` : "Fetching data...",

@@ -329,6 +329,24 @@ async function panel(browser, device, { access, grant = true, optional = null })
       await p.context.close();
     });
 
+    await test("a run waiting for the filler source counts down instead of sitting still, and stops once it moves on", async () => {
+      const p = await panel(browser, PHONE, { access: true });
+      const label = () => p.page.evaluate(() => document.querySelector(".ffui-progress-label").textContent);
+      await p.page.evaluate(() => window.AnimeTracker.FillerFetchUI.applyBackgroundState({ runId: "r", status: "running",
+        fetchTotal: 76, queueIndex: 70, processed: 70, logs: [], currentTitle: "Quiet Harbor Days", waitingForJikanUntil: Date.now() + 90500 }));
+      const first = await label();
+      assert.match(first, /^70 \/ 76 — Filler source busy, retrying in 1:3\d$/);
+      await p.page.waitForTimeout(2100);
+      const later = await label();
+      assert.notEqual(later, first, "the countdown ticks");
+      assert.match(later, /^70 \/ 76 — Filler source busy, retrying in 1:[23]\d$/);
+      await p.page.evaluate(() => window.AnimeTracker.FillerFetchUI.applyBackgroundState({ runId: "r", status: "running",
+        fetchTotal: 76, queueIndex: 71, processed: 71, logs: [], currentTitle: "Lantern Street Diaries" }));
+      await p.page.waitForTimeout(1200);
+      assert.equal(await label(), "71 / 76 — Lantern Street Diaries", "a finished wait leaves no timer rewriting the label");
+      await p.context.close();
+    });
+
     await test("a queue paused for All Websites names that one switch and links to Settings", async () => {
       const p = await panel(browser, PHONE, { access: false });
       await p.page.evaluate(() => {

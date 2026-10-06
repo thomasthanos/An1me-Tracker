@@ -36,9 +36,9 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Fetch & Import no longer turns one slow filler answer into dozens of filler paused, retry later rows.\n" +
-    "• When the filler source is slow (for example while an episode is playing), the import waits a few minutes and continues by itself.\n" +
-    "• Filler lookups allow more time on a phone, and pressing Fetch & Import during a wait tries again at once.\n" +
+    "• Fetch & Import no longer stops at 0 when the filler source is slow: slow shows move to the end and the rest finish.\n" +
+    "• If only slow shows are left, the import waits with a countdown and continues by itself, at most three times.\n" +
+    "• Pressing Fetch & Import during a wait tries again at once.\n" +
     "• AniList stays disabled on mobile.";
 
   return {

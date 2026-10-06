@@ -305,57 +305,99 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     ...Object.fromEntries(UNLISTED.map(([slug, title]) => [`animeinfo_${slug}`, info(title)])),
   });
 
-  await test("a run waits at the show while Jikan is slow instead of failing the rest, then continues by itself", async () => {
-    const h = worker({ jikan: "hang", seed: unlistedSeed() });
+  // The slow shows come first in the library, so a run that waited at them would finish nothing else.
+  const mixedSeed = () => { const seed = unlistedSeed(); seed.animeData = { ...seed.animeData, ...library() }; return seed; };
+  const state = (h) => h.c.getMetadataRepairState();
+  const waitingForJikan = async (h) => { const s = await state(h); return s?.status === "completed" || Number(s?.waitingForJikanUntil) > vm.runInContext("Date.now()", h.c); };
+
+  await test("a show Jikan is slow on goes to the end of the queue and every other show still finishes", async () => {
+    const h = worker({ jikan: "hang", seed: mixedSeed() });
     await h.c.startLibraryRepair({ origin: "manual" });
-    await until(async () => Number((await h.c.getMetadataRepairState())?.waitingForJikanUntil) > 0);
+    await until(() => waitingForJikan(h));
     await settle();
-    const paused = await h.c.getMetadataRepairState();
+    const paused = await state(h);
     assert.equal(paused.status, "running");
-    assert.deepEqual([paused.queueIndex, paused.processed, paused.failed], [0, 0, 0], "the slow show is not consumed or counted");
-    assert.ok(paused.waitingForJikanUntil >= NOW + 30000, "it waits at least half a minute");
+    assert.deepEqual([paused.processed, paused.fetched, paused.failed], [4, 4, 0], "the four AnimeFillerList shows finished while Jikan hung");
+    const left = paused.items.slice(paused.queueIndex);
+    assert.deepEqual(left.map((item) => item.slug), UNLISTED.map(([slug]) => slug), "the slow shows wait at the end, in their order");
+    assert.ok(left.every((item) => item.jikanDeferrals === 1));
+    assert.equal(paused.items.length, 8, "nothing is dropped or added");
+    assert.equal(paused.waitingForJikanUntil, NOW + 2 * MINUTE, "only they wait, until Jikan reopens");
     assert.ok(h.alarms.some((alarm) => alarm.name === "metadataRepairTick" && alarm.options.when > paused.waitingForJikanUntil), "an alarm brings it back");
-    // Woken early (the popup nudges it every few seconds): still waiting, nothing requested.
+    // Woken early (the popup nudges it every few seconds), or by a restarted worker that forgot the pause: Jikan is not asked.
     const requests = h.calls.jikan;
     await h.c.runMetadataRepairBatch();
+    vm.runInContext("globalThis.__jikanCircuitBroken = false; globalThis.__jikanCircuitBrokenUntil = 0;", h.c);
+    await h.c.runMetadataRepairBatch();
     assert.equal(h.calls.jikan, requests);
+    assert.equal((await state(h)).queueIndex, 4);
     // Jikan answers again once the wait is over.
-    h.advance(10 * MINUTE);
+    h.advance(2 * MINUTE + 1);
     h.mode.jikan = "listed";
     await h.c.runMetadataRepairBatch();
-    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
-    const done = await h.c.getMetadataRepairState();
-    assert.deepEqual([done.status, done.processed, done.fetched, done.failed], ["completed", 4, 4, 0]);
+    await until(async () => (await state(h))?.status === "completed");
+    const done = await state(h);
+    assert.deepEqual([done.status, done.processed, done.fetched, done.failed], ["completed", 8, 8, 0]);
     assert.ok(!(done.waitingForJikanUntil > 0), "the wait is cleared");
   });
 
-  await test("a show Jikan keeps timing out on is counted after three waits, and the run moves on", async () => {
+  await test("while Jikan stays down the run waits for it three times at most, then counts the shows left and ends", async () => {
     const h = worker({ jikan: "hang", seed: unlistedSeed() });
     await h.c.startLibraryRepair({ origin: "manual" });
-    for (let wait = 0; wait < 3; wait++) {
-      await until(async () => Number((await h.c.getMetadataRepairState())?.waitingForJikanUntil) > Date.now() || wait > 0);
+    const waits = [];
+    for (let round = 0; round < 6; round++) {
+      await until(() => waitingForJikan(h));
       await settle();
-      const state = await h.c.getMetadataRepairState();
-      assert.equal(state.queueIndex, 0, `still at the first show after wait ${wait + 1}`);
-      h.advance(Math.max(0, state.waitingForJikanUntil - vm.runInContext("Date.now()", h.c)) + 1000);
+      const s = await state(h);
+      if (s.status === "completed") break;
+      waits.push((s.waitingForJikanUntil - vm.runInContext("Date.now()", h.c)) / MINUTE);
+      h.advance(s.waitingForJikanUntil - vm.runInContext("Date.now()", h.c) + 1000);
       await h.c.runMetadataRepairBatch();
-      await settle();
     }
-    const moved = await h.c.getMetadataRepairState();
-    assert.ok(moved.queueIndex >= 1, "the first show is given up on");
-    assert.equal(moved.failed >= 1, true);
-    assert.equal(moved.logs[0].detail.includes("filler"), true);
+    const done = await state(h);
+    assert.deepEqual(waits, [2, 5, 10], "three waits, each as long as Jikan's own pause");
+    assert.deepEqual([done.status, done.processed, done.failed], ["completed", 4, 4]);
+    assert.ok(done.items.every((item) => item.jikanDeferrals >= 1 && item.jikanDeferrals <= 5));
+    assert.ok(done.logs.every((entry) => /filler/.test(entry.detail)), "each row names the filler lookup");
+    assert.ok(h.calls.jikan <= 6, `a request or two per wait, not one per show each time (${h.calls.jikan})`);
   });
 
-  await test("Fetch & Import pressed during a Jikan wait tries again at once", async () => {
+  await test("a show not yet tried runs before the ones waiting for Jikan, even when a reorder put it behind them", async () => {
+    const items = [{ slug: "unlisted-a", title: "Quiet Harbor Days", jikanDeferrals: 1 }, { slug: "noragami", title: "Noragami" }];
+    const seed = { ...unlistedSeed(), metadataRepairState: { runId: "reordered", status: "running", origin: "manual", uiMode: "modal",
+      total: 2, fetchTotal: 2, queueIndex: 0, processed: 0, fetched: 0, cached: 0, skipped: 0, failed: 0, logs: [], items,
+      jikanPausedUntil: NOW + 5 * MINUTE, options: { forceInfoRefresh: false, forceFillerRefresh: false } } };
+    const h = worker({ jikan: "hang", seed });
+    await h.c.runMetadataRepairBatch();
+    const s = await state(h);
+    assert.deepEqual(s.items.map((item) => item.slug), ["noragami", "unlisted-a"]);
+    assert.deepEqual([s.status, s.processed, s.fetched, s.queueIndex], ["running", 1, 1, 1]);
+    assert.equal(s.waitingForJikanUntil, NOW + 5 * MINUTE);
+    assert.equal(h.calls.jikan, 0);
+  });
+
+  await test("a run 8.2.14 left waiting at its first show carries on at once after the update", async () => {
+    const items = SHOWS.slice(0, 4).map(([slug, title]) => ({ slug, title }));
+    const seed = { animeData: library(), metadataRepairState: { runId: "stuck", status: "running", origin: "manual", uiMode: "modal",
+      total: 4, fetchTotal: 4, queueIndex: 0, processed: 0, fetched: 0, cached: 0, skipped: 0, failed: 0, logs: [], items,
+      waitingForJikanUntil: NOW + 20 * MINUTE, jikanWaitIndex: 0, jikanWaits: 1, options: { forceInfoRefresh: false, forceFillerRefresh: true } } };
+    const h = worker({ seed });
+    await h.c.runMetadataRepairBatch();
+    await until(async () => (await state(h))?.status === "completed");
+    const done = await state(h);
+    assert.deepEqual([done.status, done.processed, done.fetched, done.failed], ["completed", 4, 4, 0]);
+  });
+
+  await test("Fetch & Import pressed during a Jikan wait tries the waiting shows at once", async () => {
     const h = worker({ jikan: "hang", seed: unlistedSeed() });
     await h.c.startLibraryRepair({ origin: "manual" });
-    await until(async () => Number((await h.c.getMetadataRepairState())?.waitingForJikanUntil) > 0);
+    await until(() => waitingForJikan(h));
     await settle();
+    assert.ok((await state(h)).waitingForJikanUntil > NOW);
     h.mode.jikan = "listed";
     await h.c.startLibraryRepair({ origin: "manual" });
-    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
-    const done = await h.c.getMetadataRepairState();
+    await until(async () => (await state(h))?.status === "completed");
+    const done = await state(h);
     assert.deepEqual([done.processed, done.fetched, done.failed], [4, 4, 0]);
   });
 
