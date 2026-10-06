@@ -119,10 +119,33 @@ function bodyAfter(source, anchor) {
   return end < 0 ? null : source.slice(start, end + 1);
 }
 
+/// The cases an enum declares itself, ignoring any nested enum declared inside it.
 function casesOf(source, enumName) {
   const body = bodyAfter(source, `enum ${enumName}`);
   if (!body) return [];
-  return [...body.matchAll(/^\s*case\s+([a-zA-Z][A-Za-z0-9_]*)/gm)].map((match) => match[1]);
+  const found = [];
+  for (const line of body.split("\n")) {
+    // `case .foo` lines belong to a switch, not to the enum's own declaration.
+    const match = line.match(/^(\s*)case\s+([a-zA-Z][A-Za-z0-9_]*)/);
+    if (match) found.push({ indent: match[1].length, name: match[2] });
+  }
+  if (found.length === 0) return [];
+  const shallowest = Math.min(...found.map((entry) => entry.indent));
+  return found.filter((entry) => entry.indent === shallowest).map((entry) => entry.name);
+}
+
+/// The cases a switch body actually handles. A single line may list several (`case .a, .b:`).
+function handledCases(body) {
+  const handled = new Set();
+  for (const line of body.split("\n")) {
+    const match = line.match(/^\s*case\s+(.+?):/);
+    if (!match) continue;
+    for (const part of match[1].split(",")) {
+      const name = part.trim().match(/^\.?([a-zA-Z][A-Za-z0-9_]*)/)?.[1];
+      if (name && name !== "let" && name !== "var" && name !== "is") handled.add(name);
+    }
+  }
+  return handled;
 }
 
 const files = swiftFiles(IOS).sort();
@@ -170,8 +193,8 @@ check("no Swift file is empty", empty.length === 0, empty.join(", "));
 
 const declarations = new Map();
 for (const [file, source] of sources) {
-  walk(source, () => {});
-  for (const match of source.matchAll(/^\s*(?:public |internal |private |fileprivate |final |open )*(?:struct|class|enum|protocol|actor)\s+([A-Z][A-Za-z0-9_]*)/gm)) {
+  // Top-level only: a nested type lives in its owner's namespace and cannot collide. Both are indented.
+  for (const match of source.matchAll(/^(?:public |internal |private |fileprivate |final |open )*(?:struct|class|enum|protocol|actor)\s+([A-Z][A-Za-z0-9_]*)/gm)) {
     const name = match[1];
     if (!declarations.has(name)) declarations.set(name, []);
     declarations.get(name).push(rel(file));
@@ -205,7 +228,6 @@ const SWITCH_SITES = [
   { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/ViewModels/WebsiteAccessViewModel.swift", anchor: "func perform(_ action: DashboardAction) async" },
   { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/Models/DashboardModels.swift", anchor: "var title: String" },
   { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/Models/DashboardModels.swift", anchor: "var symbol: String" },
-  { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/Models/PermissionModels.swift", anchor: "var isAllowed: Bool" },
   { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/ViewModels/HomeViewModel.swift", anchor: "private func tone(for state: AccessState)" },
   { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/ViewModels/WebsiteAccessViewModel.swift", anchor: "var statusTitle: String" },
   { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/Models/PermissionModels.swift", anchor: "var summary: String" },
@@ -221,7 +243,8 @@ for (const site of SWITCH_SITES) {
   const cases = casesOf(site.enumSource, site.enumName);
   const target = sources.get(path.join(IOS, site.file));
   const body = target ? bodyAfter(target, site.anchor) : null;
-  const missing = cases.filter((name) => body && !body.includes(`case .${name}`));
+  const handled = body ? handledCases(body) : new Set();
+  const missing = cases.filter((name) => !handled.has(name));
   check(
     `${site.enumName} is fully handled in ${site.file} → ${site.anchor}`,
     cases.length > 0 && body !== null && missing.length === 0,
