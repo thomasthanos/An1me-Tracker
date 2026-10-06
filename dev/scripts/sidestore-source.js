@@ -36,9 +36,9 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Fetch & Import no longer stops at 0 when the filler source is slow: slow shows move to the end and the rest finish.\n" +
-    "• If only slow shows are left, the import waits with a countdown and continues by itself, at most three times.\n" +
-    "• Pressing Fetch & Import during a wait tries again at once.\n" +
+    "• Fetch & Import no longer sits at 0 on one show: a show that does not finish in two minutes, or that the background was stopped on twice, counts as needing a retry and the rest carry on.\n" +
+    "• Details in the Fetch & Import panel lists each step and how long it took, so a screenshot shows where a run stops.\n" +
+    "• A restart of the background no longer pauses sync and Fetch & Import.\n" +
     "• AniList stays disabled on mobile.";
 
   return {

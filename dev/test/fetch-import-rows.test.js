@@ -55,7 +55,28 @@ async function measure(browser, options) {
       await ui.open();
       for (const [type, name, detail] of rows) ui._log(type, name, detail);
       const log = document.getElementById(ui.IDS.logFeed);
+      // The background's steps for the run: folded under Details until opened, then read in full on a phone.
+      const at = Date.UTC(2026, 9, 6, 16, 20);
+      ui.renderTrace([
+        { at, text: "Run started: 76 to fetch, 43 up to date (manual)" },
+        { at: at + 1000, text: "Start 1/76: Ore dake Level Up na Ken Season 2: Arise from the Shadow (try 2)" },
+        { at: at + 2000, text: "AnimeFillerList page solo-leveling-season-2-arise-from-the-shadow…" },
+        { at: at + 9000, text: "AnimeFillerList page failed: afl_page_unavailable: blocked by Cloudflare, 7.0s" },
+      ]);
+      const trace = document.querySelector(".ffui-trace");
+      const foldedAtFirst = !trace.hidden && !trace.open;
+      trace.open = true;
+      const traceLines = trace.querySelector(".ffui-trace-lines");
+      const traceShown = {
+        foldedAtFirst,
+        lines: traceLines.textContent.split("\n").length,
+        whole: traceLines.scrollWidth <= traceLines.clientWidth + 1,
+        insideBox: trace.getBoundingClientRect().right <= document.getElementById(ui.IDS.container).getBoundingClientRect().right + 1,
+      };
+      ui.renderTrace([]);
+      const traceHiddenWhenEmpty = trace.hidden;
       return {
+        trace: { ...traceShown, hiddenWhenEmpty: traceHiddenWhenEmpty },
         rows: [...log.querySelectorAll(".ffui-log-row")].map((row) => {
           const box = (name) => row.querySelector(".ffui-log-" + name).getBoundingClientRect();
           const detail = row.querySelector(".ffui-log-detail");
@@ -98,6 +119,14 @@ async function measure(browser, options) {
           assert.equal(row.insideRow, true, `${row.name}: detail spills out of its row`);
         }
         assert.equal(results[size].sideways, false, "no horizontal scrolling: " + JSON.stringify(results[size].widest));
+      });
+      await test(`the run's steps sit folded under Details and open in full on ${size}`, async () => {
+        const { trace } = results[size];
+        assert.equal(trace.foldedAtFirst, true, "shown, but folded until opened");
+        assert.equal(trace.lines, 4);
+        assert.equal(trace.whole, true, "long steps wrap instead of scrolling sideways");
+        assert.equal(trace.insideBox, true);
+        assert.equal(trace.hiddenWhenEmpty, true, "no Details without steps");
       });
     }
     await test("a phone shows more rows than the desktop popup, which keeps its height", async () => {

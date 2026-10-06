@@ -25,6 +25,9 @@ const prior = () => ({ canon: [1, 3, 4], filler: [2, 5], mixed: [], anime_canon:
 // One isolated worker per case: the Jikan circuit and the slug cache live in the global scope.
 function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess = null } = {}) {
   const store = structuredClone(seed), calls = { aflIndex: 0, aflShow: 0, jikan: 0, offline: 0 }, timers = [], alarms = [], listeners = {};
+  // Request timeouts fire at once so a hang ends quickly. A limit of a minute or more (a show's own deadline) waits
+  // until the test moves the clock and fires it, as a worker that really waited that long would.
+  const longTimers = [];
   const mode = { afl, jikan, jikanEpisodes: 28, siteAccess };
   // The browser's own connectivity flag, which the worker reads as navigator.onLine. Flip it to cut the connection.
   const nav = { userAgent: ua, platform: ua, onLine: true };
@@ -35,7 +38,12 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess
     Date: Clock, console: { log() {}, warn() {}, error() {}, info() {}, debug() {} }, AbortController, Response,
     navigator: nav,
     addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
-    setTimeout(fn, ms) { timers.push(ms); return setTimeout(fn, 0); }, clearTimeout,
+    setTimeout(fn, ms) {
+      timers.push(ms);
+      if (ms >= MINUTE) { const timer = { fn }; longTimers.push(timer); return timer; }
+      return setTimeout(fn, 0);
+    },
+    clearTimeout(timer) { const at = longTimers.indexOf(timer); if (at >= 0) longTimers.splice(at, 1); else clearTimeout(timer); },
     bgStorageGet: async (keys) => structuredClone(keys === null ? store : Object.fromEntries(keys.filter((k) => k in store).map((k) => [k, store[k]]))),
     // A loop that keeps rewriting storage would starve every timer; stop it so a regression fails instead of hanging.
     bgStorageSet: async (patch) => { if (++writes > 2000) { runaway = true; throw new Error("runaway storage writes"); } Object.assign(store, structuredClone(patch)); },
@@ -46,6 +54,8 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess
         const abort = () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
         if (options.signal?.aborted) abort(); else options.signal?.addEventListener("abort", abort, { once: true });
       });
+      // The headers arrive, then the body never ends, and nothing ties it to the request's abort signal.
+      const stalled = () => new Response(new ReadableStream({ pull: () => new Promise(() => {}) }), { status: 200 });
       const blocked = () =>
         mode.afl === "down" ? Promise.reject(new TypeError("Load failed"))
           : mode.afl === "403" ? Promise.resolve(new Response("", { status: 403 }))
@@ -58,11 +68,13 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess
       }
       if (url.startsWith("https://www.animefillerlist.com/shows/")) {
         calls.aflShow++;
+        if (mode.afl === "stall-page") return Promise.resolve(stalled());
         return blocked() || Promise.resolve(new Response(showPage(28)));
       }
       if (url.startsWith("https://api.jikan.moe/")) {
         calls.jikan++;
         if (mode.jikan === "hang") return hang();
+        if (mode.jikan === "stall") return Promise.resolve(stalled());
         if (mode.jikan === "down") return Promise.reject(new TypeError("Load failed"));
         if (mode.jikan === "listed") {
           // MAL knows every show: the search echoes the title, and every seventh episode is filler.
@@ -92,7 +104,8 @@ function worker({ afl = "ok", jikan = "ok", ua = "iPhone", seed = {}, siteAccess
   const goOnline = () => { nav.onLine = true; for (const fn of listeners.online || []) fn(); };
   // The user allows the extension on the filler sites: the browser grants it and fires permissions.onAdded.
   const grantAccess = () => { mode.siteAccess = true; for (const fn of listeners.permissionAdded || []) fn({ origins: ["https://www.animefillerlist.com/*"] }); };
-  return { c, store, calls, timers, mode, nav, alarms, resolve, goOnline, grantAccess, writes: () => writes, runaway: () => runaway, advance: (ms) => { time += ms; } };
+  const fireLongTimers = () => longTimers.splice(0).forEach((timer) => timer.fn());
+  return { c, store, calls, timers, mode, nav, alarms, resolve, goOnline, grantAccess, fireLongTimers, writes: () => writes, runaway: () => runaway, advance: (ms) => { time += ms; } };
 }
 
 let failures = 0;
@@ -399,6 +412,108 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     await until(async () => (await state(h))?.status === "completed");
     const done = await state(h);
     assert.deepEqual([done.processed, done.fetched, done.failed], [4, 4, 0]);
+  });
+
+  // On an iPhone the run sat at 0 of 76 on its first show, build after build. Whatever holds a show (a request
+  // that never ends, or iOS stopping the worker in the middle of it), the queue must move on.
+  const freezeShow = (h, slug) => {
+    const real = h.c.fetch;
+    // Ignores its abort signal too, as a stalled request on a phone can.
+    h.c.fetch = (url, options) => url === `https://www.animefillerlist.com/shows/${slug}` ? new Promise(() => {}) : real(url, options);
+  };
+  const traceText = (h) => (h.store.metadataRepairTrace || []).map((entry) => entry.text).join("\n");
+
+  await test("a show the worker is stopped on twice counts as needing a retry and the rest of the queue finishes", async () => {
+    const first = worker({ seed: { animeData: library() } });
+    freezeShow(first, "noragami");
+    await first.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await state(first))?.inFlight?.starts === 1);
+    // iOS stops the worker mid-show; a new one starts on the same storage and resumes the run.
+    const second = worker({ seed: structuredClone(first.store) });
+    freezeShow(second, "noragami");
+    void second.c.runMetadataRepairBatch();
+    await until(async () => (await state(second))?.inFlight?.starts === 2);
+    const third = worker({ seed: structuredClone(second.store) });
+    freezeShow(third, "noragami");
+    void third.c.runMetadataRepairBatch();
+    await until(async () => (await state(third))?.status === "completed");
+    const done = await state(third);
+    assert.deepEqual([done.status, done.processed, done.fetched, done.failed], ["completed", 4, 3, 1]);
+    assert.deepEqual(done.failedItems.map((item) => item.slug), ["noragami"]);
+    assert.match(done.logs.find((entry) => entry.slug === "noragami").detail, /stopped twice/);
+    assert.equal(third.calls.aflShow, 3, "the third worker does not ask again for the show the other two stopped on");
+    assert.ok(!done.inFlight, "nothing is left marked as in progress");
+  });
+
+  await test("a show that never finishes in a running worker is given up after two minutes and the queue moves on", async () => {
+    const h = worker({ seed: { animeData: library() } });
+    freezeShow(h, "noragami");
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await state(h))?.inFlight?.slug === "noragami");
+    await settle();
+    assert.equal((await state(h)).queueIndex, 0, "still on the first show");
+    h.advance(2 * MINUTE);
+    h.fireLongTimers();
+    await until(async () => (await state(h))?.status === "completed");
+    const done = await state(h);
+    assert.deepEqual([done.processed, done.fetched, done.failed], [4, 3, 1]);
+    assert.match(done.logs.find((entry) => entry.slug === "noragami").detail, /timed out/);
+  });
+
+  await test("pausing twice for the connection on one show does not count as the worker stopping on it", async () => {
+    const h = worker({ seed: { animeData: library() } });
+    let drops = 0;
+    const real = h.c.fetch;
+    // The connection drops just as the first show's page is requested, twice in a row.
+    h.c.fetch = (url, options) => {
+      if (url === "https://www.animefillerlist.com/shows/noragami" && ++drops <= 2) h.nav.onLine = false;
+      return real(url, options);
+    };
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await state(h))?.waitingForNetwork === true);
+    await settle();
+    h.nav.onLine = true;
+    await h.c.runMetadataRepairBatch();
+    assert.equal((await state(h)).waitingForNetwork, true, "the connection dropped on the same show again");
+    h.nav.onLine = true;
+    await h.c.runMetadataRepairBatch();
+    await until(async () => (await state(h))?.status === "completed");
+    const done = await state(h);
+    assert.deepEqual([done.processed, done.fetched, done.failed], [4, 4, 0], "two pauses on one show do not count as two stops");
+  });
+
+  await test("a Jikan or AnimeFillerList answer whose body stalls ends as a slow answer instead of holding the show", async () => {
+    const limit = (promise) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("still waiting for the body")), 2000))]);
+    const jikan = worker({ jikan: "stall" });
+    const search = await limit(jikan.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" }));
+    assert.equal(search.fillerResult.status, "failed");
+    assert.match(search.fillerResult.error, /jikan_search_timeout/);
+    const afl = worker({ afl: "stall-page", jikan: "listed" });
+    const page = await limit(afl.resolve("noragami"));
+    assert.equal(page.fillerResult.status, "fetched", "a stalled show page falls back to Jikan like any unreachable page");
+    assert.equal(page.fillerResult.entry._source, "jikan");
+  });
+
+  await test("the run leaves a trace of its steps, and of every worker restart, for the Fetch & Import panel", async () => {
+    const first = worker({ seed: { animeData: library() } });
+    freezeShow(first, "noragami");
+    await first.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await state(first))?.inFlight?.starts === 1);
+    await settle();
+    let text = traceText(first);
+    assert.match(text, /Run started: 4 to fetch/);
+    assert.match(text, /Noragami/);
+    assert.match(text, /AnimeFillerList page/);
+    const second = worker({ seed: structuredClone(first.store) });
+    await second.c.resumeMetadataRepairIfNeeded({ workerStart: true });
+    await until(async () => (await state(second))?.status === "completed");
+    await settle();
+    text = traceText(second);
+    assert.match(text, /Worker started at 0\/4/);
+    assert.match(text, /Noragami \(try 2\)/);
+    assert.match(text, /Run completed/);
+    assert.ok(second.store.metadataRepairTrace.every((entry) => Number(entry.at) > 0 && typeof entry.text === "string"));
+    assert.ok(second.store.metadataRepairTrace.length <= 50, "the trace keeps only the latest steps");
   });
 
   await test("a run that is waiting for the connection is not restarted in a loop by a pending repair flag", async () => {

@@ -23,6 +23,14 @@ const isMobileUA = () => AnimeTrackerUtils.isMobileDevice();
 const metadataRepairMaxAttempts = () => (isMobileUA() ? 1 : 2);
 const METADATA_REPAIR_RETRY_BASE_DELAY_MS = 1500;
 const METADATA_REPAIR_HOST_ORIGINS = Object.freeze(["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"]);
+// On an iPhone a run sat at 0 of 76 on its first show, release after release. Whatever holds a show, the queue moves
+// on: a show still unresolved after two minutes in a running worker is given up, and a show two workers were stopped
+// in the middle of (iOS stops the extension's worker when it likes) is not tried a third time. Both count as needing
+// a retry.
+const METADATA_REPAIR_ITEM_DEADLINE_MS = 2 * 60 * 1000;
+const METADATA_REPAIR_ITEM_MAX_STARTS = 2;
+const METADATA_REPAIR_TRACE_KEY = "metadataRepairTrace";
+const METADATA_REPAIR_TRACE_MAX = 50;
 
 // Local permission checks only. Unknown API answers are not evidence of denial,
 // but cannot undo a pause whose denial was already established.
@@ -139,6 +147,23 @@ async function runMetadataRepairWithRetry(task, options = {}) {
   throw lastError || new Error("Metadata repair retry failed");
 }
 
+// The show's own requests have timeouts, but a body that stalls is not always ended by an abort on a phone, and one
+// show that never answered held the whole run. The deadline is measured on the clock, so a timer that fires early (or
+// late, after the worker was frozen) still gives the show its full time.
+function resolveMetadataRepairItemWithinDeadline(task) {
+  const startedAt = Date.now();
+  let timer = null;
+  const deadline = new Promise((_, reject) => {
+    const check = () => {
+      const left = startedAt + METADATA_REPAIR_ITEM_DEADLINE_MS - Date.now();
+      if (left <= 0) reject(Object.assign(new Error("item_timeout"), { itemDeadline: true }));
+      else timer = setTimeout(check, Math.max(1000, left));
+    };
+    timer = setTimeout(check, METADATA_REPAIR_ITEM_DEADLINE_MS);
+  });
+  return Promise.race([task, deadline]).finally(() => clearTimeout(timer));
+}
+
 function scheduleMetadataRepairFallback(delayInMinutes = 1) { chrome.alarms.create(METADATA_REPAIR_ALARM, { delayInMinutes }); }
 
 // A Jikan request that timed out, or Jikan paused after repeated timeouts (filler-discovery.js). The show goes to
@@ -157,6 +182,44 @@ async function getMetadataRepairState() {
 
 async function setMetadataRepairState(state) {
   await bgStorageSet({ [METADATA_REPAIR_STATE_KEY]: state });
+}
+
+// The steps of the latest run, shown under Details in the Fetch & Import panel. An iPhone has no console to read, and
+// three releases guessed at why a run stopped on its first show; this says where it stops, and each time iOS starts
+// the worker again. Each step is written as it starts, so a worker stopped in the middle still leaves it behind.
+let metadataRepairTrace = null;
+let metadataRepairTraceTail = Promise.resolve();
+
+function traceMetadataRepair(text, { reset = false } = {}) {
+  const entry = { at: Date.now(), text: String(text || "").replace(/\s+/g, " ").trim().slice(0, 140) };
+  metadataRepairTraceTail = metadataRepairTraceTail
+    .then(async () => {
+      if (reset) {
+        metadataRepairTrace = [];
+      } else if (!metadataRepairTrace) {
+        const stored = await bgStorageGet([METADATA_REPAIR_TRACE_KEY]);
+        metadataRepairTrace = Array.isArray(stored[METADATA_REPAIR_TRACE_KEY]) ? stored[METADATA_REPAIR_TRACE_KEY] : [];
+      }
+      metadataRepairTrace = [...metadataRepairTrace, entry].slice(-METADATA_REPAIR_TRACE_MAX);
+      await bgStorageSet({ [METADATA_REPAIR_TRACE_KEY]: metadataRepairTrace });
+    })
+    .catch(() => {});
+  return metadataRepairTraceTail;
+}
+
+// A request inside the show being fetched (a page, the filler index, Jikan). Recorded only while a run is working, so
+// the watch page's own lookups stay out of the trace.
+function traceMetadataRepairStep(text) {
+  if (metadataRepairInProgress) void traceMetadataRepair(text);
+}
+
+function formatMetadataRepairSeconds(ms) {
+  return `${(Math.max(0, Number(ms) || 0) / 1000).toFixed(1)}s`;
+}
+
+function beginMetadataRepairTrace(state, processed = 0) {
+  const fetchTotal = getMetadataRepairFetchTotal(state);
+  return traceMetadataRepair(`Run started: ${fetchTotal} to fetch, ${processed} up to date (${state.origin})`, { reset: true });
 }
 
 function appendMetadataRepairLog(logs, entry) {
@@ -753,10 +816,14 @@ async function finalizeMetadataRepair(state, patch = {}) {
     followUpPending,
     currentSlug: null,
     currentTitle: null,
+    inFlight: null,
     updatedAt: new Date().toISOString(),
   };
   await setMetadataRepairState(finalState);
   await chrome.alarms.clear(METADATA_REPAIR_ALARM);
+  await traceMetadataRepair(finalState.status === "error"
+    ? `Run error: ${finalState.errorMessage || "unknown"}`
+    : `Run completed: ${Number(finalState.fetched) || 0} fetched, ${Number(finalState.failed) || 0} need retry`);
 
   return finalState;
 }
@@ -772,9 +839,13 @@ async function _isWatchTabOpen() {
 
 // Offline: stop where we are instead of walking the whole queue into failures. The queue, its position and every
 // cache entry stay untouched; the fallback alarm and the online event pick the run up again.
+// A pause is not the worker being stopped in the middle of the show, so it clears that mark (inFlight).
 async function pauseMetadataRepairForNetwork(state) {
-  if (state.waitingForNetwork !== true) {
-    await setMetadataRepairState({ ...state, waitingForNetwork: true, updatedAt: new Date().toISOString() });
+  if (state.waitingForNetwork !== true || state.inFlight) {
+    const fresh = await getMetadataRepairState();
+    if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return;
+    await setMetadataRepairState({ ...fresh, waitingForNetwork: true, inFlight: null, updatedAt: new Date().toISOString() });
+    await traceMetadataRepair("Paused: offline, waiting for the connection");
   }
   scheduleMetadataRepairFallback(2);
 }
@@ -784,10 +855,12 @@ async function pauseMetadataRepairForAccess(state, blockedOrigins) {
   if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return;
   const retryOldFailures = fresh.origin === "manual" && fresh.failed > 0 && fresh.pendingManualRetry !== true;
   if (retryOldFailures) await bgStorageSet({ [PENDING_METADATA_REPAIR_KEY]: true });
-  if (retryOldFailures || fresh.waitingForAccess !== true || JSON.stringify(fresh.blockedOrigins) !== JSON.stringify(blockedOrigins)) {
-    await setMetadataRepairState({ ...fresh, waitingForAccess: true, blockedOrigins,
+  if (retryOldFailures || fresh.inFlight || fresh.waitingForAccess !== true ||
+      JSON.stringify(fresh.blockedOrigins) !== JSON.stringify(blockedOrigins)) {
+    await setMetadataRepairState({ ...fresh, waitingForAccess: true, blockedOrigins, inFlight: null,
       ...(retryOldFailures ? { pendingManualRetry: true } : {}),
       updatedAt: new Date().toISOString() });
+    await traceMetadataRepair(`Paused: website access needed (${blockedOrigins.length} sites)`);
   }
   // Consent needs a user gesture, so neither an alarm nor a pending job should retry it.
   await chrome.alarms.clear(METADATA_REPAIR_ALARM);
@@ -878,6 +951,7 @@ async function runMetadataRepairBatch(options = {}) {
         if (state.waitingForJikanUntil !== jikanPausedUntil) {
           await setMetadataRepairState({ ...state, waitingForJikanUntil: jikanPausedUntil, jikanWaits: jikanWaits + 1,
             updatedAt: new Date().toISOString() });
+          await traceMetadataRepair(`Waiting ${formatMetadataRepairSeconds(jikanPausedUntil - Date.now())} for Jikan (wait ${jikanWaits + 1})`);
         }
         chrome.alarms.create(METADATA_REPAIR_ALARM, { when: jikanPausedUntil + 1000 });
         return false;
@@ -887,15 +961,21 @@ async function runMetadataRepairBatch(options = {}) {
         await setMetadataRepairState(state);
       }
 
-      const startedAt = new Date().toISOString();
-      if (state.currentSlug !== item.slug || state.currentTitle !== item.title) {
+      // Marked before the work starts, so a worker stopped in the middle of this show leaves the mark for the next
+      // one to read. A show two workers were stopped on is not tried a third time.
+      const title = item.title || item.slug;
+      const starts = state.inFlight?.slug === item.slug ? (Number(state.inFlight.starts) || 0) + 1 : 1;
+      const stoppedTwice = starts > METADATA_REPAIR_ITEM_MAX_STARTS;
+      if (!stoppedTwice) {
         state = {
           ...state,
           currentSlug: item.slug,
-          currentTitle: item.title || item.slug,
-          updatedAt: startedAt,
+          currentTitle: title,
+          inFlight: { slug: item.slug, starts },
+          updatedAt: new Date().toISOString(),
         };
         await setMetadataRepairState(state);
+        await traceMetadataRepair(`Start ${index + 1}/${items.length}: ${title}${starts > 1 ? ` (try ${starts})` : ""}`);
       }
 
       if (index % 5 === 0) {
@@ -905,29 +985,43 @@ async function runMetadataRepairBatch(options = {}) {
       let infoResult;
       let fillerResult;
       let logEntry;
+      // Set when the show ends without an answer of its own: the worker stopped on it twice, or it ran out of time.
+      let unresolvedDetail = null;
+      const itemStartedAt = Date.now();
 
-      try {
-        const resolved = await self.AnimeTrackerAnimeResolver.resolve(item.slug, {
-          title: item.title || item.slug,
-          mediaType: item.mediaType || null,
-          mediaTypeUpdatedAt: item.mediaTypeUpdatedAt || null,
-          includeEpisodeTypes: true,
-          forceInfoRefresh: item.forceInfoRefresh === true || state.options?.forceInfoRefresh !== false,
-          // A show put back for Jikan is asked again: the retry stamp its timeout left would otherwise skip it.
-          forceFillerRefresh: item.forceFillerRefresh === true || state.options?.forceFillerRefresh !== false || putBack,
-        });
-        infoResult = resolved.infoResult || { status: "unavailable", entry: null };
-        fillerResult = resolved.fillerResult || { status: "nofill", entry: null };
-      } catch (error) {
-        const raw = error?.message || String(error);
-        const message = raw.includes("an1me_unreachable") ? "an1me.to unreachable" : raw;
-        infoResult = { status: "failed", error: message };
-        fillerResult = { status: "failed", error: message };
+      if (stoppedTwice) {
+        unresolvedDetail = "stopped twice while fetching, retry later";
+        infoResult = { status: "failed", error: "stopped twice" };
+        fillerResult = { status: "failed", error: "stopped twice" };
+        await traceMetadataRepair(`Skipped ${index + 1}/${items.length}: ${title} (the worker stopped twice on it)`);
+      } else {
+        try {
+          const resolved = await resolveMetadataRepairItemWithinDeadline(self.AnimeTrackerAnimeResolver.resolve(item.slug, {
+            title,
+            mediaType: item.mediaType || null,
+            mediaTypeUpdatedAt: item.mediaTypeUpdatedAt || null,
+            includeEpisodeTypes: true,
+            forceInfoRefresh: item.forceInfoRefresh === true || state.options?.forceInfoRefresh !== false,
+            // A show put back for Jikan is asked again: the retry stamp its timeout left would otherwise skip it.
+            forceFillerRefresh: item.forceFillerRefresh === true || state.options?.forceFillerRefresh !== false || putBack,
+          }));
+          infoResult = resolved.infoResult || { status: "unavailable", entry: null };
+          fillerResult = resolved.fillerResult || { status: "nofill", entry: null };
+        } catch (error) {
+          const raw = error?.message || String(error);
+          const message = raw.includes("an1me_unreachable") ? "an1me.to unreachable" : raw;
+          infoResult = { status: "failed", error: message };
+          fillerResult = { status: "failed", error: message };
+          if (error?.itemDeadline === true) {
+            unresolvedDetail = `timed out after ${METADATA_REPAIR_ITEM_DEADLINE_MS / 60000} min, retry later`;
+            await traceMetadataRepair(`Gave up on ${title} after ${formatMetadataRepairSeconds(Date.now() - itemStartedAt)}`);
+          }
+        }
       }
 
       // Access may have been revoked during this request. Retry this same item after
       // consent instead of counting the browser setting as a failure of the show.
-      if (infoResult.status === "failed" || fillerResult.status === "failed") {
+      if (!stoppedTwice && (infoResult.status === "failed" || fillerResult.status === "failed")) {
         const blocked = await getMetadataRepairBlockedOrigins();
         if (blocked.length || /no site access/i.test(`${infoResult.error || ""} ${fillerResult.error || ""}`)) {
           pausedForAccess = true;
@@ -937,7 +1031,7 @@ async function runMetadataRepairBatch(options = {}) {
       }
 
       // With access intact, a connection lost in flight also leaves the same item queued.
-      if (isBrowserOffline() && (infoResult.status === "failed" || fillerResult.status === "failed")) {
+      if (!stoppedTwice && isBrowserOffline() && (infoResult.status === "failed" || fillerResult.status === "failed")) {
         pausedForNetwork = true;
         await pauseMetadataRepairForNetwork(state);
         return false;
@@ -961,14 +1055,18 @@ async function runMetadataRepairBatch(options = {}) {
             jikanPausedUntil: Math.max(Number(fresh.jikanPausedUntil) || 0, pausedUntil > Date.now() ? pausedUntil : 0),
             currentSlug: next?.slug || null,
             currentTitle: next?.title || null,
+            inFlight: null,
             updatedAt: new Date().toISOString(),
           };
           await setMetadataRepairState(state);
+          await traceMetadataRepair(`Put back for Jikan: ${title} (${fillerResult.error})`);
           continue;
         }
       }
 
-      logEntry = buildMetadataRepairLog(item.slug, item.title || item.slug, infoResult, fillerResult);
+      logEntry = unresolvedDetail
+        ? { type: "retry", slug: item.slug, name: title, detail: unresolvedDetail, at: Date.now() }
+        : buildMetadataRepairLog(item.slug, title, infoResult, fillerResult);
       const counts = countMetadataRepairOutcome(logEntry);
 
       // Re-read before writing. The resolve above awaits the network, and other writers change this
@@ -1004,8 +1102,12 @@ async function runMetadataRepairBatch(options = {}) {
         lastLog: logEntry,
         currentSlug: nextItem?.slug || null,
         currentTitle: nextItem?.title || null,
+        inFlight: null,
         updatedAt,
       };
+      if (!unresolvedDetail) {
+        await traceMetadataRepair(`Done ${nextQueueIndex}/${freshItems.length} in ${formatMetadataRepairSeconds(Date.now() - itemStartedAt)}: ${logEntry.detail || logEntry.type}`);
+      }
 
       if (nextQueueIndex >= freshItems.length) {
         await finalizeMetadataRepair(state, {
@@ -1102,6 +1204,9 @@ async function startLibraryRepair(options = {}) {
       await setMetadataRepairState(existing);
     }
     await bgStorageSet({ [PENDING_METADATA_REPAIR_KEY]: true });
+    // "already working" while the count stands still means a show is holding this worker; without it, a new worker.
+    await traceMetadataRepair(`Asked to continue (${requestedOrigin}) at ${Math.min(getMetadataRepairFetchTotal(existing),
+      Number(existing.queueIndex) || 0)}/${getMetadataRepairFetchTotal(existing)}${metadataRepairInProgress ? ", already working" : ""}`);
     scheduleMetadataRepairFallback(1);
     runMetadataRepairBatch().catch((error) => {
       console.error("[BG] Failed to resume running repair:", error);
@@ -1180,6 +1285,7 @@ async function startLibraryRepair(options = {}) {
   }
 
   await setMetadataRepairState(state);
+  await beginMetadataRepairTrace(state, plan.processed);
   scheduleMetadataRepairFallback(1);
   runMetadataRepairBatch().catch((error) => {
     console.error("[BG] Failed to start library repair batch:", error);
@@ -1209,10 +1315,12 @@ async function stopLibraryRepair() {
     jikanPausedUntil: null,
     currentSlug: null,
     currentTitle: null,
+    inFlight: null,
     completedAt: state.completedAt || now,
     updatedAt: now,
   };
   await setMetadataRepairState(stopped);
+  await traceMetadataRepair(`Stopped at ${Math.min(getMetadataRepairFetchTotal(stopped), Number(stopped.queueIndex) || 0)}/${getMetadataRepairFetchTotal(stopped)}`);
   return stopped;
 }
 
@@ -1431,6 +1539,7 @@ async function ensureLibraryFresh(prioritySlugs = []) {
   };
 
   await setMetadataRepairState(state);
+  await beginMetadataRepairTrace(state, plan.processed);
   scheduleMetadataRepairFallback(1);
   runMetadataRepairBatch().catch((error) => {
     console.error("[BG] ensureLibraryFresh batch failed:", error);
@@ -1438,9 +1547,15 @@ async function ensureLibraryFresh(prioritySlugs = []) {
   return true;
 }
 
-async function resumeMetadataRepairIfNeeded() {
+// workerStart: the worker has just loaded and found a run. On an iPhone that means iOS stopped the one before, and the
+// trace counts how often.
+async function resumeMetadataRepairIfNeeded(options = {}) {
   const state = await getMetadataRepairState();
   if (state?.status !== "running") return;
+  if (options.workerStart === true) {
+    const total = getMetadataRepairFetchTotal(state);
+    await traceMetadataRepair(`Worker started at ${Math.min(total, Number(state.queueIndex) || 0)}/${total}`);
+  }
   scheduleMetadataRepairFallback(1);
   runMetadataRepairBatch().catch((error) => {
     console.error("[BG] Failed to resume metadata repair on boot:", error);

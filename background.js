@@ -4097,6 +4097,10 @@ let accessResumeTail = Promise.resolve();
 self.AnimeTrackerWebsiteAccess.subscribe(state => {
   if (!self.AnimeTrackerWebsiteAccess.enabled) return;
   accessResumeTail = accessResumeTail.then(async () => {
+    // A check that has not answered is no denial. Every worker start begins "checking", and reading that as paused
+    // cleared every retry alarm and parked a running Fetch & Import on each restart iOS makes. The answer is
+    // published when it comes, and this runs again then.
+    if (self.AnimeTrackerWebsiteAccess.getState().checking) return;
     // Use current state: a grant/removal may supersede a queued callback.
     if (self.AnimeTrackerWebsiteAccess.isPaused()) {
       const names = [METADATA_REPAIR_ALARM, LIBRARY_AUTO_REFRESH_ALARM, LIBRARY_STARTUP_CATCHUP_ALARM,
@@ -4127,7 +4131,7 @@ self.AnimeTrackerWebsiteAccess.subscribe(state => {
 maybeStartPendingMetadataRepair().catch((error) => {
   console.error("[BG] Failed to start pending metadata repair on boot:", error);
 });
-resumeMetadataRepairIfNeeded().catch((error) => {
+resumeMetadataRepairIfNeeded({ workerStart: true }).catch((error) => {
   console.error("[BG] Failed to resume metadata repair on boot:", error);
 });
 hydrateBgPollState();

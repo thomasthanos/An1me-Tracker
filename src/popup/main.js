@@ -2411,6 +2411,7 @@
         // a from-scratch local fetch deserves the same full UI as a post-sign-in import.
         void applyMetadataRepairState(changes.metadataRepairState.newValue || null, { autoOpenRunning: true });
       }
+      if (changes.metadataRepairTrace) AT.FillerFetchUI.renderTrace(changes.metadataRepairTrace.newValue || []);
 
       if (isExternalUpdate && (changes.animeData || changes.videoProgress || changes.deletedAnime || changes.groupCoverImages)) {
         // Debounced: a burst of external writes (e.g. sign-in library repair) collapses to one

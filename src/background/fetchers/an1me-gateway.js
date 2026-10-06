@@ -530,6 +530,14 @@ async function an1meTabFetch(url, req, timeoutMs, deadline) {
   }
 }
 
+// A page request of the show Fetch & Import is working on, for its trace (metadata-repair.js). Images stay out of it.
+function traceAn1meStep(req, text) {
+  if (req.as === "dataUrl") return;
+  try {
+    if (typeof traceMetadataRepairStep === "function") traceMetadataRepairStep(text);
+  } catch {}
+}
+
 async function an1meFetchUncoalesced(url, options) {
   if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) throw self.AnimeTrackerWebsiteAccess.deniedError();
   const req = {
@@ -538,6 +546,7 @@ async function an1meFetchUncoalesced(url, options) {
     body: options.body ?? null,
     headers: options.headers || null,
   };
+  const seconds = (since) => `${((Date.now() - since) / 1000).toFixed(1)}s`;
   const firstTimeout = Number(options.timeoutMs) || AN1ME_DEFAULT_TIMEOUT_MS;
   // One wall-clock budget for the whole logical fetch. Without it, readiness polling plus two
   // per-attempt timeouts plus a challenge sleep could run past 50s while the popup's caller had
@@ -560,7 +569,10 @@ async function an1meFetchUncoalesced(url, options) {
         attempt === 0 ? firstTimeout : Math.max(firstTimeout, AN1ME_SLOW_RETRY_TIMEOUT_MS),
         remaining(),
       );
+      const attemptAt = Date.now();
+      traceAn1meStep(req, `an1me.to page${attempt ? " (retry)" : ""}…`);
       const outcome = await an1meDirectFetch(url, req, budget);
+      traceAn1meStep(req, `an1me.to page: ${outcome.kind === "ok" ? `HTTP ${outcome.result.status}, ${Math.round(String(outcome.result.text || "").length / 1024)} KB` : outcome.kind}, ${seconds(attemptAt)}`);
 
       if (outcome.kind === "ok") {
         _an1meCounters.directOk++;
@@ -591,7 +603,10 @@ async function an1meFetchUncoalesced(url, options) {
   }
 
   if (!maybeDelivered && remaining() > 1000) {
+    const tabAt = Date.now();
+    traceAn1meStep(req, "an1me.to through an open tab…");
     const viaTab = await an1meTabFetch(url, req, Math.min(firstTimeout, Math.max(1000, remaining())), deadline);
+    traceAn1meStep(req, `an1me.to through a tab: ${viaTab ? `HTTP ${viaTab.status}` : "no usable tab"}, ${seconds(tabAt)}`);
     if (viaTab) return viaTab;
   }
 

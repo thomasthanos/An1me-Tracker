@@ -134,3 +134,16 @@ test('paused watchlist deletes are durable across worker restart and applied aft
   assert.equal(sent.length, 1); assert.equal(sent[0].watchlistType, 'remove');
   assert.deepEqual(h.store.pendingWebsiteWatchlist || {}, {});
 });
+test('a worker start with every website allowed does not park a running Fetch & Import while the check is still running', async () => {
+  // Every Safari worker start begins "checking". Read as a denial, it cleared every retry alarm and parked a running
+  // Fetch & Import as waiting for access, on each restart iOS makes.
+  const initial = seed();
+  initial.metadataRepairState = { runId: 'boot', status: 'running', origin: 'manual', uiMode: 'modal', total: 1, fetchTotal: 1,
+    queueIndex: 0, processed: 0, fetched: 0, cached: 0, skipped: 0, failed: 0, logs: [], items: [{ slug: 'bleach', title: 'Bleach' }], options: {} };
+  const h = cloudWorker(initial, {}, { safariDenied: [], alarms: [['progressSyncRetry', { name: 'progressSyncRetry', scheduledTime: NOW + 60000 }]] });
+  const pauses = [];
+  h.context.pauseMetadataRepairForAccess = (...args) => { pauses.push(args); };
+  await settle();
+  assert.deepEqual(pauses, [], 'a check that has not answered yet is not a denial');
+  assert.equal(h.alarms.has('progressSyncRetry'), true, 'retry alarms survive the start');
+});

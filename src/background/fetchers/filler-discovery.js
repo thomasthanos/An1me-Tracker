@@ -65,6 +65,26 @@ function resetFillerFetchBreakers() {
 
 const AFL_ORIGIN_PATTERN = "https://www.animefillerlist.com/*";
 
+// A request of the show Fetch & Import is working on, for its trace (metadata-repair.js); nothing outside a run.
+function traceFillerStep(text) {
+  try {
+    if (typeof traceMetadataRepairStep === "function") traceMetadataRepairStep(text);
+  } catch {}
+}
+const secondsSince = (startedAt) => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+
+// fetch() settles when the headers arrive, and the body can still stall on a phone's connection. The timers used to
+// be cleared at the headers, which left text() and json() waiting with no limit and held Fetch & Import on one show.
+// The body is read under the request's own timer now, and its abort ends the read even where the browser does not tie
+// the body to the signal.
+function readBodyWithin(read, signal) {
+  return Promise.race([read, new Promise((_, reject) => {
+    const abort = () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+  })]);
+}
+
 // False only when the browser says the extension may not reach AnimeFillerList: Safari lets the user
 // limit an extension to some websites, and Chrome to sites they pick. A fetch then fails as a bare
 // "Load failed", which says nothing about the fix. Any doubt (no API, an error, no answer) is "allowed".
@@ -209,9 +229,11 @@ async function getAflShowIndex(options = {}) {
     let html = null;
     let reason = "no response";
     let res = null;
+    const requestedAt = Date.now();
+    traceFillerStep("AnimeFillerList index…");
     try {
       res = await fetch(AFL_INDEX_URL, { signal: ctrl.signal });
-      if (res.ok) html = await res.text();
+      if (res.ok) html = await readBodyWithin(res.text(), ctrl.signal);
       else reason = await describeAflFailure(`HTTP ${res.status}`, res);
     } catch (e) {
       reason = e?.name === "AbortError" ? "timed out" : await describeAflFailure(String(e?.message || e || "network error"));
@@ -228,10 +250,12 @@ async function getAflShowIndex(options = {}) {
         console.warn(`[BG] AnimeFillerList index parsed only ${shows.length} shows - keeping previous index`);
         reason = `unreadable index (${shows.length} shows)`;
       }
+      traceFillerStep(`AnimeFillerList index failed: ${reason}, ${secondsSince(requestedAt)}`);
       _aflIndexFailure = { at: Date.now(), reason };
       return previous || unavailable(reason);
     }
 
+    traceFillerStep(`AnimeFillerList index: ${shows.length} shows, ${Math.round(html.length / 1024)} KB, ${secondsSince(requestedAt)}`);
     _aflIndexFailure = null;
     const cachedAt = Date.now();
     try {
@@ -404,6 +428,8 @@ async function discoverFillerSlug(an1meSlug, animeTitle, options = {}) {
 }
 
 async function fetchEpisodeTypesFromAnimeFillerList(animeSlug) {
+  const requestedAt = Date.now();
+  traceFillerStep(`AnimeFillerList page ${animeSlug}…`);
   try {
     const url = `https://www.animefillerlist.com/shows/${animeSlug}`;
     const ctrl = new AbortController();
@@ -412,8 +438,10 @@ async function fetchEpisodeTypesFromAnimeFillerList(animeSlug) {
     // caller can still try Jikan for it, so those failures are marked and described the same way.
     const unreachable = (reason) => Object.assign(new Error(`afl_page_unavailable: ${reason}`), { aflUnreachable: true });
     let response;
+    let html = "";
     try {
       response = await fetch(url, { signal: ctrl.signal });
+      if (response.ok) html = await readBodyWithin(response.text(), ctrl.signal);
     } catch (fetchError) {
       throw unreachable(fetchError?.name === "AbortError" ? "timed out" : await describeAflFailure(String(fetchError?.message || fetchError || "network error")));
     } finally {
@@ -423,7 +451,6 @@ async function fetchEpisodeTypesFromAnimeFillerList(animeSlug) {
       if (response.status === 404) return null;
       throw unreachable(await describeAflFailure(`HTTP ${response.status}`, response));
     }
-    const html = await response.text();
     const episodeTypes = { canon: [], filler: [], mixed: [], anime_canon: [], totalEpisodes: null };
 
     const trPattern = /<tr[^>]*\bclass=["']([^"']+)["'][^>]*>([\s\S]*?)<\/tr>/gi;
@@ -464,9 +491,11 @@ async function fetchEpisodeTypesFromAnimeFillerList(animeSlug) {
     }
 
     (typeof dlog === "function" ? dlog : () => {})(`[Anime Tracker] ✓ Fetched episode types for ${animeSlug}:`, episodeTypes);
+    traceFillerStep(`AnimeFillerList page: ${all.length} episodes, ${secondsSince(requestedAt)}`);
     return episodeTypes;
   } catch (error) {
     console.error(`[Anime Tracker] ✗ Failed for ${animeSlug}: ${error?.message}`, error);
+    traceFillerStep(`AnimeFillerList page failed: ${error?.message || error}, ${secondsSince(requestedAt)}`);
     throw error;
   }
 }
@@ -541,6 +570,18 @@ async function fetchJikanEpisodes(title, options = {}) {
   // A timeout that ends with the browser offline was the connection's fault, not Jikan's, so it must not close
   // Jikan for an hour: the connection usually comes back long before that.
   const jikanTimeoutWasOffline = () => typeof navigator !== "undefined" && navigator.onLine === false;
+  // A body that stalls after the headers is a slow answer like any other, under the request's own timer.
+  const readJson = async (response, ctrl, timeoutMessage) => {
+    try {
+      return await readBodyWithin(response.json(), ctrl.signal);
+    } catch (error) {
+      if (error?.name !== "AbortError") throw error;
+      if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
+      noteJikanTimeout();
+      throw unavailable(timeoutMessage);
+    }
+  };
+  const requestedAt = Date.now();
   try {
     if (globalThis.__jikanCircuitBroken && Date.now() < (globalThis.__jikanCircuitBrokenUntil || 0)) {
       throw unavailable("jikan_circuit_open");
@@ -550,34 +591,39 @@ async function fetchJikanEpisodes(title, options = {}) {
 
     if (!malId) {
       await waitForJikanSlot();
+      traceFillerStep("Jikan search…");
       const searchCtrl = new AbortController();
       const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
       const searchTimer = setTimeout(() => searchCtrl.abort(), isMobile ? JIKAN_MOBILE_SEARCH_TIMEOUT_MS : JIKAN_SEARCH_TIMEOUT_MS);
-      let searchRes;
+      let searchData;
       try {
-        searchRes = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=5`, { signal: searchCtrl.signal });
-      } catch (fetchErr) {
-        const isAbort = fetchErr?.name === "AbortError";
-        if (isAbort) {
-          if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
-          noteJikanTimeout();
-          throw unavailable("jikan_search_timeout");
+        let searchRes;
+        try {
+          searchRes = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=5`, { signal: searchCtrl.signal });
+        } catch (fetchErr) {
+          const isAbort = fetchErr?.name === "AbortError";
+          if (isAbort) {
+            if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
+            noteJikanTimeout();
+            throw unavailable("jikan_search_timeout");
+          }
+          const err = new Error(fetchErr?.message || "jikan_fetch_failed");
+          err.rateLimited = true;
+          throw err;
         }
-        const err = new Error(fetchErr?.message || "jikan_fetch_failed");
-        err.rateLimited = true;
-        throw err;
+        noteJikanAnswer();
+        if (searchRes.status === 404) return null;
+        if (!searchRes.ok) {
+          const error = new Error(`jikan_search_http_${searchRes.status}`);
+          error.rateLimited = searchRes.status === 429 || searchRes.status >= 500;
+          throw error;
+        }
+        searchData = await readJson(searchRes, searchCtrl, "jikan_search_timeout");
       } finally {
         clearTimeout(searchTimer);
       }
-      noteJikanAnswer();
-      if (searchRes.status === 404) return null;
-      if (!searchRes.ok) {
-        const error = new Error(`jikan_search_http_${searchRes.status}`);
-        error.rateLimited = searchRes.status === 429 || searchRes.status >= 500;
-        throw error;
-      }
-      const searchData = await searchRes.json();
       if (!Array.isArray(searchData?.data)) throw new Error("jikan_search_invalid_data");
+      traceFillerStep(`Jikan search: ${searchData.data.length} results, ${secondsSince(requestedAt)}`);
 
       // This used to demand exact normalized title equality, so a single differing word meant no
       // filler data at all. Scored against the same matcher the index uses instead.
@@ -600,35 +646,40 @@ async function fetchJikanEpisodes(title, options = {}) {
     const allEpisodes = [];
     let page = 1;
     let hasNext = true;
+    const episodesAt = Date.now();
+    traceFillerStep("Jikan episodes…");
 
     while (hasNext && page <= JIKAN_MAX_EPISODE_PAGES) {
       await waitForJikanSlot();
       const epCtrl = new AbortController();
       const isMobile = typeof AnimeTrackerUtils !== "undefined" && typeof AnimeTrackerUtils.isMobileDevice === "function" && AnimeTrackerUtils.isMobileDevice();
       const epTimer = setTimeout(() => epCtrl.abort(), isMobile ? JIKAN_MOBILE_EPISODES_TIMEOUT_MS : JIKAN_EPISODES_TIMEOUT_MS);
-      let epRes;
+      let epData;
       try {
-        epRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, { signal: epCtrl.signal });
-      } catch (epErr) {
-        if (epErr?.name === "AbortError") {
-          if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
-          noteJikanTimeout();
-          throw unavailable("jikan_episodes_timeout");
+        let epRes;
+        try {
+          epRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`, { signal: epCtrl.signal });
+        } catch (epErr) {
+          if (epErr?.name === "AbortError") {
+            if (jikanTimeoutWasOffline()) throw new Error("jikan_offline");
+            noteJikanTimeout();
+            throw unavailable("jikan_episodes_timeout");
+          }
+          throw epErr;
         }
-        throw epErr;
+        noteJikanAnswer();
+        // 429 used to be folded into "no data" and cached as a miss. It means "ask again later".
+        if (epRes.status === 429) {
+          const err = new Error("jikan_rate_limited");
+          err.rateLimited = true;
+          throw err;
+        }
+        if (epRes.status === 404 && page === 1) return null;
+        if (!epRes.ok) throw new Error(`jikan_episodes_http_${epRes.status}`);
+        epData = await readJson(epRes, epCtrl, "jikan_episodes_timeout");
       } finally {
         clearTimeout(epTimer);
       }
-      noteJikanAnswer();
-      // 429 used to be folded into "no data" and cached as a miss. It means "ask again later".
-      if (epRes.status === 429) {
-        const err = new Error("jikan_rate_limited");
-        err.rateLimited = true;
-        throw err;
-      }
-      if (epRes.status === 404 && page === 1) return null;
-      if (!epRes.ok) throw new Error(`jikan_episodes_http_${epRes.status}`);
-      const epData = await epRes.json();
       if (!Array.isArray(epData?.data)) throw new Error("jikan_episodes_invalid_data");
       allEpisodes.push(...epData.data);
       hasNext = epData?.pagination?.has_next_page === true;
@@ -636,6 +687,7 @@ async function fetchJikanEpisodes(title, options = {}) {
     }
 
     if (hasNext) throw new Error("jikan_episodes_incomplete");
+    traceFillerStep(`Jikan episodes: ${allEpisodes.length} in ${page - 1} pages, ${secondsSince(episodesAt)}`);
     if (allEpisodes.length === 0) return null;
 
     const episodeTypes = { canon: [], filler: [], mixed: [], anime_canon: [], totalEpisodes: allEpisodes.length };
@@ -653,6 +705,7 @@ async function fetchJikanEpisodes(title, options = {}) {
 
     return episodeTypes;
   } catch (error) {
+    traceFillerStep(`Jikan failed: ${error?.message || error}, ${secondsSince(requestedAt)}`);
     // Let metadata-repair preserve prior data and apply its short retryable backoff.
     throw error;
   }

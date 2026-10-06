@@ -11,6 +11,30 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.2.16] — 2026-10-06
+
+### Fixed
+
+- **Fetch & Import can no longer sit at 0 on one show.** On an iPhone a run stayed at **0 / 76** on its first show
+  through 8.2.14 and 8.2.15, which both blamed a slow filler source. Whatever holds a show now, the run moves on:
+  - a show that has no answer after two minutes counts as needing a retry (**timed out after 2 min**) and the next
+    show starts;
+  - iOS can stop the extension's background in the middle of a show, and the run used to start that same show again
+    every time. A show the background was stopped on twice counts as needing a retry (**stopped twice while
+    fetching**) instead of being tried a third time; a pause for the connection or website access does not count;
+  - AnimeFillerList and Jikan lookups now time out while their answer is being read too, not only while waiting for
+    it to start.
+- **A restart of the background no longer pauses everything on Safari.** Each restart checks website access, and
+  before Safari answered, the check counted as denied: it cleared every retry alarm (cloud sync, progress sync,
+  Fetch & Import) and marked a running Fetch & Import as waiting for website access. It now waits for the answer.
+- **All Websites in Safari Settings is recognised** however Safari records it (`*://*/*` or `<all_urls>`).
+
+### Added
+
+- **Details in the Fetch & Import panel.** A folded list of the run's steps: each request and how long it took,
+  where the run waits, and each time the background started again. A phone has no console to read, so a screenshot
+  of it shows where a run stops.
+
 
 ## [8.2.15] — 2026-10-06
 

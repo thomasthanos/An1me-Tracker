@@ -21,7 +21,9 @@ function worker(responses, initial = {}, env = {}) {
   vm.runInContext(read("src/common/data/cache-policy.js"), c);
   vm.runInContext(read("src/background/fetchers/aniskip.js"), c);
   const s = read("src/background/fetchers/filler-discovery.js");
-  vm.runInContext("const FILLER_MATCH_THRESHOLD = 0.82;\n" + s.slice(s.indexOf("const JIKAN_MOBILE_SEARCH_TIMEOUT_MS"), s.indexOf("try {\n  globalThis.fillerStats")), c);
+  // The Jikan section, with the request helpers it shares with the AnimeFillerList code above it.
+  const helpers = s.slice(s.indexOf("// A request of the show Fetch & Import is working on"), s.indexOf("// False only when the browser says"));
+  vm.runInContext("const FILLER_MATCH_THRESHOLD = 0.82;\n" + helpers + s.slice(s.indexOf("const JIKAN_MOBILE_SEARCH_TIMEOUT_MS"), s.indexOf("try {\n  globalThis.fillerStats")), c);
   return { c, store, calls: () => calls, advance: ms => now += ms };
 }
 const response = (status, data) => ({ ok: status >= 200 && status < 300, status, headers: { get: () => null }, json: async () => data });

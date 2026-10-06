@@ -85,6 +85,12 @@ const FillerFetchUI = {
               <!-- Live log -->
               <div id="${logFeed}" class="ffui-log" style="display:none"></div>
 
+              <!-- The background's own steps for the run (filled by renderTrace) -->
+              <details class="ffui-trace" hidden>
+                <summary>Details</summary>
+                <div class="ffui-trace-lines"></div>
+              </details>
+
             </div>
           </div>
         </div>`;
@@ -155,6 +161,33 @@ const FillerFetchUI = {
     overlay.setAttribute("aria-hidden", "false");
     requestAnimationFrame(() => container?.focus?.());
     this.checkSiteAccess().catch(() => {});
+    this.loadTrace();
+  },
+
+  // The background's steps for the latest run: each request and how long it took, where the run waits, and each time
+  // the worker started again. A phone has no console, so this is what tells why a run stopped; it stays folded away
+  // under Details. Later steps arrive through the popup's storage listener.
+  loadTrace() {
+    const storage = window.AnimeTracker?.Storage;
+    if (typeof storage?.get !== "function") return;
+    Promise.resolve(storage.get(["metadataRepairTrace"]))
+      .then((stored) => this.renderTrace(stored?.metadataRepairTrace))
+      .catch(() => {});
+  },
+
+  renderTrace(entries) {
+    const box = document.querySelector(".ffui-trace");
+    const lines = box?.querySelector(".ffui-trace-lines");
+    if (!box || !lines) return;
+    const list = Array.isArray(entries) ? entries : [];
+    box.hidden = list.length === 0;
+    const followLatest = lines.scrollHeight - lines.clientHeight - lines.scrollTop < 24;
+    const pad = (value) => String(value).padStart(2, "0");
+    lines.textContent = list.map((entry) => {
+      const at = new Date(Number(entry?.at) || 0);
+      return `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}  ${String(entry?.text || "")}`;
+    }).join("\n");
+    if (followLatest) lines.scrollTop = lines.scrollHeight;
   },
 
   // Hiding a run that is still going remembers it, so reopening the popup does not throw the panel back up for
