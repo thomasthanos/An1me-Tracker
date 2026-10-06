@@ -11,7 +11,10 @@ An1me-Tracker/
 ├── popup.html                 Library and settings entry point
 ├── src/                       Browser runtime and shared resources
 │   └── icons/ios/             Native icon sources; excluded from browser packages
-├── ios/                       Native SwiftUI host app sources (installed into the generated Xcode project)
+├── ios/                       Native SwiftUI host app sources
+│   ├── App/                   The lifecycle files that replace the packager's generated ones
+│   └── An1meTracker/          The app: Models, Services, ViewModels, Views, Shared,
+│                              and the generated ExtensionPermissions model
 ├── dev/
 │   ├── scripts/               Packaging, native setup, source and artwork generators
 │   ├── test/                  Regression suites, one *.test.js per area
