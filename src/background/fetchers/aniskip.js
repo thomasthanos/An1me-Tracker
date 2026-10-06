@@ -62,6 +62,18 @@ function scheduleSlugMalBundleFlush() {
   bgStorageSet({ [SLUG_TO_MAL_BUNDLE_KEY]: _slugMalBundle }).catch(() => {});
 }
 
+// A MAL id another lookup matched by title (Fetch & Import's MyAnimeList search, filler-discovery.js). On a phone this
+// file cannot resolve ids itself (AniList is off there), so this is how Skip Outro gets one. An id already confirmed
+// is left as it is.
+async function rememberConfirmedMalId(slug, malId) {
+  const id = Number(malId) || 0;
+  if (!slug || id <= 0) return;
+  const bundle = await loadSlugMalBundle();
+  if (bundle[slug]?.matched === true && Number(bundle[slug].malId) > 0) return;
+  bundle[slug] = { malId: id, cachedAt: Date.now(), matched: true };
+  await bgStorageSet({ [SLUG_TO_MAL_BUNDLE_KEY]: bundle }).catch(() => {});
+}
+
 async function getMalIdForSlug(slug, title) {
   if (self.AnimeTrackerWebsiteAccess && !(await self.AnimeTrackerWebsiteAccess.canRun())) return null;
   if (!slug) return null;

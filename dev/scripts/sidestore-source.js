@@ -36,9 +36,9 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Fetch & Import works while Jikan is down: filler and recap episodes come from MyAnimeList itself, so it no longer sits at 0 waiting.\n" +
-    "• Details in the Fetch & Import panel keeps how a run began as well as its latest steps.\n" +
-    "• A show that does not finish in two minutes, or that the background was stopped on twice, counts as needing a retry and the rest carry on.\n" +
+    "• Filler data on iPhone is read correctly from MyAnimeList's phone pages; shows 8.2.17 wrongly marked as not listed are checked again once.\n" +
+    "• Fetch & Import asks MyAnimeList first, so it no longer waits on Jikan, and a special with no episode list is not retried.\n" +
+    "• Skip Outro can now find shows on iPhone that Fetch & Import has matched on MyAnimeList.\n" +
     "• AniList stays disabled on mobile.";
 
   return {

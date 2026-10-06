@@ -89,6 +89,7 @@ function worker({ afl = "ok", jikan = "ok", mal = "down", ua = "iPhone", seed = 
       // MyAnimeList itself, read when Jikan cannot answer. Off unless a case turns it on.
       if (url.startsWith("https://myanimelist.net/")) {
         calls.mal = (calls.mal || 0) + 1;
+        if (mode.mal === "403") return Promise.resolve(new Response("", { status: 403 }));
         if (mode.mal !== "ok") return Promise.reject(new TypeError("Load failed"));
         const keyword = url.match(/search\/prefix\.json\?type=anime&keyword=([^&]+)/);
         if (keyword) {
@@ -101,15 +102,26 @@ function worker({ afl = "ok", jikan = "ok", mal = "down", ua = "iPhone", seed = 
         }
         const page = url.match(/^https:\/\/myanimelist\.net\/anime\/(\d+)\/_\/episode\?offset=(\d+)$/);
         if (!page) return Promise.reject(new Error("unexpected request " + url));
-        const first = Number(page[2]), total = mode.malEpisodes || 28;
-        const rows = Array.from({ length: Math.max(0, Math.min(100, total - first)) }, (_, i) => {
+        calls.malPages = (calls.malPages || 0) + 1;
+        // A special or a movie has no episode list page at all.
+        if (mode.malEpisodesStatus) return Promise.resolve(new Response("<title>404 Not Found</title>", { status: mode.malEpisodesStatus }));
+        // Safari on an iPhone gets MyAnimeList's phone page: thirty episodes a page, plain rows, "- Filler" after the date.
+        const mobile = mode.malLayout === "mobile";
+        const first = Number(page[2]), total = mode.malEpisodes || 28, perPage = mobile ? 30 : 100;
+        const rows = Array.from({ length: Math.max(0, Math.min(perPage, total - first)) }, (_, i) => {
           const number = first + i + 1;
           const mark = number % 7 === 0 ? "Filler" : number % 10 === 0 ? "Recap" : "";
+          if (mobile) {
+            return `<tr>\n    <td class="episode-number nowrap">${number}</td>\n    <td class="episode-title va-t">\n` +
+              `      <a class="clearfix" href="https://myanimelist.net/anime/${page[1]}/x/episode/${number}"><span class="fs16 lh18 fw-b">Episode ${number}</span><br></a>\n` +
+              `      <div class="mt8"><span class="fn-grey2">Oct 6, 2012${mark ? `<span class="di-ib pl4">- ${mark}</span>` : ""}</span></div>\n    </td></tr>`;
+          }
           return `<tr class="episode-list-data">\n  <td class="episode-number nowrap" data-raw="${number}">${number}</td>\n` +
             `  <td class="episode-title fs12">${mark ? `<span class="fl-r di-ib pr4 icon-episode-type-bg">${mark}</span>` : ""}` +
             `<a href="https://myanimelist.net/anime/${page[1]}/x/episode/${number}" class="fl-l fw-b ">Episode ${number}</a></td>\n</tr>`;
         }).join("");
-        return Promise.resolve(new Response(`<table class="episode_list ascend"><tbody>${rows}</tbody></table>`));
+        const header = mobile ? `<tr class="episode-list-header">\n    <td class="episode-number ac">#</td>\n    <td class="episode-title ac">Episode</td>\n  </tr>` : "";
+        return Promise.resolve(new Response(`<table class="${mobile ? "anime-episode-list" : "episode_list ascend"}"><tbody>${header}${rows}</tbody></table>`));
       }
       return Promise.reject(new Error("unexpected request " + url));
     },
@@ -123,7 +135,7 @@ function worker({ afl = "ok", jikan = "ok", mal = "down", ua = "iPhone", seed = 
   c.self = c;
   for (const file of ["src/common/utils.js", "src/common/data/title-match.js", "src/common/data/cache-policy.js", "src/common/data/merge-utils.js"]) vm.runInContext(read(file), c);
   vm.runInContext("const isLikelyMovieSlug = AnimeTrackerMergeUtils.isLikelyMovieSlug;", c);
-  for (const file of ["src/background/fetchers/filler-discovery.js", "src/background/jobs/metadata-repair.js", "src/background/anime-resolver.js"]) vm.runInContext(read(file), c);
+  for (const file of ["src/background/fetchers/aniskip.js", "src/background/fetchers/filler-discovery.js", "src/background/jobs/metadata-repair.js", "src/background/anime-resolver.js"]) vm.runInContext(read(file), c);
   const resolve = (slug, options = {}) => c.AnimeTrackerAnimeResolver.resolve(slug, { title: Object.fromEntries(SHOWS)[slug] || slug, includeEpisodeTypes: true, ...options });
   // The connection comes back: the flag flips and the worker gets the same online event a browser sends.
   const goOnline = () => { nav.onLine = true; for (const fn of listeners.online || []) fn(); };
@@ -608,6 +620,59 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.deepEqual([done.status, done.processed, done.fetched, done.failed], ["completed", 4, 4, 0]);
     assert.ok(!(done.waitingForJikanUntil > 0), "no wait for Jikan");
     assert.match(traceText(h), /MyAnimeList episodes: 28/);
+  });
+
+  // 8.2.17 on an iPhone: MyAnimeList served its phone page, which the parser did not know, so every show read as
+  // "0 episodes" and was cached as not listed. And Jikan was asked first, losing up to eight seconds a run to it.
+  await test("MyAnimeList's phone page (thirty episodes a page) is read like the desktop one", async () => {
+    const h = worker({ mal: "ok" });
+    h.mode.malLayout = "mobile";
+    h.mode.malEpisodes = 75;
+    const result = await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(result.fillerResult.status, "fetched");
+    const entry = h.store["episodeTypes_totally-unlisted-show"];
+    assert.equal(entry.totalEpisodes, 75);
+    assert.deepEqual(entry.filler, [7, 14, 21, 28, 35, 42, 49, 56, 63, 70]);
+    assert.deepEqual(entry.mixed, [10, 20, 30, 40, 50, 60]);
+    assert.equal(h.calls.malPages, 3, "pages at 0, 30 and 60");
+  });
+
+  await test("MyAnimeList is asked first, and Jikan only when MyAnimeList fails", async () => {
+    const h = worker({ jikan: "listed", mal: "ok" });
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(h.store["episodeTypes_totally-unlisted-show"]._source, "myanimelist");
+    assert.equal(h.calls.jikan, 0);
+    const fallback = worker({ jikan: "listed", mal: "down" });
+    await fallback.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(fallback.store["episodeTypes_totally-unlisted-show"]._source, "jikan");
+  });
+
+  await test("a show with no episode list on MyAnimeList (a special) is not listed, and is not retried", async () => {
+    const h = worker({ jikan: "hang", mal: "ok" });
+    h.mode.malEpisodesStatus = 404;
+    const result = await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(result.fillerResult.status, "nofill");
+    assert.equal(h.calls.jikan, 0, "a missing page is an answer, not a failure to ask Jikan about");
+    assert.equal(h.store["episodeTypes_totally-unlisted-show"].retryable, undefined);
+  });
+
+  await test("when MyAnimeList refuses and Jikan is down, the shows are counted at once instead of waiting", async () => {
+    const h = worker({ jikan: "hang", mal: "403", seed: unlistedSeed() });
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await state(h))?.status === "completed");
+    const done = await state(h);
+    assert.deepEqual([done.status, done.processed, done.failed], ["completed", 4, 4]);
+    assert.ok(!(done.waitingForJikanUntil > 0), "no wait for Jikan");
+    assert.ok(done.logs.every((entry) => /myanimelist_http_403/.test(entry.detail)), JSON.stringify(done.logs.map((entry) => entry.detail)));
+  });
+
+  await test("the MyAnimeList id a search found is kept, so later refreshes and Skip Outro need no search", async () => {
+    const h = worker({ jikan: "down", mal: "ok" });
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(h.store.malIdForSlugBundle?.["totally-unlisted-show"]?.malId, 901);
+    assert.equal(h.store.malIdForSlugBundle["totally-unlisted-show"].matched, true);
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show", forceFillerRefresh: true });
+    assert.equal(h.calls.malSearch, 1, "the second refresh reads the episode list straight away");
   });
 
   await test("a run that is waiting for the connection is not restarted in a loop by a pending repair flag", async () => {

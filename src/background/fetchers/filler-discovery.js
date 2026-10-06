@@ -711,14 +711,20 @@ async function fetchJikanEpisodes(title, options = {}) {
   }
 }
 
-// Jikan is a copy of MyAnimeList's data, and when it cannot answer the same flags are read from MyAnimeList itself.
-// On 2026-10-06 Jikan's API stopped completing connections, and every show only it knew (not on AnimeFillerList, or
-// listed there with every season numbered together) waited for it: Fetch & Import sat at 0 of 76. MyAnimeList has no
-// API without a key, so this reads its search box's JSON and its episode list pages, a hundred episodes a page, where
-// each filler or recap episode carries a "Filler" or "Recap" tag.
+// MyAnimeList's own filler flags, the data Jikan copies. On 2026-10-06 Jikan's API stopped completing connections,
+// and every show only it knew (not on AnimeFillerList, or listed there with every season numbered together) waited
+// for it: Fetch & Import sat at 0 of 76. MyAnimeList has no API without a key, so this reads its search box's JSON and
+// its episode list pages. It is asked before Jikan, which only answers for it.
+//
+// MyAnimeList serves two episode list pages. The desktop one has a hundred episodes a page, rows marked
+// episode-list-data and a "Filler" tag beside the title. The phone one, which Safari on an iPhone always gets (an
+// extension cannot change its user agent), has thirty a page, plain rows and "- Filler" after the air date; 8.2.17
+// only knew the desktop page and read every show on a phone as having no episodes.
 const MAL_SEARCH_TIMEOUT_MS = 8000;
 const MAL_EPISODES_TIMEOUT_MS = 15000;
-const MAL_EPISODES_PER_PAGE = 100;
+const MAL_DESKTOP_EPISODES_PER_PAGE = 100;
+const MAL_PHONE_EPISODES_PER_PAGE = 30;
+const MAL_MAX_EPISODES = 1500;
 // A page a second and a half apart: a library sweep reads one or two pages a show, and MyAnimeList turns a burst away.
 const MAL_MIN_GAP_MS = 1500;
 let _malNextSlotAt = 0;
@@ -730,20 +736,25 @@ async function waitForMalSlot() {
   if (at > now) await AnimeTrackerUtils.sleep(at - now);
 }
 
-// One row per episode: its number, and whether MyAnimeList tags it as filler or recap.
-function parseMalEpisodeRows(html) {
+// One row per episode, from either page: its number, and whether MyAnimeList tags it as filler or recap. perPage is
+// how many rows a full page of that kind holds, so a shorter page is the last one.
+function parseMalEpisodePage(html) {
+  const source = String(html || "");
   const rows = [];
-  const rowPattern = /<tr[^>]*\bclass=["'][^"']*\bepisode-list-data\b[^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi;
+  const rowPattern = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
   let match;
-  while ((match = rowPattern.exec(String(html || ""))) !== null) {
+  while ((match = rowPattern.exec(source)) !== null) {
     const cells = match[1];
-    const number = Number(cells.match(/class=["'][^"']*\bepisode-number\b[^"']*["'][^>]*data-raw=["'](\d+)["']/i)?.[1] ||
-      cells.match(/class=["'][^"']*\bepisode-number\b[^"']*["'][^>]*>\s*(\d+)\s*</i)?.[1]);
-    if (!Number.isFinite(number) || number <= 0) continue;
-    const tag = cells.match(/icon-episode-type-bg["'][^>]*>\s*(Filler|Recap)\s*</i)?.[1]?.toLowerCase() || null;
+    const cell = cells.match(/<td\b[^>]*\bclass=["'][^"']*\bepisode-number\b[^"']*["'][^>]*>\s*([^<]*)</i);
+    if (!cell) continue;
+    const number = Number(cells.match(/\bepisode-number\b[^>]*\bdata-raw=["'](\d+)["']/i)?.[1] || cell[1].trim());
+    // The phone page's header row has "#" in that column.
+    if (!Number.isInteger(number) || number <= 0) continue;
+    const tag = cells.match(/(?:icon-episode-type-bg["'][^>]*>|>\s*-)\s*(Filler|Recap)\s*</i)?.[1]?.toLowerCase() || null;
     rows.push({ number, filler: tag === "filler", recap: tag === "recap" });
   }
-  return rows;
+  const perPage = /\bepisode-list-data\b/.test(source) ? MAL_DESKTOP_EPISODES_PER_PAGE : MAL_PHONE_EPISODES_PER_PAGE;
+  return { rows, perPage };
 }
 
 async function fetchMyAnimeListPage(url, timeoutMs, read) {
@@ -757,7 +768,7 @@ async function fetchMyAnimeListPage(url, timeoutMs, read) {
     return await readBodyWithin(read(response), ctrl.signal);
   } catch (error) {
     if (error?.name === "AbortError") throw new Error("myanimelist_timeout");
-    if (/^myanimelist_/.test(String(error?.message || ""))) throw error;
+    if (error?.code === "SITE_ACCESS_REQUIRED" || /^myanimelist_/.test(String(error?.message || ""))) throw error;
     throw new Error(`myanimelist_fetch_failed: ${error?.message || error}`);
   } finally {
     clearTimeout(timer);
@@ -787,6 +798,9 @@ async function fetchMyAnimeListEpisodes(title, options = {}) {
       const match = self.AnimeTrackerTitleMatch.bestMatch(keys, candidates, FILLER_MATCH_THRESHOLD);
       if (!match) return null;
       malId = Number(match.id) || 0;
+      // Matched by title like AniSkip's own lookup, so it is kept where AniSkip looks: the next refresh skips the
+      // search, and Skip Outro finds the id on a phone, where AniSkip cannot resolve one itself.
+      if (malId && options.slug && typeof rememberConfirmedMalId === "function") await rememberConfirmedMalId(options.slug, malId);
     }
     if (!malId) return null;
 
@@ -794,19 +808,28 @@ async function fetchMyAnimeListEpisodes(title, options = {}) {
     traceFillerStep("MyAnimeList episodes…");
     const episodes = [];
     let pages = 0;
-    for (; pages < JIKAN_MAX_EPISODE_PAGES; pages++) {
-      const html = await fetchMyAnimeListPage(
-        `https://myanimelist.net/anime/${malId}/_/episode?offset=${pages * MAL_EPISODES_PER_PAGE}`,
-        MAL_EPISODES_TIMEOUT_MS,
-        (response) => response.text(),
-      );
-      const rows = parseMalEpisodeRows(html);
-      episodes.push(...rows);
-      if (rows.length < MAL_EPISODES_PER_PAGE) {
-        pages++;
-        break;
+    for (let offset = 0; ; ) {
+      if (offset >= MAL_MAX_EPISODES) throw new Error("myanimelist_episodes_incomplete");
+      let html;
+      try {
+        html = await fetchMyAnimeListPage(
+          `https://myanimelist.net/anime/${malId}/_/episode?offset=${offset}`,
+          MAL_EPISODES_TIMEOUT_MS,
+          (response) => response.text(),
+        );
+      } catch (error) {
+        // A special or a movie has no episode list page: an answer, like an empty list, not a failure to retry.
+        if (offset === 0 && /myanimelist_http_404/.test(String(error?.message || ""))) {
+          traceFillerStep(`MyAnimeList episodes: no list, ${secondsSince(episodesAt)}`);
+          return null;
+        }
+        throw error;
       }
-      if (pages === JIKAN_MAX_EPISODE_PAGES - 1) throw new Error("myanimelist_episodes_incomplete");
+      const { rows, perPage } = parseMalEpisodePage(html);
+      pages++;
+      episodes.push(...rows);
+      if (rows.length < perPage) break;
+      offset += rows.length;
     }
     traceFillerStep(`MyAnimeList episodes: ${episodes.length} in ${pages} pages, ${secondsSince(episodesAt)}`);
     if (episodes.length === 0) return null;
@@ -824,21 +847,29 @@ async function fetchMyAnimeListEpisodes(title, options = {}) {
   }
 }
 
-// MyAnimeList's filler flags: through Jikan first, which is an API, then from MyAnimeList's own pages when Jikan fails.
-// Offline or without site access neither can answer, so Jikan's error stands. When both fail, Jikan's error is the one
-// reported too, so a run still puts the show back and waits for Jikan as before.
+// A failure that may pass: a timeout, a dropped connection, too many requests, a server error. Anything else (a 403,
+// an unreadable answer) is MyAnimeList refusing for now, and waiting would not change it.
+function isPassingMalFailure(error) {
+  return /myanimelist_(?:timeout|fetch_failed|rate_limited|http_5\d\d)/.test(String(error?.message || ""));
+}
+
+// MyAnimeList's filler flags: from MyAnimeList first (one search, then a page or two), and through Jikan only when
+// MyAnimeList fails. 8.2.17 asked Jikan first and lost up to eight seconds a run to it while it was down. Offline or
+// without site access neither can answer, so MyAnimeList's error stands. When both fail, a show MyAnimeList refused is
+// counted as needing a retry at once; after a failure that may pass, Jikan's error is reported, so a busy Jikan puts
+// the show back to try both again shortly.
 async function fetchMalEpisodeTypes(title, options = {}) {
   try {
-    return { types: await fetchJikanEpisodes(title, options), source: "jikan" };
-  } catch (jikanError) {
+    return { types: await fetchMyAnimeListEpisodes(title, options), source: "myanimelist" };
+  } catch (malError) {
     const offline = typeof navigator !== "undefined" && navigator.onLine === false;
-    if (offline || jikanError?.code === "SITE_ACCESS_REQUIRED" || /jikan_offline|no site access/i.test(String(jikanError?.message || ""))) {
-      throw jikanError;
+    if (offline || malError?.code === "SITE_ACCESS_REQUIRED" || /no site access/i.test(String(malError?.message || ""))) {
+      throw malError;
     }
     try {
-      return { types: await fetchMyAnimeListEpisodes(title, options), source: "myanimelist" };
-    } catch {
-      throw jikanError;
+      return { types: await fetchJikanEpisodes(title, options), source: "jikan" };
+    } catch (jikanError) {
+      throw isPassingMalFailure(malError) ? jikanError : malError;
     }
   }
 }

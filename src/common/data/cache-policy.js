@@ -31,8 +31,9 @@
   // does not see it.
   const INFO_SCHEMA_VERSION = 5;
   const EPISODE_TYPES_SCHEMA_VERSION = 3;
-  // 1 also stamped timeouts/circuit-open as absence. Only new confirmed misses use 2.
-  const FILLER_NEGATIVE_CACHE_VERSION = 2;
+  // 1 also stamped timeouts/circuit-open as absence. 2 includes the misses 8.2.17 wrote on iPhones, where it could not
+  // read MyAnimeList's phone page and took every show for having no episodes. Only misses from 8.2.18 on use 3.
+  const FILLER_NEGATIVE_CACHE_VERSION = 3;
 
   const toMs = globalThis.AnimeTrackerUtils.toMillisOrNaN;
 

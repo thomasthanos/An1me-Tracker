@@ -11,6 +11,28 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.2.18] — 2026-10-06
+
+### Fixed
+
+- **Filler data on iPhone is read correctly.** MyAnimeList serves Safari on an iPhone its phone page (thirty
+  episodes a page, filler marked after the air date), and 8.2.17 only knew the desktop page: every show read as
+  having no episodes and was saved as **not listed**. Both pages are read now, with the same results, and the shows
+  8.2.17 saved as not listed are checked again once on the next Fetch & Import.
+- **A special with no episode list is not retried.** One Piece Fan Letter and other specials have no episode list
+  on MyAnimeList; that answer used to count as a failure and put the show back again and again. It now counts as
+  not listed.
+
+### Changed
+
+- **Fetch & Import asks MyAnimeList first.** Jikan only copies MyAnimeList's data, and while it was down every run
+  lost up to eight seconds to it before going to MyAnimeList. Jikan is now asked only when MyAnimeList fails; if
+  MyAnimeList refuses outright, the show counts as needing a retry at once instead of waiting.
+- **MyAnimeList matches are kept.** The id a MyAnimeList search finds is saved, so later refreshes read the episode
+  list straight away, and **Skip Outro** on iPhone, which cannot look ids up there, finds those shows.
+- An expected skip in the library's slug migration (a special not renamed onto a series) is logged as information,
+  so Chrome no longer lists it among the extension's errors.
+
 ## [8.2.17] — 2026-10-06
 
 ### Fixed

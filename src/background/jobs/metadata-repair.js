@@ -568,6 +568,7 @@ async function fetchJikanForUnreachableAfl(error, { slug, title, info, cached, m
   if (self.AnimeTrackerCachePolicy.isFillerUsableSnapshot(cached) && !MAL_FILLER_SOURCES.has(cached._source)) return null;
   try {
     const { types, source } = await fetchMalEpisodeTypes(title, {
+      slug,
       malId: await readConfirmedMalId(slug),
       extraKeys: typeof collectFillerMatchKeys === "function" ? collectFillerMatchKeys(slug, title, info) : [],
     });
@@ -694,6 +695,7 @@ async function repairEpisodeTypesCacheUncoalesced(slug, title, forceRefresh = tr
     if (episodeTypes && !matchesInfoTotal(episodeTypes)) episodeTypes = null;
     if (!episodeTypes && title) {
       const malFlags = await fetchMalEpisodeTypes(title, {
+        slug,
         malId: await readConfirmedMalId(slug),
         extraKeys: collectFillerMatchKeys(slug, title, info),
       });

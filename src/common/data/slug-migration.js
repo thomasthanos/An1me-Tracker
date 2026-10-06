@@ -352,7 +352,9 @@
           logInfo(`Found target for "${slug}" → "${resolved}"`);
         } else {
           state.perSlug[slug] = { ...state.perSlug[slug], incompatible: true };
-          logWarn(`Skipping incompatible rename for "${slug}" → "${resolved}" (movie/series type mismatch)`);
+          // The guard doing its job (a special is not renamed onto a series), not a fault: Chrome lists warnings
+          // among the extension's errors, so this stays an info line.
+          logInfo(`Skipping incompatible rename for "${slug}" → "${resolved}" (movie/series type mismatch)`);
         }
       }
     }

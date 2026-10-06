@@ -89,7 +89,9 @@ async function test(name, fn) { try { await fn(); console.log('PASS ' + name); }
     const h = worker(), p = h.c.AnimeTrackerCachePolicy;
     const base = { schemaVersion: 3, cachedAt: now };
     assert.equal(p.isFillerFresh({ ...base, notFound: true, negativeCacheVersion: 1 }), false);
-    assert.equal(p.isFillerFresh({ ...base, notFound: true, negativeCacheVersion: 2 }), true);
+    // 8.2.17 on an iPhone wrote "not listed" for shows whose MyAnimeList phone page it could not read.
+    assert.equal(p.isFillerFresh({ ...base, notFound: true, negativeCacheVersion: 2 }), false);
+    assert.equal(p.isFillerFresh({ ...base, notFound: true, negativeCacheVersion: 3 }), true);
     assert.equal(p.isFillerFresh({ ...base, canon: [1], filler: [] }), true);
   });
   process.exitCode = failures ? 1 : 0;
