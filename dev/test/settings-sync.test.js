@@ -249,5 +249,111 @@ async function test(name, fn) {
     assert.equal(SettingsView.toggleSubtitle("settingsSmartNotif", true), "You will be notified of new episodes");
   });
 
+  // Shared context for the playback-settings push/pull pair: the field map plus the payload builder and
+  // the equality check the full sync uses to decide whether the cloud needs another write.
+  function playbackContext(store) {
+    const storageArea = {
+      get: (keys, cb) => {
+        const res = {};
+        for (const k of (Array.isArray(keys) ? keys : [keys])) res[k] = store[k];
+        cb(res);
+      },
+      set: (data, cb) => {
+        Object.assign(store, data);
+        if (cb) cb();
+      },
+    };
+    const c = vm.createContext({
+      console,
+      navigator: { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", platform: "Win32", maxTouchPoints: 0 },
+      chrome: { storage: { local: storageArea }, runtime: { lastError: null } },
+      dlog: () => {},
+      LIBRARY_MUTATION_KEY_SET: new Set(),
+      runBgLibraryTransaction: async (keys, fn) => {
+        const snap = {};
+        for (const k of keys) snap[k] = store[k];
+        const res = await fn(snap);
+        if (res?.data) Object.assign(store, res.data);
+        return res?.result || res;
+      },
+      bgStorageGet: async (keys) => {
+        const res = {};
+        for (const k of keys) res[k] = store[k];
+        return res;
+      },
+      bgStorageSet: async (data) => Object.assign(store, data),
+      queueSidecarSync: async (kind, payload) => ({ success: true, kind, payload }),
+    });
+    c.globalThis = c;
+    c.self = c;
+    vm.runInContext(read("src/common/utils.js"), c);
+
+    const bgSrc = read("background.js");
+    const applyDef = bgSrc.slice(bgSrc.indexOf("const BG_PLAYBACK_FIELD_MAP = {"), bgSrc.indexOf("const BG_ANILIST_AUTH_KEY ="));
+    const payloadDef = bgSrc.slice(
+      bgSrc.indexOf("async function queueStoredPlaybackSettings() {"),
+      bgSrc.indexOf("function enqueueSidecarSync("),
+    );
+    vm.runInContext(applyDef + "\n" + payloadDef, c);
+    return c;
+  }
+
+  await test("a reinstall adopts the account's playback settings instead of stamping its own defaults over them", async () => {
+    const store = {}; // empty storage, exactly what an uninstall leaves behind
+    const c = playbackContext(store);
+
+    const cloud = {
+      copyGuard: false, smartNotif: true, autoSkipFiller: true, skiptimeHelper: true,
+      auto4kServer: false, adGuard: false, autoResume: true,
+      userPreferences: { sort: "name", category: "movies" },
+      updatedAt: "2026-10-05T10:00:00.000Z",
+    };
+    assert.equal(await c.applyCloudPlaybackSettings(cloud), true, "the cloud copy is applied on a fresh install");
+    assert.equal(store.copyGuardEnabled, false);
+    assert.equal(store.smartNotificationsEnabled, true);
+    assert.equal(store.autoSkipFillers, true);
+    assert.equal(store.skiptimeHelperEnabled, true);
+    assert.equal(store.auto4kServerEnabled, false);
+    assert.equal(store.adGuardEnabled, false);
+    assert.equal(store.autoResumeEnabled, true);
+    assert.equal(store.userPreferences.sort, "name", "UI preferences travel with the same payload");
+    assert.equal(store.playbackSettingsUpdatedAt, cloud.updatedAt, "the cloud stamp is adopted, not a fresh local one");
+
+    const payload = await c.buildStoredPlaybackSettings();
+    assert.equal(payload.copyGuard, false);
+    assert.equal(payload.auto4kServer, false);
+    assert.equal(payload.adGuard, false);
+    assert.equal(payload.updatedAt, cloud.updatedAt, "the payload keeps the change time it adopted");
+    assert.equal(c.playbackSettingsEqual(cloud, payload), true, "adopting the cloud copy leaves nothing to push");
+  });
+
+  await test("a device whose preferences are newer keeps them and pushes them over the cloud", async () => {
+    const store = { copyGuardEnabled: false, playbackSettingsUpdatedAt: "2026-10-06T10:00:00.000Z" };
+    const c = playbackContext(store);
+
+    const cloud = {
+      copyGuard: true, smartNotif: false, autoSkipFiller: false, skiptimeHelper: false,
+      auto4kServer: true, adGuard: true, autoResume: false,
+      updatedAt: "2026-10-05T10:00:00.000Z",
+    };
+    assert.equal(await c.applyCloudPlaybackSettings(cloud), false, "an older cloud copy is ignored");
+    assert.equal(store.copyGuardEnabled, false, "the local choice stands");
+
+    const payload = await c.buildStoredPlaybackSettings();
+    assert.equal(payload.copyGuard, false);
+    assert.equal(payload.updatedAt, store.playbackSettingsUpdatedAt, "the push keeps the local change time");
+    assert.equal(c.playbackSettingsEqual(cloud, payload), false, "the newer local copy is pushed");
+  });
+
+  await test("the full library sync carries playback settings in both directions", () => {
+    const bgSrc = read("background.js");
+    const start = bgSrc.indexOf("async function performFullSync(");
+    const fullSync = bgSrc.slice(start, bgSrc.indexOf("let fullSyncRunPromise", start));
+    assert.ok(start > 0 && fullSync.length > 0, "performFullSync is present");
+    assert.match(fullSync, /applyCloudPlaybackSettings\(cloudDoc\.playbackSettings\)/, "a full sync applies the cloud copy");
+    assert.match(fullSync, /fieldPaths\.push\("playbackSettings"\)/, "a full sync pushes the local copy");
+    assert.match(fullSync, /playbackDiffers/, "an unchanged copy earns no extra write");
+  });
+
   process.exitCode = failures ? 1 : 0;
 })();

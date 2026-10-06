@@ -2066,6 +2066,17 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
   try {
     const outcome = await enqueueFirestoreWrite(async () => {
       const cloudDoc = await fetchCloudDataCached(user, token, reason, { requireRevalidation: true });
+
+      // Playback preferences ride the same sync as the library. They used to be pushed only from a toggle
+      // tap, so a reinstall restored the library while its settings silently fell back to defaults, and a
+      // change made while signed out was dropped for good. Apply the cloud copy first (it wins only when
+      // strictly newer), so the push below carries the account's preferences, not this device's defaults.
+      if (cloudDoc?.playbackSettings) {
+        await applyCloudPlaybackSettings(cloudDoc.playbackSettings);
+      }
+      const playbackSettings = await buildStoredPlaybackSettings();
+      const playbackDiffers = !playbackSettingsEqual(cloudDoc?.playbackSettings || null, playbackSettings);
+
       const cloudAnimeRef = cloudDoc?.animeData || {};
       const cloudProgressRef = cloudDoc?.videoProgress || {};
       const cloudDeletedRef = cloudDoc?.deletedAnime || {};
@@ -2178,6 +2189,7 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         groupChangedC ||
         goalsChangedC ||
         badgesChangedC ||
+        playbackDiffers ||
         shouldWriteEmail;
 
       if (!needsCloudWrite) {
@@ -2200,6 +2212,7 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         badgeUnlocks: mergedBadges,
         lastUpdated: pushedAt,
       };
+      if (playbackDiffers) payloadFields.playbackSettings = playbackSettings;
       if (shouldWriteEmail) payloadFields.email = user.email;
 
       const fieldPaths = [];
@@ -2242,6 +2255,11 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         wireFields.badgeUnlocks = mergedBadges;
         fieldPaths.push("badgeUnlocks");
         _changedFields.push("badges");
+      }
+      if (playbackDiffers) {
+        wireFields.playbackSettings = playbackSettings;
+        fieldPaths.push("playbackSettings");
+        _changedFields.push("playback");
       }
       fieldPaths.push("lastUpdated");
       if (shouldWriteEmail) {
@@ -2764,6 +2782,13 @@ const SIDECAR_SYNC_CONFIG = Object.freeze({
 const SIDECAR_RETRY_BACKOFF_MIN = Object.freeze([1, 5, 15, 60]);
 
 async function queueStoredPlaybackSettings() {
+  return queueSidecarSync("playbackSettings", await buildStoredPlaybackSettings());
+}
+
+// The playback-settings payload for this device, as both the sidecar push and the full sync send it. On a
+// phone the three desktop-only switches keep the PC's values (cached under cloud_desktop_playback_settings)
+// so a mobile toggle cannot downgrade them; a desktop reads its own.
+async function buildStoredPlaybackSettings() {
   const isMobile = !!AnimeTrackerUtils?.isMobileDevice?.();
   const stored = await bgStorageGet([
     "copyGuardEnabled",
@@ -2793,7 +2818,7 @@ async function queueStoredPlaybackSettings() {
     auto4kServerVal = cachedDesktop.auto4kServer !== undefined ? cachedDesktop.auto4kServer !== false : true;
   }
 
-  return queueSidecarSync("playbackSettings", {
+  return {
     copyGuard: copyGuardVal,
     smartNotif: stored.smartNotificationsEnabled === true,
     autoSkipFiller: stored.autoSkipFillers === true,
@@ -2803,7 +2828,15 @@ async function queueStoredPlaybackSettings() {
     autoResume: stored.autoResumeEnabled === true,
     userPreferences: stored.userPreferences || null,
     updatedAt,
-  });
+  };
+}
+
+// Equal payloads must not earn another Firestore write on every sync. userPreferences is an object, so the
+// fields are compared as data rather than by reference.
+function playbackSettingsEqual(a, b) {
+  if (!a || !b) return false;
+  return [...Object.keys(BG_PLAYBACK_FIELD_MAP), "userPreferences", "updatedAt"]
+    .every((field) => JSON.stringify(a[field] ?? null) === JSON.stringify(b[field] ?? null));
 }
 
 function enqueueSidecarSync(task) {

@@ -902,50 +902,95 @@
 
 #settingsView .settings-card .settings-toggle-list{ gap: 0; }
 
+/* ── Preference rows ──────────────────────────────────────────────────────────────────────────────
+   Every row is a control: a state-lit icon tile, the label pair, then the switch. The tile answers to
+   [data-enabled] exactly like the switch does, so a row still reads at a glance when the switch is at
+   the far edge of a phone's screen. */
 #settingsView .settings-card .settings-toggle-row {
-  min-height: 42px;
-  padding: 5px 2px;
-  gap: 10px;
-  border-radius: 0 !important;
-  border-bottom: 1px solid rgba(100, 130, 171, 0.14) !important;
+  min-height: 50px;
+  padding: 8px 4px;
+  gap: 12px;
+  border-radius: 10px !important;
+  border-bottom: 1px solid rgba(100, 130, 171, 0.13) !important;
   background: transparent !important;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
 
 #settingsView .settings-card .settings-toggle-row::before{ display: none; }
 
-#settingsView .settings-card .settings-toggle-row:hover{ padding-left: 0; background: rgba(var(--primary-rgb), 0.035) !important; }
+/* The row divider above is !important, so the last row has to opt out at the same specificity. */
+#settingsView .settings-card .settings-toggle-row:last-child{ border-bottom: none !important; }
+
+#settingsView .settings-card .settings-toggle-row:hover{
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.11) 0%, rgba(var(--primary-rgb), 0.035) 60%, transparent 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.10);
+}
+
+#settingsView .settings-card .settings-toggle-row:active{ box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.2); }
+
+#settingsView .settings-card .settings-toggle-row:focus-visible{ outline: 2px solid var(--cyan); outline-offset: -2px; }
 
 #settingsView .settings-toggle-icon-wrap {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  color: #24c7ff;
-  background: rgba(14, 27, 47, 0.86);
-  border: 1px solid rgba(82, 111, 153, 0.46);
-  box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.04);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: rgba(150, 172, 208, 0.7);
+  background: linear-gradient(180deg, rgba(var(--ink-rgb), 0.05) 0%, rgba(var(--ink-rgb), 0.012) 100%), rgba(12, 23, 39, 0.9);
+  border: 1px solid rgba(82, 111, 153, 0.42);
+  box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.05);
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
 #settingsView .settings-toggle-icon-svg{ width: 17px; height: 17px; }
 
-#settingsView .settings-toggle-title{ font-size: 12.4px; font-weight: 700; color: var(--t1); }
+#settingsView .settings-toggle-row[data-enabled="true"] .settings-toggle-icon-wrap {
+  color: var(--cyan);
+  border-color: rgba(var(--primary-rgb), 0.45);
+  background: linear-gradient(180deg, rgba(var(--primary-rgb), 0.17) 0%, rgba(var(--primary-rgb), 0.05) 100%), rgba(12, 23, 39, 0.9);
+  box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.07), 0 5px 14px -9px rgba(var(--primary-rgb), 0.6);
+}
 
-#settingsView .settings-toggle-subtitle{ font-size: 10.8px; line-height: 1.25; color: rgba(157, 174, 210, 0.92); }
+#settingsView .settings-card .settings-toggle-row:hover .settings-toggle-icon-wrap{ border-color: rgba(var(--primary-rgb), 0.42); }
+
+#settingsView .settings-toggle-title{ font-size: 12.6px; font-weight: 700; color: var(--t1); letter-spacing: 0.1px; }
+
+#settingsView .settings-toggle-subtitle{ font-size: 10.8px; line-height: 1.3; color: rgba(157, 174, 210, 0.88); margin-top: 1px; }
 
 #settingsView .settings-toggle-control {
-  width: 32px;
-  height: 18px;
-  border-color: rgba(83, 111, 153, 0.46);
-  background: rgba(13, 25, 43, 0.98);
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(83, 111, 153, 0.5);
+  background: rgba(9, 18, 33, 0.95);
+  box-shadow: inset 0 1px 2px rgba(var(--shadow-rgb), 0.45);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-#settingsView .settings-toggle-control::after{ top: 2px; left: 2px; width: 12px; height: 12px; background: #93a4c6; }
+#settingsView .settings-toggle-control::after{
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: #8fa1c4;
+  box-shadow: 0 1px 3px rgba(var(--shadow-rgb), 0.55);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
+}
 
 #settingsView .settings-toggle-row[data-enabled="true"] .settings-toggle-control {
-  background: linear-gradient(135deg, rgba(39, 188, 255, 0.9), rgba(31, 151, 213, 0.9));
-  border-color: rgba(70, 207, 255, 0.85);
+  background: linear-gradient(135deg, rgba(45, 196, 255, 0.95), rgba(28, 146, 208, 0.95));
+  border-color: rgba(86, 213, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.25), 0 0 13px -4px rgba(var(--primary-rgb), 0.6);
 }
 
-#settingsView .settings-toggle-row[data-enabled="true"] .settings-toggle-control::after{ transform: translateX(14px); background: #f5fbff; }
+#settingsView .settings-toggle-row[data-enabled="true"] .settings-toggle-control::after{ transform: translateX(14px); background: #f7fcff; }
+
+@media (prefers-reduced-motion: reduce){
+  #settingsView .settings-card .settings-toggle-row,
+  #settingsView .settings-toggle-icon-wrap,
+  #settingsView .settings-toggle-control,
+  #settingsView .settings-toggle-control::after{ transition: none; }
+}
 
 #settingsView .settings-connections-card{ gap: 6px; }
 
