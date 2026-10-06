@@ -212,6 +212,7 @@ const FillerFetchUI = {
 
   resetUI(options = {}) {
     this._clearAutoClose();
+    this._setJikanCountdown(0);
     this._waitingForAccess = false;
     this._blockedOrigins = null;
     this._accessSignature = null;
@@ -355,10 +356,12 @@ const FillerFetchUI = {
     const totalCount = progress.total > 0 ? progress.total : verifiedTotal;
 
     let label = "Ready to fetch and import your data…";
+    const jikanUntil = state.status === "running" && !this._waitingForAccess && state.waitingForNetwork !== true &&
+      Number(state.waitingForJikanUntil) > Date.now() ? Number(state.waitingForJikanUntil) : 0;
     if (state.status === "running") {
       const currentTitle = this._waitingForAccess ? "Waiting for website access…" :
         state.waitingForNetwork === true ? "Waiting for connection…" :
-        Number(state.waitingForJikanUntil) > Date.now() ? "Filler source busy, continuing shortly…" :
+        jikanUntil ? this.jikanWaitLabel(jikanUntil) :
         state.currentTitle || state.currentSlug || "Working…";
       label = `${processed} / ${total} — ${currentTitle}`;
     } else if (state.status === "completed") {
@@ -376,6 +379,7 @@ const FillerFetchUI = {
     }
 
     this._setProgress(pct, label);
+    this._setJikanCountdown(jikanUntil, () => this._setProgress(pct, `${processed} / ${total} — ${this.jikanWaitLabel(jikanUntil)}`));
 
     if (state.status === "completed" && state.followUpPending !== true && !this.state.failed) {
       if (this.state.autoMode) {
@@ -386,6 +390,28 @@ const FillerFetchUI = {
     } else {
       this._clearAutoClose();
     }
+  },
+
+  // The shows left all wait for the filler source (Jikan) to answer again. A ticking countdown shows the run is
+  // waiting, not stuck: a still "continuing shortly" read as frozen at 0 of 76.
+  jikanWaitLabel(until) {
+    const seconds = Math.ceil((Number(until) - Date.now()) / 1000);
+    if (!(seconds > 0)) return "Filler source busy, retrying now…";
+    const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    return `Filler source busy, retrying in ${time}`;
+  },
+
+  _setJikanCountdown(until, render) {
+    if (this._jikanTimer) clearInterval(this._jikanTimer);
+    this._jikanTimer = null;
+    if (!(until > Date.now()) || typeof render !== "function") return;
+    this._jikanTimer = setInterval(() => {
+      render();
+      if (Date.now() >= until) {
+        clearInterval(this._jikanTimer);
+        this._jikanTimer = null;
+      }
+    }, 1000);
   },
 
   _scheduleAutoClose() {

@@ -141,12 +141,14 @@ async function runMetadataRepairWithRetry(task, options = {}) {
 
 function scheduleMetadataRepairFallback(delayInMinutes = 1) { chrome.alarms.create(METADATA_REPAIR_ALARM, { delayInMinutes }); }
 
-// A Jikan request that timed out, or Jikan paused after repeated timeouts (filler-discovery.js). The run waits at
-// that show for Jikan instead of walking the rest of the queue into "filler paused" failures, a few times per
-// show before it counts the show as failed and moves on.
+// A Jikan request that timed out, or Jikan paused after repeated timeouts (filler-discovery.js). The show goes to
+// the end of the queue and the run carries on with the others, so one slow source never holds up the rest (8.2.14
+// waited at the show, and a phone where Jikan stayed slow sat at 0 of 76). Only when the shows left are all ones
+// put back does the run wait for Jikan to reopen. After three such waits a run stops waiting and counts what is
+// left as failed; a show is put back at most five times, so the queue always ends.
 const METADATA_REPAIR_JIKAN_BUSY = /jikan_circuit_open|jikan_(?:search|episodes)_timeout/i;
 const METADATA_REPAIR_JIKAN_WAITS = 3;
-const METADATA_REPAIR_JIKAN_MIN_WAIT_MS = 30 * 1000;
+const METADATA_REPAIR_JIKAN_PUT_BACKS = 5;
 
 async function getMetadataRepairState() {
   const result = await bgStorageGet([METADATA_REPAIR_STATE_KEY]);
@@ -777,15 +779,6 @@ async function pauseMetadataRepairForNetwork(state) {
   scheduleMetadataRepairFallback(2);
 }
 
-async function pauseMetadataRepairForJikan(state, index, waits) {
-  const fresh = await getMetadataRepairState();
-  if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return;
-  const until = Math.max(Date.now() + METADATA_REPAIR_JIKAN_MIN_WAIT_MS, Number(globalThis.__jikanCircuitBrokenUntil) || 0);
-  await setMetadataRepairState({ ...fresh, waitingForJikanUntil: until, jikanWaitIndex: index, jikanWaits: waits,
-    updatedAt: new Date().toISOString() });
-  chrome.alarms.create(METADATA_REPAIR_ALARM, { when: until + 1000 });
-}
-
 async function pauseMetadataRepairForAccess(state, blockedOrigins) {
   const fresh = await getMetadataRepairState();
   if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return;
@@ -848,7 +841,7 @@ async function runMetadataRepairBatch(options = {}) {
         const fresh = await getMetadataRepairState();
         if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return false;
         forgetFailuresFromOutage();
-        state = { ...fresh, waitingForAccess: false, blockedOrigins: [], updatedAt: new Date().toISOString() };
+        state = { ...fresh, waitingForAccess: false, blockedOrigins: [], jikanPausedUntil: null, updatedAt: new Date().toISOString() };
         await setMetadataRepairState(state);
       }
 
@@ -860,22 +853,40 @@ async function runMetadataRepairBatch(options = {}) {
       if (state.waitingForNetwork === true) {
         // iOS may suspend the worker before its online event arrives.
         forgetFailuresFromOutage();
-        state = { ...state, waitingForNetwork: false };
+        state = { ...state, waitingForNetwork: false, jikanPausedUntil: null };
         await setMetadataRepairState(state);
       }
-      const jikanUntil = Number(state.waitingForJikanUntil) || 0;
-      if (jikanUntil > Date.now()) {
-        // Woken early (a popup nudge or a restarted worker): keep waiting for Jikan.
+      const item = items[index];
+      // Every show left was put back for Jikan, and Jikan is still paused: wait for it (the alarm, or a popup nudge
+      // after the time, brings the run back) instead of asking it too early. A restarted worker forgets the pause,
+      // so the run keeps its own copy.
+      const putBack = (Number(item?.jikanDeferrals) || 0) > 0;
+      const jikanPausedUntil = Math.max(Number(state.jikanPausedUntil) || 0, Number(globalThis.__jikanCircuitBrokenUntil) || 0);
+      const jikanWaits = Number(state.jikanWaits) || 0;
+      if (putBack && jikanPausedUntil > Date.now() && (jikanWaits < METADATA_REPAIR_JIKAN_WAITS || state.waitingForJikanUntil === jikanPausedUntil)) {
+        // A show not yet tried can sit behind it (a priority reorder moves pending shows): do that one first.
+        const ready = items.findIndex((entry, at) => at > index && !((Number(entry?.jikanDeferrals) || 0) > 0));
+        if (ready > index) {
+          const queue = [...items];
+          const [next] = queue.splice(ready, 1);
+          queue.splice(index, 0, next);
+          state = { ...state, items: queue, updatedAt: new Date().toISOString() };
+          await setMetadataRepairState(state);
+          continue;
+        }
         pausedForJikan = true;
-        chrome.alarms.create(METADATA_REPAIR_ALARM, { when: jikanUntil + 1000 });
+        if (state.waitingForJikanUntil !== jikanPausedUntil) {
+          await setMetadataRepairState({ ...state, waitingForJikanUntil: jikanPausedUntil, jikanWaits: jikanWaits + 1,
+            updatedAt: new Date().toISOString() });
+        }
+        chrome.alarms.create(METADATA_REPAIR_ALARM, { when: jikanPausedUntil + 1000 });
         return false;
       }
-      if (jikanUntil) {
+      if (state.waitingForJikanUntil) {
         state = { ...state, waitingForJikanUntil: null };
         await setMetadataRepairState(state);
       }
 
-      const item = items[index];
       const startedAt = new Date().toISOString();
       if (state.currentSlug !== item.slug || state.currentTitle !== item.title) {
         state = {
@@ -902,9 +913,8 @@ async function runMetadataRepairBatch(options = {}) {
           mediaTypeUpdatedAt: item.mediaTypeUpdatedAt || null,
           includeEpisodeTypes: true,
           forceInfoRefresh: item.forceInfoRefresh === true || state.options?.forceInfoRefresh !== false,
-          // After waiting for Jikan, ask it again: the retry stamp its timeout left would otherwise skip the show.
-          forceFillerRefresh: item.forceFillerRefresh === true || state.options?.forceFillerRefresh !== false ||
-            (state.jikanWaitIndex === index && Number(state.jikanWaits) > 0),
+          // A show put back for Jikan is asked again: the retry stamp its timeout left would otherwise skip it.
+          forceFillerRefresh: item.forceFillerRefresh === true || state.options?.forceFillerRefresh !== false || putBack,
         });
         infoResult = resolved.infoResult || { status: "unavailable", entry: null };
         fillerResult = resolved.fillerResult || { status: "nofill", entry: null };
@@ -934,11 +944,27 @@ async function runMetadataRepairBatch(options = {}) {
       }
 
       if (fillerResult.status === "failed" && METADATA_REPAIR_JIKAN_BUSY.test(String(fillerResult.error || ""))) {
-        const waits = state.jikanWaitIndex === index ? Number(state.jikanWaits) || 0 : 0;
-        if (waits < METADATA_REPAIR_JIKAN_WAITS) {
-          pausedForJikan = true;
-          await pauseMetadataRepairForJikan(state, index, waits + 1);
-          return false;
+        const deferrals = Number(item.jikanDeferrals) || 0;
+        if (deferrals < METADATA_REPAIR_JIKAN_PUT_BACKS && (Number(state.jikanWaits) || 0) < METADATA_REPAIR_JIKAN_WAITS) {
+          // Put the show at the end of the queue, uncounted, and go on with the next one, which now sits at this index.
+          const fresh = await getMetadataRepairState();
+          if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return false;
+          const queue = Array.isArray(fresh.items) ? [...fresh.items] : [...items];
+          const at = queue[index]?.slug === item.slug ? index : queue.findIndex((entry) => entry?.slug === item.slug);
+          if (at >= 0) queue.splice(at, 1);
+          queue.push({ ...item, jikanDeferrals: deferrals + 1 });
+          const pausedUntil = Number(globalThis.__jikanCircuitBrokenUntil) || 0;
+          const next = queue[index] || null;
+          state = {
+            ...fresh,
+            items: queue,
+            jikanPausedUntil: Math.max(Number(fresh.jikanPausedUntil) || 0, pausedUntil > Date.now() ? pausedUntil : 0),
+            currentSlug: next?.slug || null,
+            currentTitle: next?.title || null,
+            updatedAt: new Date().toISOString(),
+          };
+          await setMetadataRepairState(state);
+          continue;
         }
       }
 
@@ -1070,9 +1096,9 @@ async function startLibraryRepair(options = {}) {
       await setMetadataRepairState(existing);
     }
 
-    // Fetch & Import pressed during a wait for Jikan: the breakers were just reset, so try now.
-    if (requestedOrigin === "manual" && existing.waitingForJikanUntil) {
-      existing = { ...existing, waitingForJikanUntil: null };
+    // Fetch & Import pressed while shows wait for Jikan: the breakers were just reset, so try them now.
+    if (requestedOrigin === "manual" && (existing.waitingForJikanUntil || existing.jikanPausedUntil || existing.jikanWaits)) {
+      existing = { ...existing, waitingForJikanUntil: null, jikanPausedUntil: null, jikanWaits: 0 };
       await setMetadataRepairState(existing);
     }
     await bgStorageSet({ [PENDING_METADATA_REPAIR_KEY]: true });
@@ -1180,6 +1206,7 @@ async function stopLibraryRepair() {
     waitingForAccess: false,
     waitingForNetwork: false,
     waitingForJikanUntil: null,
+    jikanPausedUntil: null,
     currentSlug: null,
     currentTitle: null,
     completedAt: state.completedAt || now,

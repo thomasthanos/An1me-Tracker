@@ -253,6 +253,24 @@ function installedWorker(local, sync) {
     assert.equal(p.timers.length, 0, 'no periodic wake while the user must grant access');
     assert.deepEqual(messages, [], 'a stale timestamp is not a reason to resume without permission');
   });
+  await test('a run waiting minutes for the filler source is not restarted as stalled, and says it is waiting', async () => {
+    // A manual restart would reset the Jikan pause and end the wait early; the popup used to send one after three
+    // quiet minutes, which a wait for Jikan always has.
+    const state = { runId: 'jikan-wait', status: 'running', uiMode: 'status', origin: 'manual', fetchTotal: 76, queueIndex: 70, processed: 70,
+      waitingForJikanUntil: Date.now() + 9 * 60000, updatedAt: new Date(Date.now() - 6 * 60000).toISOString() };
+    const messages = [], labels = [];
+    const p = popup({ metadataRepairState: state }, async message => { messages.push(message.type); return { success: true, state }; });
+    p.AT.SyncStatusController.setActivity = (_source, activity) => labels.push(activity.label);
+    await p.AT.MetadataRepair.applyMetadataRepairState(state); await flush();
+    assert.equal(messages.includes('START_LIBRARY_REPAIR'), false, 'no restart that would cut the wait short');
+    assert.match(labels.at(-1), /^Filler source busy/);
+    assert.ok(!labels.some(label => /^Resuming/.test(label)));
+    // Control: the same quiet run with no wait left is a stalled worker and is nudged.
+    const stalled = { ...state, waitingForJikanUntil: Date.now() - 1000 };
+    const q = popup({ metadataRepairState: stalled }, async message => { messages.push(message.type); return { success: true, state: stalled }; });
+    await q.AT.MetadataRepair.applyMetadataRepairState(stalled); await flush();
+    assert.equal(messages.includes('START_LIBRARY_REPAIR'), true);
+  });
   await test('an install or update event preserves an existing library, settings, progress and metadata cache', async () => {
     for (const reason of ['install', 'update']) {
       const store = { animeData: { naruto: { episodes: [1] } }, videoProgress: { episode: { currentTime: 30 } }, settings: { watchThreshold: 0.9 },

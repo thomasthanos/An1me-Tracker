@@ -12,6 +12,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.15] — 2026-10-06
+
+### Fixed
+
+- **Fetch & Import no longer stops at 0 while the filler source is slow.** 8.2.14 made a run wait at a show
+  whose filler data comes from Jikan (MyAnimeList) while Jikan was slow, and every show after it waited too: on
+  a phone where Jikan stayed slow the panel sat at **0 / 76 — Filler source busy**. Now:
+  - a show Jikan is slow on goes to the end of the queue, and every other show (those AnimeFillerList lists,
+    and those already cached) finishes as usual;
+  - only when the shows left all wait for Jikan does the run pause, until Jikan's own pause ends, with a
+    countdown (**Filler source busy, retrying in 1:45**) so it never looks frozen;
+  - a run waits for Jikan three times at most (about 2, 5 and 10 minutes), then counts the shows still left as
+    needing a retry and ends;
+  - an open popup no longer restarts a waiting run as stalled, which cut the wait short;
+  - a run left waiting by 8.2.14 continues at once after the update.
+
 ## [8.2.14] — 2026-10-06
 
 ### Fixed
