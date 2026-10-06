@@ -71,6 +71,9 @@ jobs:
       - name: Build (unsigned)
         run: |
           set -o pipefail
+          mkdir -p build
+          log="build/xcodebuild.log"
+          status=0
           xcodebuild build \
             -project "${{ steps.project.outputs.path }}" \
             -scheme "$APP_NAME" \
@@ -82,7 +85,27 @@ jobs:
             MARKETING_VERSION="${{ steps.meta.outputs.version }}" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            | tail -n 40
+            > "$log" 2>&1 || status=$?
+          # A bare `| tail -n 40` used to reduce a failed build to "exit code 65": the tail fills up with
+          # asset-catalog chatter and the diagnostic scrolls out of the window. Print the tail, then the
+          # lines that actually explain the failure.
+          tail -n 15 "$log"
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Why the build failed"
+            grep -nE "error:|fatal error:|Command .* failed|does not contain|Multiple commands produce" "$log" | head -n 60 || true
+            echo "::endgroup::"
+            echo "::error::xcodebuild failed with exit $status. The full log is attached to this run."
+          fi
+          exit "$status"
+
+      - name: Upload the build log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xcodebuild-log
+          path: build/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       # An .ipa is the .app inside a Payload folder, zipped. SideStore signs the app and its extension.
       - name: Package the .ipa
