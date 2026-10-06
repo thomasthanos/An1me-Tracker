@@ -130,7 +130,7 @@ test("setupUI installs the native app sources, registers them, and unwires the W
     // Every app source landed, and the generated permission model matches ios-permissions.js exactly.
     const installed = listSwiftFiles(path.join(appDir, "An1meTracker"));
     assert.equal(installed.length, expectedSwift + 1, "app sources plus the generated model");
-    const generated = fs.readFileSync(path.join(appDir, "An1meTracker/Generated/HostPermissions.generated.swift"), "utf8");
+    const generated = fs.readFileSync(path.join(appDir, "An1meTracker/ExtensionPermissions/HostPermissions.generated.swift"), "utf8");
     assert.equal(generated, swiftSource());
 
     // The project now builds them.

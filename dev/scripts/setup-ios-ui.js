@@ -23,12 +23,19 @@ const { projectObjects } = require("./setup-ios-icons");
 const { swiftSource } = require("./ios-permissions");
 
 const ROOT = path.join(__dirname, "../..");
+/// The whole iOS source tree in the repository.
 const IOS_SRC = path.join(ROOT, "ios");
+/// The lifecycle files that replace the generated ones.
+const LIFECYCLE_SRC = path.join(IOS_SRC, "App");
+/// The app's Swift sources, copied into the generated project.
 const APP_SRC = path.join(IOS_SRC, "An1meTracker");
 const ICONS_SRC = path.join(ROOT, "src/icons/ios");
 
 /// The folder the app's own Swift files are copied into, beside the generated ViewController.
 const APP_FOLDER = "An1meTracker";
+
+/// Where the generated permission model lands inside that folder.
+const PERMISSIONS_FOLDER = "ExtensionPermissions";
 
 /// The link the Safari extension opens to send the user to its website settings (see ios/SceneDelegate.swift).
 const URL_SCHEME = "an1metracker";
@@ -203,7 +210,7 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
   const hostDirs = [];
 
   // 1. The host app's launch path: our ViewController and SceneDelegate replace the generated ones.
-  const srcViewController = path.join(IOS_SRC, "ViewController.swift");
+  const srcViewController = path.join(LIFECYCLE_SRC, "ViewController.swift");
   if (fs.existsSync(srcViewController)) {
     for (const dest of findFilesByName(buildDir, "ViewController.swift")) {
       if (dest.includes("Extension")) continue;
@@ -212,7 +219,7 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
       result.viewControllers++;
     }
   }
-  const srcScene = path.join(IOS_SRC, "SceneDelegate.swift");
+  const srcScene = path.join(LIFECYCLE_SRC, "SceneDelegate.swift");
   if (fs.existsSync(srcScene)) {
     for (const dest of findFilesByName(buildDir, "SceneDelegate.swift")) {
       if (dest.includes("Extension")) continue;
@@ -226,7 +233,7 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
     const destination = path.join(hostDir, APP_FOLDER);
     fs.rmSync(destination, { recursive: true, force: true });
     fs.cpSync(APP_SRC, destination, { recursive: true });
-    const generated = path.join(destination, "Generated");
+    const generated = path.join(destination, PERMISSIONS_FOLDER);
     fs.mkdirSync(generated, { recursive: true });
     fs.writeFileSync(path.join(generated, "HostPermissions.generated.swift"), swiftSource());
 
@@ -257,7 +264,7 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
     if (catalog.includes("Extension")) continue;
     const imagesetDir = path.join(catalog, "AppLogo.imageset");
     fs.mkdirSync(imagesetDir, { recursive: true });
-    const srcContents = path.join(IOS_SRC, "AppLogo.imageset/Contents.json");
+  const srcContents = path.join(IOS_SRC, "AppLogo.imageset/Contents.json");
     if (fs.existsSync(srcContents)) fs.copyFileSync(srcContents, path.join(imagesetDir, "Contents.json"));
     const srcLogo = path.join(ICONS_SRC, "AppIcon-dark.png");
     if (fs.existsSync(srcLogo)) fs.copyFileSync(srcLogo, path.join(imagesetDir, "AppLogo.png"));
