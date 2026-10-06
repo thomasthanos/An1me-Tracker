@@ -141,6 +141,13 @@ async function runMetadataRepairWithRetry(task, options = {}) {
 
 function scheduleMetadataRepairFallback(delayInMinutes = 1) { chrome.alarms.create(METADATA_REPAIR_ALARM, { delayInMinutes }); }
 
+// A Jikan request that timed out, or Jikan paused after repeated timeouts (filler-discovery.js). The run waits at
+// that show for Jikan instead of walking the rest of the queue into "filler paused" failures, a few times per
+// show before it counts the show as failed and moves on.
+const METADATA_REPAIR_JIKAN_BUSY = /jikan_circuit_open|jikan_(?:search|episodes)_timeout/i;
+const METADATA_REPAIR_JIKAN_WAITS = 3;
+const METADATA_REPAIR_JIKAN_MIN_WAIT_MS = 30 * 1000;
+
 async function getMetadataRepairState() {
   const result = await bgStorageGet([METADATA_REPAIR_STATE_KEY]);
   return result[METADATA_REPAIR_STATE_KEY] || null;
@@ -770,6 +777,15 @@ async function pauseMetadataRepairForNetwork(state) {
   scheduleMetadataRepairFallback(2);
 }
 
+async function pauseMetadataRepairForJikan(state, index, waits) {
+  const fresh = await getMetadataRepairState();
+  if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return;
+  const until = Math.max(Date.now() + METADATA_REPAIR_JIKAN_MIN_WAIT_MS, Number(globalThis.__jikanCircuitBrokenUntil) || 0);
+  await setMetadataRepairState({ ...fresh, waitingForJikanUntil: until, jikanWaitIndex: index, jikanWaits: waits,
+    updatedAt: new Date().toISOString() });
+  chrome.alarms.create(METADATA_REPAIR_ALARM, { when: until + 1000 });
+}
+
 async function pauseMetadataRepairForAccess(state, blockedOrigins) {
   const fresh = await getMetadataRepairState();
   if (!fresh || fresh.status !== "running" || fresh.runId !== state.runId) return;
@@ -791,6 +807,7 @@ async function runMetadataRepairBatch(options = {}) {
   // deliberately waiting, or the two would call each other in a tight loop.
   let pausedForNetwork = false;
   let pausedForAccess = false;
+  let pausedForJikan = false;
 
   try {
     let state = await getMetadataRepairState();
@@ -846,6 +863,17 @@ async function runMetadataRepairBatch(options = {}) {
         state = { ...state, waitingForNetwork: false };
         await setMetadataRepairState(state);
       }
+      const jikanUntil = Number(state.waitingForJikanUntil) || 0;
+      if (jikanUntil > Date.now()) {
+        // Woken early (a popup nudge or a restarted worker): keep waiting for Jikan.
+        pausedForJikan = true;
+        chrome.alarms.create(METADATA_REPAIR_ALARM, { when: jikanUntil + 1000 });
+        return false;
+      }
+      if (jikanUntil) {
+        state = { ...state, waitingForJikanUntil: null };
+        await setMetadataRepairState(state);
+      }
 
       const item = items[index];
       const startedAt = new Date().toISOString();
@@ -874,7 +902,9 @@ async function runMetadataRepairBatch(options = {}) {
           mediaTypeUpdatedAt: item.mediaTypeUpdatedAt || null,
           includeEpisodeTypes: true,
           forceInfoRefresh: item.forceInfoRefresh === true || state.options?.forceInfoRefresh !== false,
-          forceFillerRefresh: item.forceFillerRefresh === true || state.options?.forceFillerRefresh !== false,
+          // After waiting for Jikan, ask it again: the retry stamp its timeout left would otherwise skip the show.
+          forceFillerRefresh: item.forceFillerRefresh === true || state.options?.forceFillerRefresh !== false ||
+            (state.jikanWaitIndex === index && Number(state.jikanWaits) > 0),
         });
         infoResult = resolved.infoResult || { status: "unavailable", entry: null };
         fillerResult = resolved.fillerResult || { status: "nofill", entry: null };
@@ -901,6 +931,15 @@ async function runMetadataRepairBatch(options = {}) {
         pausedForNetwork = true;
         await pauseMetadataRepairForNetwork(state);
         return false;
+      }
+
+      if (fillerResult.status === "failed" && METADATA_REPAIR_JIKAN_BUSY.test(String(fillerResult.error || ""))) {
+        const waits = state.jikanWaitIndex === index ? Number(state.jikanWaits) || 0 : 0;
+        if (waits < METADATA_REPAIR_JIKAN_WAITS) {
+          pausedForJikan = true;
+          await pauseMetadataRepairForJikan(state, index, waits + 1);
+          return false;
+        }
       }
 
       logEntry = buildMetadataRepairLog(item.slug, item.title || item.slug, infoResult, fillerResult);
@@ -973,7 +1012,7 @@ async function runMetadataRepairBatch(options = {}) {
     if (metadataRepairAccessChanged) {
       metadataRepairAccessChanged = false;
       resumeLibraryRepair({ checkAccess: true }).catch(() => {});
-    } else if (!pausedForNetwork && !pausedForAccess) {
+    } else if (!pausedForNetwork && !pausedForAccess && !pausedForJikan) {
       maybeStartPendingMetadataRepair().catch((error) => {
         console.error("[BG] Failed to trigger pending repair after batch:", error);
       });
@@ -1031,6 +1070,11 @@ async function startLibraryRepair(options = {}) {
       await setMetadataRepairState(existing);
     }
 
+    // Fetch & Import pressed during a wait for Jikan: the breakers were just reset, so try now.
+    if (requestedOrigin === "manual" && existing.waitingForJikanUntil) {
+      existing = { ...existing, waitingForJikanUntil: null };
+      await setMetadataRepairState(existing);
+    }
     await bgStorageSet({ [PENDING_METADATA_REPAIR_KEY]: true });
     scheduleMetadataRepairFallback(1);
     runMetadataRepairBatch().catch((error) => {
@@ -1135,6 +1179,7 @@ async function stopLibraryRepair() {
     pendingManualRetry: false,
     waitingForAccess: false,
     waitingForNetwork: false,
+    waitingForJikanUntil: null,
     currentSlug: null,
     currentTitle: null,
     completedAt: state.completedAt || now,

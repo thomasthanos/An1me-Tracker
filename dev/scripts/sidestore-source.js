@@ -36,9 +36,9 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Speed control settings save again on iPhone: Could not save speed preference no longer blocks turning it on or choosing a speed.\n" +
-    "• The speed button in the player keeps its chosen speed even when the extension's background is not answering.\n" +
-    "• Website access stays one button: Allow website access asks Safari for every site the tracker uses at once.\n" +
+    "• Fetch & Import no longer turns one slow filler answer into dozens of filler paused, retry later rows.\n" +
+    "• When the filler source is slow (for example while an episode is playing), the import waits a few minutes and continues by itself.\n" +
+    "• Filler lookups allow more time on a phone, and pressing Fetch & Import during a wait tries again at once.\n" +
     "• AniList stays disabled on mobile.";
 
   return {

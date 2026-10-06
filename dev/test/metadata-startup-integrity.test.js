@@ -56,10 +56,14 @@ async function test(name, fn) { try { await fn(); console.log('PASS ' + name); }
     assert.deepEqual(h.store['episodeTypes_sousou-no-frieren'].filler, [2,5]);
     assert.equal(h.store['episodeTypes_sousou-no-frieren'].notFound, undefined);
     assert.equal(h.store['episodeTypes_sousou-no-frieren'].retryable, true);
-    assert.equal(h.c.AnimeTrackerCachePolicy.fillerRefreshAt(h.store['episodeTypes_sousou-no-frieren']) - now, HOUR);
+    // One timeout is the ordinary short retry, not a closed Jikan; a second in a row pauses Jikan for minutes.
+    assert.equal(h.c.AnimeTrackerCachePolicy.fillerRefreshAt(h.store['episodeTypes_sousou-no-frieren']) - now, 15 * 60000);
     const second = await h.c.AnimeTrackerAnimeResolver.resolve('audit_unlisted', { title: 'Audit Unlisted Show', includeEpisodeTypes: true });
     assert.equal(second.fillerResult.status, 'failed'); assert.deepEqual(h.store.episodeTypes_audit_unlisted.filler, [2,5]);
-    assert.equal(h.calls.length, 1, 'open circuit prevents another network request');
+    assert.equal(h.calls.length, 2, 'a single timeout does not stop the next lookup');
+    const third = await h.c.AnimeTrackerAnimeResolver.resolve('sousou-no-frieren', { title: 'Sousou no Frieren', includeEpisodeTypes: true, forceFillerRefresh: true });
+    assert.equal(third.fillerResult.status, 'failed'); assert.deepEqual(h.store['episodeTypes_sousou-no-frieren'].filler, [2,5]);
+    assert.equal(h.calls.length, 2, 'two timeouts in a row pause Jikan: no further request');
     assert.deepEqual({ animeData: h.store.animeData, videoProgress: h.store.videoProgress }, progress);
   });
   for (const event of ['startup', 'upgrade']) await test(event + ' preserves transient positive caches and interrupted queue', async () => {

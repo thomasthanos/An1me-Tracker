@@ -192,14 +192,34 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.equal(h.store["episodeTypes_totally-unlisted-show"].notFound, true);
   });
 
-  await test("Jikan timeouts leave a phone on mobile data room to answer, and desktop is unchanged", async () => {
+  await test("Jikan timeouts leave a phone streaming an episode room to answer, and desktop more than before", async () => {
     const phone = worker({ afl: "ok", jikan: "hang", ua: "iPhone" });
     await phone.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
-    assert.ok(phone.timers.includes(5000), "search allows 5 seconds");
-    assert.ok(!phone.timers.includes(2500), "the old 2.5 second limit is gone");
+    assert.ok(phone.timers.includes(8000), "search allows 8 seconds");
+    assert.ok(!phone.timers.includes(5000) && !phone.timers.includes(2500), "the old 2.5 and 5 second limits are gone");
     const desktop = worker({ afl: "ok", jikan: "hang", ua: "Mozilla/5.0 (Windows NT 10.0) Chrome/130" });
     await desktop.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
-    assert.ok(desktop.timers.includes(3500));
+    assert.ok(desktop.timers.includes(5000) && !desktop.timers.includes(3500));
+  });
+
+  await test("one slow Jikan answer does not pause it; two in a row pause it for minutes, longer each time, and an answer resets the count", async () => {
+    const h = worker({ jikan: "hang" });
+    const breaker = () => vm.runInContext("({ open: globalThis.__jikanCircuitBroken === true, until: globalThis.__jikanCircuitBrokenUntil || 0, strikes: globalThis.__jikanTimeouts || 0 })", h.c);
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    assert.equal(breaker().open, false, "a single timeout leaves Jikan open");
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show", forceFillerRefresh: true });
+    let state = breaker();
+    assert.equal(state.open, true, "two in a row pause it");
+    assert.equal(state.until - NOW, 2 * MINUTE, "for two minutes, not an hour");
+    h.advance(2 * MINUTE + 1);
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show", forceFillerRefresh: true });
+    state = breaker();
+    assert.equal(state.until - (NOW + 2 * MINUTE + 1), 5 * MINUTE, "the next timeout pauses it longer");
+    h.advance(5 * MINUTE + 1);
+    h.mode.jikan = "listed";
+    const answered = await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show", forceFillerRefresh: true });
+    assert.equal(answered.fillerResult.status, "fetched");
+    assert.equal(breaker().strikes, 0, "an answer resets the count");
   });
 
   await test("titles that differ only in word breaks match, and containment alone still does not", async () => {
@@ -278,6 +298,67 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.deepEqual([done.status, done.processed, done.fetched, done.failed], ["completed", 4, 4, 0]);
   });
 
+  // Shows AnimeFillerList does not list go to Jikan. While the episode plays, Jikan answers slowly.
+  const UNLISTED = [["unlisted-a", "Quiet Harbor Days"], ["unlisted-b", "Lantern Street Diaries"], ["unlisted-c", "Paper Moon Courier"], ["unlisted-d", "Glass Orchard Stories"]];
+  const unlistedSeed = () => ({
+    animeData: Object.fromEntries(UNLISTED.map(([slug, title]) => [slug, { title, episodes: [{ number: 1, watchedAt: "2026-10-01T10:00:00Z", duration: 1400 }] }])),
+    ...Object.fromEntries(UNLISTED.map(([slug, title]) => [`animeinfo_${slug}`, info(title)])),
+  });
+
+  await test("a run waits at the show while Jikan is slow instead of failing the rest, then continues by itself", async () => {
+    const h = worker({ jikan: "hang", seed: unlistedSeed() });
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => Number((await h.c.getMetadataRepairState())?.waitingForJikanUntil) > 0);
+    await settle();
+    const paused = await h.c.getMetadataRepairState();
+    assert.equal(paused.status, "running");
+    assert.deepEqual([paused.queueIndex, paused.processed, paused.failed], [0, 0, 0], "the slow show is not consumed or counted");
+    assert.ok(paused.waitingForJikanUntil >= NOW + 30000, "it waits at least half a minute");
+    assert.ok(h.alarms.some((alarm) => alarm.name === "metadataRepairTick" && alarm.options.when > paused.waitingForJikanUntil), "an alarm brings it back");
+    // Woken early (the popup nudges it every few seconds): still waiting, nothing requested.
+    const requests = h.calls.jikan;
+    await h.c.runMetadataRepairBatch();
+    assert.equal(h.calls.jikan, requests);
+    // Jikan answers again once the wait is over.
+    h.advance(10 * MINUTE);
+    h.mode.jikan = "listed";
+    await h.c.runMetadataRepairBatch();
+    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
+    const done = await h.c.getMetadataRepairState();
+    assert.deepEqual([done.status, done.processed, done.fetched, done.failed], ["completed", 4, 4, 0]);
+    assert.ok(!(done.waitingForJikanUntil > 0), "the wait is cleared");
+  });
+
+  await test("a show Jikan keeps timing out on is counted after three waits, and the run moves on", async () => {
+    const h = worker({ jikan: "hang", seed: unlistedSeed() });
+    await h.c.startLibraryRepair({ origin: "manual" });
+    for (let wait = 0; wait < 3; wait++) {
+      await until(async () => Number((await h.c.getMetadataRepairState())?.waitingForJikanUntil) > Date.now() || wait > 0);
+      await settle();
+      const state = await h.c.getMetadataRepairState();
+      assert.equal(state.queueIndex, 0, `still at the first show after wait ${wait + 1}`);
+      h.advance(Math.max(0, state.waitingForJikanUntil - vm.runInContext("Date.now()", h.c)) + 1000);
+      await h.c.runMetadataRepairBatch();
+      await settle();
+    }
+    const moved = await h.c.getMetadataRepairState();
+    assert.ok(moved.queueIndex >= 1, "the first show is given up on");
+    assert.equal(moved.failed >= 1, true);
+    assert.equal(moved.logs[0].detail.includes("filler"), true);
+  });
+
+  await test("Fetch & Import pressed during a Jikan wait tries again at once", async () => {
+    const h = worker({ jikan: "hang", seed: unlistedSeed() });
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => Number((await h.c.getMetadataRepairState())?.waitingForJikanUntil) > 0);
+    await settle();
+    h.mode.jikan = "listed";
+    await h.c.startLibraryRepair({ origin: "manual" });
+    await until(async () => (await h.c.getMetadataRepairState())?.status === "completed");
+    const done = await h.c.getMetadataRepairState();
+    assert.deepEqual([done.processed, done.fetched, done.failed], [4, 4, 0]);
+  });
+
   await test("a run that is waiting for the connection is not restarted in a loop by a pending repair flag", async () => {
     const h = worker({ seed: { animeData: library() } });
     h.nav.onLine = false;
@@ -334,9 +415,10 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     assert.equal(result.fillerResult.status, "failed");
     assert.equal(circuit(dropped), false, "the circuit stays closed");
     assert.equal(dropped.store["episodeTypes_totally-unlisted-show"], undefined, "and nothing is cached for the show");
-    // Control: the same hang with the connection up is Jikan's own slowness and still opens the circuit.
+    // Control: the same hang twice with the connection up is Jikan's own slowness and still pauses it.
     const slow = worker({ jikan: "hang" });
     await slow.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    await slow.resolve("totally-unlisted-show", { title: "Totally Unlisted Show", forceFillerRefresh: true });
     assert.equal(circuit(slow), true);
   });
 
@@ -388,6 +470,7 @@ const missEntries = (store) => Object.entries(store).filter(([key, value]) => (k
     // A lookup from the watch page, not from Fetch & Import, hung on the dying connection before it went offline.
     const h = worker({ jikan: "hang" });
     await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show" });
+    await h.resolve("totally-unlisted-show", { title: "Totally Unlisted Show", forceFillerRefresh: true });
     assert.equal(vm.runInContext("globalThis.__jikanCircuitBroken", h.c), true);
     h.nav.onLine = false;
     h.mode.jikan = "ok";
