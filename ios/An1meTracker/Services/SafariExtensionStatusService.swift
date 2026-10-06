@@ -47,8 +47,9 @@ final class SafariExtensionStatusService: SafariExtensionStatusProviding {
             return .unknown(.queryFailed("no answer from Safari"))
         }
         // Objective-C exposes the property as `enabled` (Swift `isEnabled`); read it through KVC so no
-        // compile-time knowledge of SFSafariExtensionState is needed.
-        let enabled = (state.value(forKey: "enabled") as? NSNumber)?.boolValue
+        // compile-time knowledge of SFSafariExtensionState is needed. Casting to NSObject first keeps the
+        // KVC call unambiguous rather than relying on dynamic member lookup on AnyObject.
+        let enabled = ((state as? NSObject)?.value(forKey: "enabled") as? NSNumber)?.boolValue
         guard let enabled else {
             return .unknown(.queryFailed("unexpected state object"))
         }
