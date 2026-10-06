@@ -3497,7 +3497,70 @@ function updateSpeedControlPreferences(message) {
   return result;
 }
 
+// ─── Permission report for the native iOS app ────────────────────────────────────────────────────────
+//
+// The Safari Web Extension is the only thing that can ask Safari which websites it has been allowed, so it
+// is the only side that can answer the companion app. iOS exposes no public API for a containing app to
+// read a WebExtension's host permissions (SFSafariExtensionManager answers only whether the extension is
+// enabled, and only from iOS 26.2), and the app ships without entitlements because SideStore signs it with
+// the user's own Apple ID — a capability the profile cannot grant turns into a failed signature. So the
+// reading travels over the app's URL scheme, and the app treats it as a dated measurement, never a verdict.
+
+function permissionPatternIsBroad(origin) {
+  return origin === "<all_urls>" || origin === "*://*/*";
+}
+
+async function buildPermissionReport() {
+  const manifest = chrome.runtime.getManifest();
+  const declared = [...(manifest.host_permissions || []), ...(manifest.optional_host_permissions || [])]
+    .filter((origin) => !permissionPatternIsBroad(origin));
+
+  // getAll() is the authoritative answer. Safari records "All Websites" as *://*/* even when the manifest
+  // asks for <all_urls>, and contains() answers per spelling — which is why the gate in
+  // src/common/website-access.js prefers getAll() too.
+  const all = await new Promise((resolve) => {
+    try {
+      const browserApi = self.browser?.permissions;
+      if (typeof browserApi?.getAll === "function") {
+        const pending = browserApi.getAll();
+        if (pending?.then) {
+          pending.then(resolve, () => resolve(null));
+          return;
+        }
+      }
+      const chromeApi = self.chrome?.permissions;
+      if (typeof chromeApi?.getAll === "function") {
+        chromeApi.getAll((result) => resolve(result || null));
+        return;
+      }
+    } catch {}
+    resolve(null);
+  });
+
+  const grantedOrigins = Array.isArray(all?.origins)
+    ? all.origins.filter((origin) => typeof origin === "string")
+    : [];
+  const allWebsites = grantedOrigins.some(permissionPatternIsBroad);
+  const blockedOrigins = allWebsites
+    ? []
+    : declared.filter((origin) => !grantedOrigins.includes(origin));
+
+  return {
+    grantedOrigins,
+    blockedOrigins,
+    allWebsites,
+    extensionVersion: manifest.version,
+    capturedAt: Date.now(),
+  };
+}
+
 const messageHandlers = {
+  GET_PERMISSION_REPORT(_message, _sender, sendResponse) {
+    buildPermissionReport()
+      .then((report) => sendResponse({ success: true, report }))
+      .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
+    return true;
+  },
   GET_WEBSITE_ACCESS(_message, _sender, sendResponse) {
     self.AnimeTrackerWebsiteAccess.refresh().then(state => sendResponse({ success: true, state }));
     return true;

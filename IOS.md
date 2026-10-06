@@ -49,25 +49,39 @@ versions. In short, from a Windows PC:
 > `An1meTracker-<version>.ipa` from the [releases page](https://github.com/thomasthanos/An1me-Tracker/releases)
 > and use **My Apps → +**. An IPA download URL cannot be added as a Source.
 
-## 3. Turn the extension on
+## 3. Set it up from the app
+
+The **An1me Tracker** app is the place to see and fix access. It shows the state Safari reports and never
+guesses: until the extension has measured something, it says **Not verified yet** rather than **Allowed**.
 
 1. **Settings → Apps → Safari → Extensions → An1me.to Tracker** → turn it on.
-2. Open **an1me.to** in Safari. Tap the **puzzle / AA** button in the address bar and allow the tracker
-   **Always on This Website** so it can save watch progress.
-3. Open **An1me.to Tracker** from that Safari menu and tap **Allow website access**, then **Allow** in Safari's
-   prompt. This one tap asks for every website the tracker uses: sign-in and cloud sync, metadata, filler
-   data, cover images and Skip Outro. The button is on the tracker before sign-in and in **Tracker → Settings**.
-4. If Safari does not allow them, the card adds **Open Safari Settings**: it opens the An1me Tracker app, which
-   takes you to the extension's page in Settings (iOS 26.2 and later; earlier versions open Settings, then go to
-   **Apps → Safari → Extensions → An1me.to Tracker**). Under **Permissions**, set **All Websites** to **Allow**
-   and come back to Safari: the card checks again by itself.
+2. Open the **An1me Tracker** app. The dashboard shows the extension state, website access and how many of
+   the tracker's services are allowed.
+3. Tap **Allow Required Access**. On iOS 26.2 and later this opens the extension's own page in Settings; on
+   earlier versions it opens Settings, where you continue to
+   **Apps → Safari → Extensions → An1me.to Tracker**. Under **Permissions**, allow the websites the tracker
+   lists — or turn on **All Websites**, which covers every one of them at once.
+4. Back in the app, tap **Verify Access**. This opens an1me.to once; the extension measures what Safari has
+   actually allowed and hands the result back, and the app shows **Allowed** (or which services are still
+   missing) together with when it was verified. **Recheck** re-reads that measurement without opening Safari.
+
+Open **an1me.to** in Safari and allow the tracker **Always on This Website** so it can save watch progress.
+
+### What the app can and cannot do
+
+Safari decides website access, and no app may grant a Safari Web Extension's host permissions for you —
+there is no public API for it. What the app does instead:
+
+- **Opening the right screen** uses `SFSafariSettings.openExtensionsSettings`, the app's one supported way
+  to land on the extension's own Settings page (iOS 26.2 and later), with the Settings app as fallback.
+- **Reading the state** uses `SFSafariExtensionManager` for "is the extension on" (also iOS 26.2 and later)
+  and the extension's own `browser.permissions` reading, sent back over the `an1metracker://` link.
+- On iOS 18–26.1 there is no public API for the extension state at all, so the app says **Unable to check**
+  and explains why instead of showing a value it cannot stand behind.
 
 > [!IMPORTANT]
-> Safari controls permission approval; the tracker can only ask. Its scripts run on an1me.to only; elsewhere
-> it only reads the services it uses (Firebase, Jikan, AnimeFillerList, AniSkip, MyAnimeList and image hosts).
-> Settings lists those services one by one and also has a single **All Websites** switch that covers them all.
-> Online work stays paused until they are allowed; local progress keeps saving. AniList sync remains
-> disabled on mobile.
+> The app holds no permission verdict of its own. It stores the extension's measurement with the time it
+> was taken, marks a reading older than 12 hours as stale, and shows **Last verified …** beside it.
 > [Apple's Safari extension permission documentation](https://developer.apple.com/documentation/safariservices/managing-safari-web-extension-permissions)
 
 ## 4. Sign in

@@ -1,19 +1,17 @@
-// Pins the iOS WebKit fallback to the extension manifest version.
+// Pins the shipped version to the extension manifest.
 //
 //   node dev/test/ios-version.test.js
 //
-// The sidebar/WebKit fallback page (ios/Resources/Base.lproj/Main.html) shows a version badge.
-// That number used to be hand-written and had already drifted a minor version behind
-// manifest.json. scripts/setup-ios-ui.js now stamps every data-version element from the manifest
-// during the iOS build, so this test guards the two things that would silently undo that:
-// the manifest staying the single source of truth, and the elements the stamp targets existing.
+// manifest.json is the single source of truth for the version. The release workflow reads it, hands it to
+// xcodebuild as MARKETING_VERSION, and generates the Safari package from the same file, so the app, the
+// extension and the SideStore feed cannot drift apart. The WebKit fallback page this test used to guard is
+// gone, and with it the hand-written version badge it existed for.
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
-const { manifestVersion, stampVersion } = require("../scripts/setup-ios-ui.js");
 
 const REPO = path.join(__dirname, "../..");
-const MAIN_HTML = path.join(REPO, "ios/Resources/Base.lproj/Main.html");
+const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
 
 let failures = 0;
 function check(label, actual, expected) {
@@ -28,38 +26,41 @@ function check(label, actual, expected) {
   }
 }
 
-const manifest = JSON.parse(fs.readFileSync(path.join(REPO, "manifest.json"), "utf8"));
-const html = fs.readFileSync(MAIN_HTML, "utf8");
+const manifest = JSON.parse(read("manifest.json"));
+const workflow = read(".github/workflows/tracker-ipa.yml");
 
-check("manifest.json exposes a version", typeof manifest.version === "string" && manifest.version.length > 0, true);
-check("manifestVersion reads it from the manifest", manifestVersion(), manifest.version);
+check("manifest.json exposes a version", typeof manifest.version === "string" && /^\d+\.\d+\.\d+$/.test(manifest.version), true);
 
-// The stamp must reach the rendered element, not just the text of the file.
-const { html: stamped, stamped: count } = stampVersion(html, manifest.version);
-check("Main.html has a data-version element to stamp", count >= 1, true);
-// data-version is followed by whitespace or ">" — a class such as "version-badge" makes a plain
-// word boundary fail, and an unrelated data-version-anchor must not be matched as a prefix.
-const ATTRIBUTE = new RegExp(`\\sdata-version(?=[\\s>])[^>]*>${manifest.version.replace(/\./g, "\\.")}<`);
-check("the stamped badge shows the manifest version", ATTRIBUTE.test(stamped), true);
+// The workflow must derive MARKETING_VERSION from the manifest rather than hard-coding a number.
+check(
+  "the workflow publishes the manifest version as a step output",
+  /\ echo "version=\$\(node -p 'require\("\.\/manifest\.json"\)\.version'\)"/.test(workflow),
+  true,
+);
+check(
+  "xcodebuild receives that output as MARKETING_VERSION",
+  /MARKETING_VERSION="\$\{\{ steps\.meta\.outputs\.version \}\}"/.test(workflow),
+  true,
+);
+const hardCoded = workflow.match(/MARKETING_VERSION="(\d+\.\d+\.\d+)"/);
+check("no version is hard-coded in the workflow", hardCoded, null);
+check(
+  "the build number comes from the run, not the manifest",
+  /CURRENT_PROJECT_VERSION="\$GITHUB_RUN_NUMBER"/.test(workflow),
+  true,
+);
 
-// The repo copy is the build input, so it must never carry a version manifest.json disagrees with.
-const inRepo = html.match(/\sdata-version(?=[\s>])[^>]*>([^<]*)</);
-check("the version written in the repo matches the manifest", inRepo && inRepo[1].trim(), manifest.version);
+// The SideStore feed is built from the built app's Info.plist, which is stamped by the workflow above.
+const sidestore = read("dev/scripts/sidestore-source.js");
+check("the SideStore feed reads the app's own version", sidestore.includes("CFBundleShortVersionString"), true);
 
-// A missing target must be an error, otherwise a rename would ship the old number silently.
-let threw = false;
-try {
-  stampVersion("<html><body><span>1.0.0</span></body></html>", manifest.version);
-} catch {
-  threw = true;
+// The packaged Safari manifest is generated from the same file, so the extension inside the IPA carries it.
+const packaged = path.join(REPO, "dist/an1me-tracker-safari/manifest.json");
+if (fs.existsSync(packaged)) {
+  check("the packaged Safari manifest carries the manifest version", JSON.parse(fs.readFileSync(packaged, "utf8")).version, manifest.version);
+} else {
+  console.log("  SKIP  packaged Safari manifest not built yet (safari-compat.test.js builds it)");
 }
-check("stamping fails loudly when no data-version element exists", threw, true);
-
-// A longer attribute name that merely starts with data-version must not be treated as the target.
-const decoy = stampVersion('<body data-version-anchor><i>1.0.0</i></body><p data-version>0.0.0</p>', manifest.version);
-check("a data-version-anchor decoy is left alone", decoy.stamped, 1);
-check("the real data-version element is the one stamped", decoy.html.includes(`>${manifest.version}<`), true);
-check("the decoy keeps its own content", decoy.html.includes("<i>1.0.0</i>"), true);
 
 console.log(failures === 0 ? "\nPASS" : `\nFAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

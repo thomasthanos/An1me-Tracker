@@ -23,31 +23,10 @@ const NAME = TARGET === "safari" ? "an1me-tracker-safari" : "an1me-tracker";
 const OUT = path.join(DIST, NAME);
 const RUNTIME_ENTRIES = ["manifest.json", "background.js", "popup.html", "src"];
 
-// Safari has no identity (Google / AniList OAuth), notifications or side panel APIs.
-const SAFARI_UNSUPPORTED_PERMISSIONS = ["identity", "notifications", "sidePanel"];
-
-// Safari only asks the user about hosts the manifest declares optional, and only when the extension requests them
-// from a tap. So the services the tracker reads (Firebase, Jikan, AnimeFillerList, AniSkip, MyAnimeList and the
-// image CDNs) are optional here, and one Allow website access tap requests them all in one Safari prompt.
-// <all_urls> is optional too: it is never requested, but it gives Settings a single "All Websites" switch for
-// anyone who prefers to allow them there. The tracking site stays required. Content scripts still run on an1me.to
-// only, and the AniList API stays off on mobile. The desktop manifest and its permissions are unchanged.
-const SAFARI_CORE_HOSTS = ["https://an1me.to/*", "https://*.an1me.to/*"];
-const SAFARI_DISABLED_HOSTS = ["https://graphql.anilist.co/*"];
-const SAFARI_ALL_WEBSITES = "<all_urls>";
-
-function toSafariManifest(manifest) {
-  const safari = { ...manifest, permissions: (manifest.permissions || []).filter((p) => !SAFARI_UNSUPPORTED_PERMISSIONS.includes(p)) };
-  delete safari.side_panel;
-  const hosts = manifest.host_permissions || [];
-  safari.host_permissions = hosts.filter(host => SAFARI_CORE_HOSTS.includes(host));
-  safari.optional_host_permissions = [...new Set([
-    ...(manifest.optional_host_permissions || []),
-    ...hosts.filter(host => !SAFARI_CORE_HOSTS.includes(host) && !SAFARI_DISABLED_HOSTS.includes(host)),
-    SAFARI_ALL_WEBSITES,
-  ])];
-  return safari;
-}
+// Safari has no identity (Google / AniList OAuth), notifications or side panel APIs, and its host set is
+// decided by ios-permissions.js rather than by whatever the desktop manifest happens to require: the two
+// builds answer to different questions, and the iOS list is the one the native app also shows the user.
+const { toSafariManifest } = require("./ios-permissions");
 
 function copyEntry(relPath) {
   const from = path.join(ROOT, relPath);

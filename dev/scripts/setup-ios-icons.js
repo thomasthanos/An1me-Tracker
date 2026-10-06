@@ -112,4 +112,4 @@ if (require.main === module) {
   setupIcons(buildDir);
 }
 
-module.exports = { setupIcons, findAppIconSets, registerComposerIcon };
+module.exports = { setupIcons, findAppIconSets, findProjects, projectObjects, registerComposerIcon };

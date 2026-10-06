@@ -12,6 +12,9 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 const { execFileSync } = require("child_process");
+// The iOS host set is decided by dev/scripts/ios-permissions.js, not by the desktop manifest: the two
+// builds answer to different questions.
+const { REQUIRED_ORIGINS, OPTIONAL_ORIGINS, ALL_WEBSITES, UNSUPPORTED_IOS_PERMISSIONS } = require("../scripts/ios-permissions");
 
 const REPO = path.join(__dirname, "../..");
 
@@ -69,18 +72,26 @@ function loadCoordinator(withNotifications) {
   const packaged = JSON.parse(fs.readFileSync(path.join(REPO, "dist/an1me-tracker-safari/manifest.json"), "utf8"));
   check(
     "Safari manifest drops identity, notifications and the side panel",
-    [packaged.permissions.filter((p) => ["identity", "notifications", "sidePanel"].includes(p)), "side_panel" in packaged],
+    [packaged.permissions.filter((p) => UNSUPPORTED_IOS_PERMISSIONS.includes(p)), "side_panel" in packaged],
     [[], false],
   );
-  check("Safari manifest keeps every other permission", packaged.permissions, source.permissions.filter((p) => !["identity", "notifications", "sidePanel"].includes(p)));
+  check("Safari manifest keeps every other permission", packaged.permissions, source.permissions.filter((p) => !UNSUPPORTED_IOS_PERMISSIONS.includes(p)));
   check("Safari manifest keeps the content scripts and version", [packaged.content_scripts, packaged.version], [source.content_scripts, source.version]);
   const core = ["https://an1me.to/*", "https://*.an1me.to/*"];
-  // Safari prompts only for optional hosts requested from a tap: the services are optional so one tap asks for all
-  // of them, and the optional all-websites pattern is Settings' single "All Websites" switch for the same thing.
-  const services = source.host_permissions.filter(host => !core.includes(host) && host !== "https://graphql.anilist.co/*");
+  // Safari prompts only for optional hosts requested from a tap, so every non-required group ships as one
+  // requestable block, with the all-websites switch beside it.
+  const iosHosts = [...REQUIRED_ORIGINS, ...OPTIONAL_ORIGINS];
   check("only the tracking site stays required in Safari", packaged.host_permissions, core);
-  check("one tap can request every service, and Settings has an All Websites switch", packaged.optional_host_permissions, [...services, "<all_urls>"]);
+  check("required origins are exactly the tracking-site group", packaged.host_permissions, [...REQUIRED_ORIGINS]);
+  check("one tap can request every service, and Settings has an All Websites switch", packaged.optional_host_permissions, [...OPTIONAL_ORIGINS, ALL_WEBSITES]);
   check("the disabled mobile AniList API is not requested", packaged.optional_host_permissions.includes("https://graphql.anilist.co/*"), false);
+  check("desktop-only hosts stay out of the iOS build",
+    ["https://graphql.anilist.co/*", "https://anilist.co/*", "https://accounts.google.com/*"].filter((host) => iosHosts.includes(host)), []);
+  // These three were inherited from the desktop manifest and no code path in this repository produces a
+  // URL for them, so the iOS build no longer asks for them.
+  check("dead image CDNs are not requested on iOS",
+    ["https://image.tmdb.org/*", "https://media.kitsu.app/*", "https://img1.ak.crunchyroll.com/*"].filter((host) => iosHosts.includes(host)), []);
+  check("every iOS origin is an https pattern", iosHosts.every((origin) => /^https:\/\/[^/\s]+\/\*$/.test(origin)), true);
   check("content scripts still run on an1me.to only", [...new Set(packaged.content_scripts.flatMap((script) => script.matches))].every((match) => /an1me\.to\//.test(match)), true);
   const filler = ["https://www.animefillerlist.com/*", "https://api.jikan.moe/*"];
   check("Chrome's manifest still requires the filler sites", filler.every((host) => source.host_permissions.includes(host)) && !source.optional_host_permissions, true);

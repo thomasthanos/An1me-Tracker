@@ -4,109 +4,177 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 
-const { setupUI } = require("../scripts/setup-ios-ui.js");
+const { setupUI, listSwiftFiles } = require("../scripts/setup-ios-ui.js");
+const { swiftSource } = require("../scripts/ios-permissions.js");
 
-test("setupUI injects SwiftUI ViewController, AppLogo imageset, and web resources", () => {
+const REPO = path.join(__dirname, "../..");
+
+// A minimal but structurally faithful project.pbxproj: one host app target whose only build phase is
+// Sources, one main group, and the section markers the script inserts into.
+function projectFixture() {
+  return `// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AAAAAAAAAAAAAAAAAAAAAAAA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBBBBBBBBBBBBBBBBBBBBBBB /* AppDelegate.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		BBBBBBBBBBBBBBBBBBBBBBBB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		CCCCCCCCCCCCCCCCCCCCCCCC = {
+			isa = PBXGroup;
+			children = (
+				BBBBBBBBBBBBBBBBBBBBBBBB /* AppDelegate.swift */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DDDDDDDDDDDDDDDDDDDDDDDD /* An1me Tracker */ = {
+			isa = PBXNativeTarget;
+			buildPhases = (
+				EEEEEEEEEEEEEEEEEEEEEEEE /* Sources */,
+			);
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FFFFFFFFFFFFFFFFFFFFFFFF /* Project object */ = {
+			isa = PBXProject;
+			mainGroup = CCCCCCCCCCCCCCCCCCCCCCCC;
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		EEEEEEEEEEEEEEEEEEEEEEEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				AAAAAAAAAAAAAAAAAAAAAAAA /* AppDelegate.swift in Sources */,
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+	};
+	rootObject = FFFFFFFFFFFFFFFFFFFFFFFF /* Project object */;
+}
+`;
+}
+
+function buildFixture() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ios-ui-test-"));
+  const projectDir = path.join(tmpDir, "An1me Tracker.xcodeproj");
+  const appDir = path.join(tmpDir, "An1me Tracker/iOS (App)");
+  const extDir = path.join(tmpDir, "An1me Tracker/iOS (Extension)");
+  const assetsDir = path.join(appDir, "Assets.xcassets");
+
+  fs.mkdirSync(projectDir, { recursive: true });
+  fs.mkdirSync(appDir, { recursive: true });
+  fs.mkdirSync(extDir, { recursive: true });
+  fs.mkdirSync(assetsDir, { recursive: true });
+
+  fs.writeFileSync(path.join(projectDir, "project.pbxproj"), projectFixture());
+  fs.writeFileSync(path.join(appDir, "ViewController.swift"), "// dummy template");
+  fs.writeFileSync(path.join(extDir, "ViewController.swift"), "// dummy extension");
+  fs.writeFileSync(path.join(extDir, "SceneDelegate.swift"), "// extension");
+  fs.writeFileSync(path.join(appDir, "SceneDelegate.swift"), "// template");
+
+  const plist = (body) => `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n${body}</dict>\n</plist>\n`;
+  fs.writeFileSync(path.join(appDir, "Info.plist"), plist("\t<key>UIApplicationSceneManifest</key>\n\t<dict>\n\t</dict>\n"));
+  fs.writeFileSync(path.join(extDir, "Info.plist"), plist("\t<key>NSExtension</key>\n\t<dict>\n\t</dict>\n"));
+
+  // The generated storyboard connects a WKWebView to ViewController's outlet.
+  fs.writeFileSync(
+    path.join(appDir, "Main.storyboard"),
+    `<?xml version="1.0" encoding="UTF-8"?>\n<document>\n\t<scenes>\n\t\t<scene>\n\t\t\t<objects>\n\t\t\t\t<viewController id="x" customClass="ViewController">\n\t\t\t\t\t<connections>\n\t\t\t\t\t\t<outlet property="webView" destination="y" id="z"/>\n\t\t\t\t\t</connections>\n\t\t\t\t</viewController>\n\t\t\t</objects>\n\t\t</scene>\n\t</scenes>\n</document>\n`,
+  );
+  return { tmpDir, projectDir, appDir, extDir, assetsDir };
+}
+
+test("setupUI installs the native app sources, registers them, and unwires the WebKit fallback", () => {
+  const fixture = buildFixture();
+  const { tmpDir, projectDir, appDir, extDir } = fixture;
   try {
-    const appDir = path.join(tmpDir, "An1me Tracker/An1me Tracker");
-    const extDir = path.join(tmpDir, "An1me Tracker/An1me Tracker Extension");
-    const assetsDir = path.join(appDir, "Assets.xcassets");
-    const resDir = path.join(appDir, "Resources/Base.lproj");
-
-    fs.mkdirSync(appDir, { recursive: true });
-    fs.mkdirSync(extDir, { recursive: true });
-    fs.mkdirSync(assetsDir, { recursive: true });
-    fs.mkdirSync(resDir, { recursive: true });
-
-    // Create dummy template files
-    fs.writeFileSync(path.join(appDir, "ViewController.swift"), "// dummy template");
-    fs.writeFileSync(path.join(extDir, "ViewController.swift"), "// dummy extension");
-    fs.writeFileSync(path.join(resDir, "Main.html"), "<p>dummy</p>");
-    fs.writeFileSync(path.join(appDir, "Resources/Style.css"), "/* dummy */");
-    fs.writeFileSync(path.join(appDir, "Resources/Icon.png"), "dummy icon");
-
     const result = setupUI(tmpDir);
+    const expectedSwift = listSwiftFiles(path.join(REPO, "ios/An1meTracker")).length;
 
     assert.equal(result.viewControllers, 1);
-    assert.equal(result.htmlFiles, 1);
-    assert.equal(result.cssFiles, 1);
+    assert.equal(result.sceneDelegates, 1);
+    assert.equal(result.urlSchemes, 1);
     assert.equal(result.assetCatalogs, 1);
+    assert.equal(result.storyboards, 1);
+    // The app's own sources plus the generated permission model.
+    assert.equal(result.swiftFiles, expectedSwift + 1);
 
-    // Verify app ViewController was replaced
+    // The host app's launch path is the native one.
     const appSwift = fs.readFileSync(path.join(appDir, "ViewController.swift"), "utf8");
-    assert.match(appSwift, /An1meTrackerAppView/);
+    assert.match(appSwift, /RootView\(\)\.environmentObject\(PermissionCoordinator\.shared\)/);
     assert.match(appSwift, /UIHostingController/);
+    assert.doesNotMatch(appSwift, /Main\.html/);
+    assert.doesNotMatch(appSwift, /An1meTrackerAppView/);
 
-    // Verify extension ViewController was NOT touched
-    const extSwift = fs.readFileSync(path.join(extDir, "ViewController.swift"), "utf8");
-    assert.equal(extSwift, "// dummy extension");
+    const scene = fs.readFileSync(path.join(appDir, "SceneDelegate.swift"), "utf8");
+    assert.match(scene, /openURLContexts/);
+    assert.match(scene, /PermissionBridge\.event\(from: url\)/);
+    assert.match(scene, /PermissionCoordinator\.shared\.handle\(event\)/);
 
-    // Verify AppLogo.imageset was created
-    const logoDir = path.join(assetsDir, "AppLogo.imageset");
-    assert.ok(fs.existsSync(path.join(logoDir, "Contents.json")));
-    assert.ok(fs.existsSync(path.join(logoDir, "AppLogo.png")));
+    // The extension target is never touched.
+    assert.equal(fs.readFileSync(path.join(extDir, "ViewController.swift"), "utf8"), "// dummy extension");
+    assert.equal(fs.readFileSync(path.join(extDir, "SceneDelegate.swift"), "utf8"), "// extension");
 
-    // Verify Main.html was replaced, and that its controls kept the contract the native
-    // bridge relies on: Script.js forwards data-action values to the `controller` handler,
-    // so these attribute values are the interface, not styling details.
-    const html = fs.readFileSync(path.join(resDir, "Main.html"), "utf8");
-    assert.match(html, /An1me Tracker/);
-    assert.doesNotMatch(html, /dummy/);
-    assert.match(html, /data-action="open-settings"/);
-    assert.match(html, /data-action="open-url:https:\/\/an1me\.to"/);
-    assert.match(html, /data-action="open-url:https:\/\/github\.com\/thomasthanos\/An1me-Tracker"/);
+    // Every app source landed, and the generated permission model matches ios-permissions.js exactly.
+    const installed = listSwiftFiles(path.join(appDir, "An1meTracker"));
+    assert.equal(installed.length, expectedSwift + 1, "app sources plus the generated model");
+    const generated = fs.readFileSync(path.join(appDir, "An1meTracker/Generated/HostPermissions.generated.swift"), "utf8");
+    assert.equal(generated, swiftSource());
 
-    // The version badge is stamped from manifest.json, replacing the template placeholder.
-    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../../manifest.json"), "utf8"));
-    assert.match(html, new RegExp(`\\sdata-version(?=[\\s>])[^>]*>${manifest.version.replace(/\./g, "\\.")}<`));
+    // The project now builds them.
+    const project = fs.readFileSync(path.join(projectDir, "project.pbxproj"), "utf8");
+    assert.match(project, /An1meTracker \*\/ = \{/);
+    const sourcesPhase = project.split("/* Begin PBXSourcesBuildPhase section */")[1].split("/* End PBXSourcesBuildPhase section */")[0];
+    for (const file of installed) {
+      assert.ok(sourcesPhase.includes(`${path.basename(file)} in Sources`), `${path.basename(file)} is in the Sources phase`);
+    }
+
+    // The storyboard no longer connects the WKWebView, and the property survives anyway.
+    const storyboard = fs.readFileSync(path.join(appDir, "Main.storyboard"), "utf8");
+    assert.doesNotMatch(storyboard, /outlet property="webView"/);
+    assert.match(appSwift, /@IBOutlet var webView: WKWebView\?/);
+
+    // Running again adds nothing twice.
+    const second = setupUI(tmpDir);
+    assert.equal(second.swiftFiles, 0);
+    const projectAgain = fs.readFileSync(path.join(projectDir, "project.pbxproj"), "utf8");
+    assert.equal(projectAgain.split("An1meTracker */,").length - 1, 1, "one group reference");
+
+    const updated = fs.readFileSync(path.join(appDir, "Info.plist"), "utf8");
+    assert.match(updated, /<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>an1metracker<\/string>/);
+    assert.equal(fs.readFileSync(path.join(extDir, "Info.plist"), "utf8").includes("CFBundleURLTypes"), false);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
-test("setupUI gives the host app the extension's link: its scene delegate and URL scheme, not the extension's", () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ios-ui-url-"));
-  try {
-    const appDir = path.join(tmpDir, "An1me Tracker/iOS (App)");
-    const extDir = path.join(tmpDir, "An1me Tracker/iOS (Extension)");
-    fs.mkdirSync(appDir, { recursive: true });
-    fs.mkdirSync(extDir, { recursive: true });
-    const plist = (body) => `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n${body}</dict>\n</plist>\n`;
-    const appPlist = plist("\t<key>UIApplicationSceneManifest</key>\n\t<dict>\n\t\t<key>UIApplicationSupportsMultipleScenes</key>\n\t\t<false/>\n\t</dict>\n");
-    const extPlist = plist("\t<key>NSExtension</key>\n\t<dict>\n\t</dict>\n");
-    fs.writeFileSync(path.join(appDir, "Info.plist"), appPlist);
-    fs.writeFileSync(path.join(extDir, "Info.plist"), extPlist);
-    fs.writeFileSync(path.join(appDir, "SceneDelegate.swift"), "// template");
-    fs.writeFileSync(path.join(extDir, "SceneDelegate.swift"), "// extension");
+test("the extension and the app agree about the URL scheme and the settings selector", () => {
+  // The extension opens this link; the app registers it in its Info.plist during the build.
+  const siteAccess = fs.readFileSync(path.join(REPO, "src/popup/lib/site-access.js"), "utf8");
+  assert.match(siteAccess, /"an1metracker:\/\/safari-settings"/);
 
-    const result = setupUI(tmpDir);
-    assert.equal(result.sceneDelegates, 1);
-    assert.equal(result.urlSchemes, 1);
+  const constants = fs.readFileSync(path.join(REPO, "ios/An1meTracker/Shared/TrackerConstants.swift"), "utf8");
+  assert.match(constants, /static let urlScheme = "an1metracker"/);
 
-    const scene = fs.readFileSync(path.join(appDir, "SceneDelegate.swift"), "utf8");
-    assert.match(scene, /openURLContexts/);
-    assert.match(scene, /handleTrackerURL/);
-    assert.equal(fs.readFileSync(path.join(extDir, "SceneDelegate.swift"), "utf8"), "// extension");
-    assert.equal(fs.readFileSync(path.join(extDir, "Info.plist"), "utf8"), extPlist);
+  // Opening the extension's own Settings page is a runtime lookup, so the app also builds against SDKs
+  // that predate the API and runs on iOS 18, where it answers "unsupported" rather than guessing.
+  const launcher = fs.readFileSync(path.join(REPO, "ios/An1meTracker/Services/SettingsLauncher.swift"), "utf8");
+  assert.match(launcher, /openExtensionsSettingsForIdentifiers:completionHandler:/);
+  assert.match(launcher, /NSClassFromString\("SFSafariSettings"\)/);
 
-    const updated = fs.readFileSync(path.join(appDir, "Info.plist"), "utf8");
-    assert.match(updated, /<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>an1metracker<\/string>/);
-    assert.ok(updated.indexOf("CFBundleURLTypes") > updated.indexOf("</dict>"), "added at the top level, after the nested dict");
-    assert.ok(updated.trimEnd().endsWith("</dict>\n</plist>"));
-
-    // Running again (the workflow re-runs on a regenerated project, but be safe) adds nothing twice.
-    setupUI(tmpDir);
-    assert.equal(fs.readFileSync(path.join(appDir, "Info.plist"), "utf8").split("CFBundleURLTypes").length, 2);
-
-    // The scheme the app registers is the one the extension links to.
-    const siteAccess = fs.readFileSync(path.join(__dirname, "../../src/popup/lib/site-access.js"), "utf8");
-    assert.match(siteAccess, /"an1metracker:\/\/safari-settings"/);
-    const swift = fs.readFileSync(path.join(__dirname, "../../ios/ViewController.swift"), "utf8");
-    assert.match(swift, /trackerURLScheme = "an1metracker"/);
-    assert.match(swift, /"safari-settings"/);
-    assert.match(swift, /openExtensionsSettingsForIdentifiers:completionHandler:/);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
+  const status = fs.readFileSync(path.join(REPO, "ios/An1meTracker/Services/SafariExtensionStatusService.swift"), "utf8");
+  assert.match(status, /getStateOfSafariExtensionWithIdentifier:completionHandler:/);
+  assert.match(status, /NSClassFromString\("SFSafariExtensionManager"\)/);
 });

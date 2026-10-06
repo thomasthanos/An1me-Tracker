@@ -134,6 +134,17 @@
     },
     {
       "matches": [
+        "https://an1me.to/*",
+        "https://*.an1me.to/*"
+      ],
+      "js": [
+        "src/content/page/permission-report.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
         "https://an1me.to/watch/*",
         "https://*.an1me.to/watch/*"
       ],
