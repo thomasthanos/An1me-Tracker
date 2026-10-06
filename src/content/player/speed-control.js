@@ -15,29 +15,49 @@
   let preferenceRevision = 0;
   const desired = key => pending.has(key) ? pending.get(key) : preferences[key];
 
+  // The worker serialises preference writes. When no worker answers at all (iOS can leave the extension's worker
+  // unreachable for a while), the page writes the same patch itself: these are device-local settings.
+  const WORKER_REPLY_MS = 4000;
+  async function writeHere(patch) {
+    const stored = await chrome.storage.local.get([model.KEY]);
+    await chrome.storage.local.set({ [model.KEY]: model.patch(stored?.[model.KEY], patch, mobile) });
+    return { success: true };
+  }
+
   function persist(delta) {
     const patch = Object.fromEntries(Object.entries(delta).filter(([key, value]) =>
       desired(key) !== value));
     if (!Object.keys(patch).length) return;
     for (const [key, value] of Object.entries(patch)) pending.set(key, value);
+    const saved = response => {
+      for (const [key, value] of Object.entries(patch)) if (pending.get(key) === value) pending.delete(key);
+      if (!response?.success) {
+        inform("Could not save playback preferences.");
+      } else if (Object.hasOwn(patch, "normalRate") && !pending.has("normalRate") && binding &&
+        preferences.normalRate !== binding.normal) {
+        // Reconcile conflicting external edits from current local storage.
+        // A delayed response snapshot must not overwrite a newer choice.
+        const current = generation, revision = preferenceRevision;
+        AT.Storage.get([model.KEY]).then(stored => {
+          if (running && generation === current && preferenceRevision === revision) changed(stored?.[model.KEY]);
+        }).catch(() => {});
+      }
+    };
+    let settled = false;
+    const answer = (response, unreachable) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (!unreachable) { saved(response); return; }
+      writeHere(patch).then(saved, () => saved(null));
+    };
+    const timer = setTimeout(() => answer(null, true), WORKER_REPLY_MS);
     try {
       chrome.runtime.sendMessage({ type: "UPDATE_SPEED_CONTROL_PREFERENCES", patch, mobile }, response => {
-        for (const [key, value] of Object.entries(patch)) if (pending.get(key) === value) pending.delete(key);
-        if (chrome.runtime.lastError || !response?.success) {
-          inform("Could not save playback preferences.");
-        } else if (Object.hasOwn(patch, "normalRate") && !pending.has("normalRate") && binding &&
-          preferences.normalRate !== binding.normal) {
-          // Reconcile conflicting external edits from current local storage.
-          // A delayed response snapshot must not overwrite a newer choice.
-          const current = generation, revision = preferenceRevision;
-          AT.Storage.get([model.KEY]).then(stored => {
-            if (running && generation === current && preferenceRevision === revision) changed(stored?.[model.KEY]);
-          }).catch(() => {});
-        }
+        answer(response, !!chrome.runtime.lastError);
       });
     } catch {
-      for (const key of Object.keys(patch)) pending.delete(key);
-      inform("Could not save playback preferences.");
+      answer(null, true);
     }
   }
 

@@ -6,7 +6,7 @@
 </picture>
 
 <p>
-  <a href="CHANGELOG.md"><img src=".github/assets/badge-v-tracker.svg" height="24" alt="Version 8.2.12"></a>
+  <a href="CHANGELOG.md"><img src=".github/assets/badge-v-tracker.svg" height="24" alt="Version 8.2.13"></a>
   <a href="manifest.json"><img src=".github/assets/badge-manifest.svg" height="24" alt="Manifest V3"></a>
   <a href="PRIVACY.md"><img src=".github/assets/badge-cloud-sync.svg" height="24" alt="Cloud sync optional"></a>
 </p>
@@ -85,7 +85,7 @@ Add this URL in **SideStore → Sources → +**:
 https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-source/source.json
 ```
 
-[Download An1meTracker-8.2.12.ipa](https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-v8.2.12/An1meTracker-8.2.12.ipa) · [All releases](https://github.com/thomasthanos/An1me-Tracker/releases)
+[Download An1meTracker-8.2.13.ipa](https://github.com/thomasthanos/An1me-Tracker/releases/download/tracker-v8.2.13/An1meTracker-8.2.13.ipa) · [All releases](https://github.com/thomasthanos/An1me-Tracker/releases)
 
 The source URL is for **Add Source**; the IPA is for **My Apps → +**. Keep LocalDevVPN connected while installing or refreshing.
 

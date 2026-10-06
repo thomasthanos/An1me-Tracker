@@ -36,10 +36,9 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• One button for website access: Allow website access asks Safari for every site the tracker uses at once.\n" +
-    "• If Safari does not allow them, Open Safari Settings goes through this app to the extension's page: All Websites → Allow.\n" +
-    "• No separate setup page opens after installing or updating.\n" +
-    "• Scripts still run on an1me.to only; online work pauses until access is allowed and local progress keeps saving.\n" +
+    "• Speed control settings save again on iPhone: Could not save speed preference no longer blocks turning it on or choosing a speed.\n" +
+    "• The speed button in the player keeps its chosen speed even when the extension's background is not answering.\n" +
+    "• Website access stays one button: Allow website access asks Safari for every site the tracker uses at once.\n" +
     "• AniList stays disabled on mobile.";
 
   return {

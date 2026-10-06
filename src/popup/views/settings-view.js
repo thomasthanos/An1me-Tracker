@@ -427,6 +427,16 @@
     updateSpeedControl();
   }
 
+  // The worker serialises preference writes. When no worker answers at all (iOS can leave the extension's worker
+  // unreachable for a while), the popup writes the same patch itself: these are device-local settings.
+  async function writeSpeedPreferencesHere(delta, mobile) {
+    const model = globalThis.AnimeTrackerSpeedPreferences;
+    const stored = await chrome.storage.local.get([model.KEY]);
+    const next = model.patch(stored?.[model.KEY], delta, mobile);
+    await chrome.storage.local.set({ [model.KEY]: next });
+    return next;
+  }
+
   async function saveSpeedControlPatch(delta) {
     if (speedBusy) return;
     const model = globalThis.AnimeTrackerSpeedPreferences;
@@ -436,8 +446,14 @@
     const revision = speedRevision;
     try {
       model.patch(speedPreferences, delta, mobile);
-      const response = await window.AnimeTracker.sendRuntimeRequest(
-        { type: "UPDATE_SPEED_CONTROL_PREFERENCES", patch: delta, mobile }, { timeoutMs: 10000 });
+      let response;
+      try {
+        response = await window.AnimeTracker.sendRuntimeRequest(
+          { type: "UPDATE_SPEED_CONTROL_PREFERENCES", patch: delta, mobile }, { timeoutMs: 4000 });
+      } catch (unreachable) {
+        window.PopupLogger?.warn?.("Settings", "Worker did not answer; saving speed preference here:", unreachable);
+        response = { success: true, preferences: await writeSpeedPreferencesHere(delta, mobile) };
+      }
       if (response?.success !== true || !response.preferences) throw new Error(response?.error || "Speed preferences were not saved");
       // Storage events may already contain a newer edit from another popup or the player.
       if (revision === speedRevision) speedPreferences = model.normalize(response.preferences, mobile);
