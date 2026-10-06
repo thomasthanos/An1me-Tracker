@@ -51,8 +51,15 @@ function setup(mobile) {
     } } };
   window.testBind = video => { window.testVideo = video; for (const listener of window.testVideoSubscribers) listener(video); };
   window.testMakeVideo = () => {
-    const host = document.createElement('div'); host.className = 'art-video-player'; host.style.cssText = 'position:relative;width:390px;height:240px';
-    host.innerHTML = '<video class="art-video" style="width:100%;height:100%"></video><div class="art-controls-right"></div>';
+    // an1me.to's ArtPlayer bar: full on a 390px phone, with room on desktop (see speed-control-phone-layout.test.js).
+    const host = document.createElement('div'); host.className = 'art-video-player art-control-show'; host.style.cssText = 'position:relative;width:100%;height:240px';
+    const control = (name, width = 38) => `<div class="art-control art-control-${name}" style="flex:none;width:${width}px;height:38px"></div>`;
+    host.innerHTML = '<video class="art-video" style="width:100%;height:100%"></video>' +
+      '<div class="art-bottom" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;padding:0 10px">' +
+      '<div class="art-controls" style="display:flex;height:38px"><div class="art-controls-left" style="display:flex">' +
+      control('seek-backward') + control('playAndPause') + control('seek-forward') + control('volume') + control('time', 84) + '</div>' +
+      '<div class="art-controls-center" style="flex:1"></div><div class="art-controls-right" style="display:flex">' +
+      control('quality', 48) + control('setting') + control('fullscreen') + '</div></div></div>';
     document.body.append(host); const video = host.querySelector('video');
     Object.defineProperty(video, 'readyState', { configurable: true, get: () => 1 });
     video.playbackRate = 1.25; video.volume = .7; video.muted = false; return video;
@@ -82,7 +89,10 @@ async function exercise(mobile) {
     equal(testVideo.playbackRate, 1.25, 'unset normal leaves player untouched'); equal(testWrites.length, 0, 'no default writes');
     equal(testVideo.volume, .7, 'native volume untouched'); equal(testIntervals, 0, 'no permanent polling');
     const rect = document.querySelector('.at-speed-button').getBoundingClientRect();
-    equal(rect.width >= 44 && rect.height >= 44, true, '44px touch target');
+    if (document.querySelector('.at-speed-control').classList.contains('at-speed-bar')) {
+      equal(rect.width >= 44, true, 'wide enough to tap in the bar');
+      equal(Math.round(rect.height), Math.round(document.querySelector('.art-controls').getBoundingClientRect().height), 'as tall as the player bar');
+    } else equal(rect.width >= 44 && rect.height >= 44, true, '44px touch target');
     equal(!!document.querySelector('.at-speed-button svg'), true, 'vector icon');
   });
   if (!mobile) {
@@ -154,9 +164,17 @@ async function exercise(mobile) {
     const host = testVideo.parentElement, widget = document.querySelector('.at-speed-control');
     host.querySelector('.art-controls-right').remove(); await wait(200);
     equal(widget.parentElement, host, 'fallback wrapper');
-    const controls = document.createElement('div'); controls.className = 'art-controls-right'; host.append(controls); await wait(200);
-    equal(widget.parentElement, controls, 'late player controls');
-    controls.replaceChildren(); await wait(200); equal(widget.parentElement, controls, 'replacement controls remounted');
+    // ArtPlayer rebuilds the row with its own controls in it.
+    const playerControls = () => ['quality', 'setting', 'fullscreen'].map(name => {
+      const node = document.createElement('div'); node.className = `art-control art-control-${name}`;
+      node.style.cssText = `flex:none;width:${name === 'quality' ? 48 : 38}px;height:38px`; return node;
+    });
+    const controls = document.createElement('div'); controls.className = 'art-controls-right'; controls.style.display = 'flex';
+    controls.append(...playerControls()); host.querySelector('.art-controls').append(controls); await wait(200);
+    // A phone's bar has no room for it (it stays in the player's corner); a desktop bar adopts it.
+    const home = mobile ? host : controls;
+    equal(widget.parentElement, home, 'late player controls');
+    controls.replaceChildren(...playerControls()); await wait(200); equal(widget.parentElement, home, 'replacement controls remounted');
     equal(document.querySelectorAll('.at-speed-control').length, 1, 'no duplicate UI');
   });
   await test('rejected setter reports the actual rate and never stores rejected choice', async () => {

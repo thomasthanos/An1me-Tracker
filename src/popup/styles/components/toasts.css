@@ -16,7 +16,9 @@
   box-shadow: var(--at-toast-shadow);
   border: 1px solid rgba(var(--ink-rgb), 0.08);
   color: #fff;
-  z-index: 10001;
+  /* Above the Fetch & Import overlay (100000): a toast answers an action taken inside that panel
+     (copying a log row), and at 10001 it answered from behind it. */
+  z-index: 100002;
   opacity: 0;
   pointer-events: auto;
   overflow: hidden;

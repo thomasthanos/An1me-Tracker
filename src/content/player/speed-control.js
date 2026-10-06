@@ -64,8 +64,7 @@
   function inform(message) {
     if (!binding) return;
     binding.status.textContent = message;
-    binding.menu.hidden = false;
-    binding.button.setAttribute("aria-expanded", "true");
+    setMenu(true);
   }
 
   function refresh() {
@@ -133,7 +132,7 @@
     clearTimeout(b.holdTimer); b.holdTimer = null;
     b.held = false; b.toggled = false; b.normal = rate;
     persist({ normalRate: rate });
-    b.menu.hidden = true; b.button.setAttribute("aria-expanded", "false");
+    setMenu(false);
   }
 
   function saveAudio(b) {
@@ -166,11 +165,19 @@
     refresh();
   }
 
+  // In ArtPlayer's bar the button is one of its controls: as tall as the bar and as flat as the controls beside it.
+  // In the player's corner it sits just above ArtPlayer's bar layer (60), below its loading, notices and settings,
+  // and hides with the controls unless its menu is open, so an unseen button cannot catch a tap.
   const CSS = `
     .at-speed-control{position:relative;display:inline-flex;flex:none;align-items:center;font:600 13px system-ui,sans-serif;color:#f7fafc;z-index:30}
     .at-speed-control.at-speed-overlay{position:absolute;top:10px;right:10px}
+    .art-video-player>.at-speed-control.at-speed-overlay{z-index:65}
+    .art-video-player:not(.art-control-show):not(.art-hover)>.at-speed-overlay:not(.at-speed-open){visibility:hidden;opacity:0}
     .at-speed-control button{box-sizing:border-box;cursor:pointer;color:inherit;font:inherit;border:1px solid #ffffff30;background:#15202e;border-radius:10px;min-height:44px;min-width:44px;padding:8px;line-height:1.2}
     .at-speed-control .at-speed-button{display:flex;align-items:center;justify-content:center;gap:5px;touch-action:none}
+    .at-speed-control.at-speed-bar{align-self:stretch}
+    .at-speed-bar .at-speed-button{height:100%;min-height:0;padding:0 8px;border:0;border-radius:6px;background:none}
+    .at-speed-phone.at-speed-bar .at-speed-button svg{display:none}
     .at-speed-button svg{width:18px;height:18px;flex:none;pointer-events:none}
     .at-speed-control button:focus-visible{outline:2px solid #70d8ff;outline-offset:2px}
     .at-speed-menu{position:absolute;right:0;bottom:calc(100% + 6px);width:184px;box-sizing:border-box;padding:8px;background:#101b28;border:1px solid #70d8ff55;border-radius:14px;box-shadow:0 4px 12px #0008;max-height:200px;overflow:auto}
@@ -182,18 +189,64 @@
     .at-speed-control[hidden],.at-speed-menu[hidden]{display:none!important}
   `;
 
+  // How wide the button is in the bar, until it has been there to be measured.
+  const BAR_WIDTH_ESTIMATE = mobile ? 44 : 72;
+
+  // The room ArtPlayer's bar has left: past its right-hand group up to the edge .art-bottom clips, plus the gap it
+  // leaves between its left- and right-hand groups. The button's own width does not count against it.
+  function artBarHasRoom(b, controls) {
+    const clip = (controls.closest(".art-bottom") || b.root).getBoundingClientRect();
+    const right = controls.getBoundingClientRect();
+    const left = controls.parentElement?.querySelector(":scope > .art-controls-left")?.getBoundingClientRect();
+    const own = b.widget.parentNode === controls ? b.widget.getBoundingClientRect().width : 0;
+    const room = clip.right - right.right + Math.max(0, left ? right.left - left.right : 0) + own;
+    return room >= (b.barWidth || BAR_WIDTH_ESTIMATE);
+  }
+
+  // ArtPlayer's bar when it has room, first on its right so fullscreen stays last. A phone held upright has none (back,
+  // play, forward, volume, the time, quality, settings and fullscreen fill it), and the button appended after
+  // fullscreen was pushed past the edge .art-bottom clips: never seen upright, and sideways after fullscreen and taller
+  // than the bar. Without room it goes to the player's top-right corner, and back to the bar when the phone is turned.
   function mount() {
     const b = binding;
     if (!b || !b.video.isConnected) return;
     const controls = b.root.querySelector(".art-controls-right, .plyr__controls");
-    const target = controls || b.root;
+    const artBar = !!controls?.matches(".art-controls-right");
+    const inBar = !!controls && (!artBar || artBarHasRoom(b, controls));
+    const target = inBar ? controls : b.root;
     if (b.widget.parentNode === target) return;
-    b.widget.classList.toggle("at-speed-overlay", !controls);
-    if (!controls && b.doc.defaultView.getComputedStyle(target).position === "static") {
+    b.widget.classList.toggle("at-speed-overlay", !inBar);
+    b.widget.classList.toggle("at-speed-bar", inBar && artBar);
+    if (!inBar && b.doc.defaultView.getComputedStyle(target).position === "static") {
       b.positionTarget = target; b.oldPosition = target.style.position;
       target.style.position = "relative";
     }
-    target.append(b.widget);
+    if (inBar && artBar) {
+      target.prepend(b.widget);
+      b.barWidth = b.widget.getBoundingClientRect().width || b.barWidth;
+    } else target.append(b.widget);
+    fitMenu();
+  }
+
+  // The menu opens away from the edge the button sits on (up from the bar, down from the corner) and is never taller
+  // than the player leaves room for. While it is open the corner button stays shown, even when ArtPlayer hides its
+  // controls.
+  function fitMenu() {
+    const b = binding;
+    if (!b || b.menu.hidden) return;
+    const clip = (b.widget.closest(".art-bottom") || b.root).getBoundingClientRect();
+    const box = b.widget.getBoundingClientRect();
+    const room = b.widget.classList.contains("at-speed-overlay") ? clip.bottom - box.bottom - 12 : box.top - clip.top - 12;
+    b.menu.style.maxHeight = `${Math.max(88, Math.floor(room))}px`;
+  }
+
+  function setMenu(open) {
+    const b = binding;
+    if (!b) return;
+    b.menu.hidden = !open;
+    b.button.setAttribute("aria-expanded", String(open));
+    b.widget.classList.toggle("at-speed-open", open);
+    fitMenu();
   }
 
   function observeControls() {
@@ -247,7 +300,7 @@
     const doc = video.ownerDocument;
     const root = video.closest(".art-video-player,.artplayer-app,.plyr") || video.parentElement;
     if (!root) return;
-    const widget = doc.createElement("div"); widget.className = "at-speed-control";
+    const widget = doc.createElement("div"); widget.className = mobile ? "at-speed-control at-speed-phone" : "at-speed-control";
     const button = doc.createElement("button"); button.type = "button"; button.className = "at-speed-button";
     button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-expanded", "false");
     button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17a9 9 0 1 1 16 0M12 13l4-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="13" r="1.5" fill="currentColor"/></svg>';
@@ -270,10 +323,14 @@
     listen(button, "click", event => {
       event.stopPropagation();
       if (b.suppressClick) { b.suppressClick = false; event.preventDefault(); return; }
-      menu.hidden = !menu.hidden; button.setAttribute("aria-expanded", String(!menu.hidden));
+      setMenu(menu.hidden);
     });
-    listen(widget, "keydown", event => { if (event.key === "Escape") { menu.hidden = true; button.setAttribute("aria-expanded", "false"); button.focus(); } });
-    listen(doc, "click", event => { if (!widget.contains(event.target)) { menu.hidden = true; button.setAttribute("aria-expanded", "false"); } });
+    listen(widget, "keydown", event => { if (event.key === "Escape") { setMenu(false); button.focus(); } });
+    listen(doc, "click", event => { if (!widget.contains(event.target)) setMenu(false); });
+    // Turning a phone resizes the player: the bar may now have room for the button, or no longer.
+    let resizeTimer = null;
+    listen(doc.defaultView, "resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(mount, 100); });
+    b.cleanups.push(() => clearTimeout(resizeTimer));
     if (mobile) {
       listen(button, "pointerdown", event => {
         if (event.button !== 0 || b.pointerId != null) return;
@@ -281,7 +338,7 @@
         try { button.setPointerCapture(event.pointerId); } catch {}
         b.holdTimer = setTimeout(() => {
           b.holdTimer = null; b.suppressClick = true;
-          menu.hidden = true; button.setAttribute("aria-expanded", "false"); hold();
+          setMenu(false); hold();
         }, 300);
       });
       const endPointer = event => {
