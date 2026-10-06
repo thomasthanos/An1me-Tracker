@@ -12,6 +12,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
 
+## [8.2.13] — 2026-10-06
+
+### Fixed
+
+- **Speed control on iPhone.** Turning speed control on or off, or choosing a speed in Settings, could fail with
+  **Could not save speed preference**, so the setting never changed and the player's speed button could stay
+  missing. The save goes through the extension's background, which on iPhone can stop answering for a while.
+  The popup and the player now wait at most four seconds for it and otherwise save the change on the device
+  themselves; these are device-local settings. A save the background actually refuses still shows the error.
+
 ## [8.2.12] — 2026-10-05
 
 ### Changed

@@ -20,6 +20,11 @@ function setup(mobile) {
   const get = keys => Object.fromEntries(keys.filter(key => key in window.testStore).map(key => [key, structuredClone(window.testStore[key])]));
   window.chrome = { runtime: { lastError: null, sendMessage(message, callback) {
     window.testWrites.push(structuredClone(message));
+    if (window.testWorker === 'unreachable') {
+      queueMicrotask(() => { window.chrome.runtime.lastError = { message: 'Could not establish connection. Receiving end does not exist.' };
+        callback(undefined); window.chrome.runtime.lastError = null; });
+      return;
+    }
     const deliver = () => {
     const preferences = window.AnimeTrackerSpeedPreferences.patch(window.testStore.speedControlPreferences, message.patch, message.mobile);
     const oldValue = window.testStore.speedControlPreferences; window.testStore.speedControlPreferences = preferences;
@@ -28,7 +33,14 @@ function setup(mobile) {
     };
     if (window.testDelayWrites) { window.testDeliveryQueue.push(deliver); return; }
     return deliver();
-  } }, storage: { local: { get(keys, callback) { const data = get(keys); if (callback) queueMicrotask(() => callback(data)); else return Promise.resolve(data); } },
+  } }, storage: { local: { get(keys, callback) { const data = get(keys); if (callback) queueMicrotask(() => callback(data)); else return Promise.resolve(data); },
+    // Only the fallback for a worker that cannot be reached writes here.
+    set(items) {
+      window.testDirectWrites = (window.testDirectWrites || 0) + 1;
+      const oldValue = window.testStore.speedControlPreferences; window.testStore.speedControlPreferences = items.speedControlPreferences;
+      for (const listener of window.testStorageListeners) listener({ speedControlPreferences: { oldValue, newValue: items.speedControlPreferences } }, 'local');
+      return Promise.resolve();
+    } },
     onChanged: { addListener: listener => window.testStorageListeners.add(listener), removeListener: listener => window.testStorageListeners.delete(listener) } } };
   window.AnimeTrackerUtils = { isMobileDevice: () => mobile };
   window.AnimeTrackerContent = { Storage: { get: async keys => get(keys) },
@@ -181,6 +193,16 @@ async function exercise(mobile) {
     equal(video.playbackRate, testStore.speedControlPreferences.normalRate, 'iframe normal restored');
     S.stop(); equal(doc.querySelectorAll('.at-speed-control,#at-speed-control-style').length, 0, 'iframe cleanup');
     frame.remove(); testBind(previous);
+  });
+  await test('an unreachable worker does not lose the chosen speed: the page saves it itself', async () => {
+    await S.start(); await wait(30);
+    window.testWorker = 'unreachable'; window.testDirectWrites = 0;
+    const target = testStore.speedControlPreferences?.normalRate === 1.5 ? 2 : 1.5;
+    document.querySelector(`[data-speed-rate="${target}"]`).click(); await wait(60);
+    equal(testStore.speedControlPreferences.normalRate, target, 'stored on the device');
+    equal(window.testDirectWrites, 1, 'one direct write');
+    equal(document.querySelector('.at-speed-status').textContent, '', 'no failure message');
+    window.testWorker = null; S.stop();
   });
   return results;
 }

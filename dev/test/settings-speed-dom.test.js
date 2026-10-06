@@ -40,9 +40,20 @@ function setup() {
     if (window.testHoldRead) return new Promise(resolve => { window.testReadReply = () => resolve(snapshot); });
     return snapshot;
   },
-    set() { throw new Error("Popup must not write preferences directly"); } }, onChanged: { addListener: listener => window.testStorageListeners.add(listener) } },
+    // Direct writes are only the fallback for a worker that cannot be reached.
+    set: async items => {
+      if (!window.testAllowDirectWrite) throw new Error("Popup must not write preferences directly");
+      window.testDirectWrites = (window.testDirectWrites || 0) + 1;
+      window.testStorageChange(items.speedControlPreferences);
+    } }, onChanged: { addListener: listener => window.testStorageListeners.add(listener) } },
     runtime: { lastError: null, sendMessage(message, callback) {
       window.testMessages.push(structuredClone(message));
+      if (window.testWorker === "unreachable") {
+        setTimeout(() => { window.chrome.runtime.lastError = { message: "Could not establish connection. Receiving end does not exist." };
+          callback(undefined); window.chrome.runtime.lastError = null; });
+        return;
+      }
+      if (window.testWorker === "silent") return;
       const respond = () => {
         if (window.testFailNext) { window.testFailNext = false; callback({ success: false, error: "test save failed" }); return; }
         try {
@@ -189,6 +200,20 @@ async function runInBrowser(mobile) {
       window.testHoldReply = false; window.testReply(); await settle();
       equal(required("settingsNormalSpeed").value, "1.25", "confirmed selection");
       equal(required("settingsNormalSpeed").disabled, false, "selector restored");
+    });
+  }
+  for (const worker of ["unreachable", "silent"]) {
+    await test(`a worker that is ${worker} does not stop the change: the popup saves it itself`, async () => {
+      const target = required("settingsNormalSpeed").value === "1.5" ? "2" : "1.5";
+      window.testWorker = worker; window.testAllowDirectWrite = true; window.testDirectWrites = 0;
+      change("settingsNormalSpeed", target);
+      await new Promise(resolve => setTimeout(resolve, worker === "silent" ? 4300 : 50));
+      equal(window.testStore.speedControlPreferences.normalRate, Number(target), "stored on the device");
+      equal(window.testDirectWrites, 1, "one direct write");
+      equal(required("settingsNormalSpeed").value, target, "control shows the saved choice");
+      equal(required("settingsNormalSpeed").disabled, false, "control usable again");
+      equal(document.querySelector(".at-toast"), null, "no error for a change that was saved");
+      window.testWorker = null; window.testAllowDirectWrite = false;
     });
   }
   await test("OFF keeps the selectors present and disabled without changing the library", async () => {
