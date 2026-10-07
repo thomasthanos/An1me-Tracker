@@ -11,6 +11,18 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.8] — 2026-10-07
+
+### Changed
+
+- **Streamlined Safari manifest hosts.** Reduced Safari declared hosts to only endpoints requiring host permissions (`an1me.to`, `animefillerlist.com`, `myanimelist.net`, `s4.anilist.co`), relying on CORS for public APIs.
+- **Simplified one-screen iOS app.** Replaced multi-screen permissions UI and probing with a clean status screen (Extension and an1me.to access) and single contextual action button.
+- **Fast anime info refresh.** Cache and reuse last known working slug (`resolvedSlug`) to avoid redundant 404 lookups on refreshed titles.
+
+### Fixed
+
+- **Windows CRLF line endings in test harness.** Normalized line endings in `undeclared-host-access.test.js` to ensure reliable test execution across Windows and Linux.
+
 ## [8.3.7] — 2026-10-07
 
 ### Changed
