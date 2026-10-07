@@ -213,7 +213,8 @@ struct WebsiteAccessViewModel {
                 symbol: PermissionRow.symbol(forGroup: group?.id),
                 isRequired: isRequired,
                 status: status,
-                statusText: PermissionRow.label(for: status),
+                // Safari's own word: a website the extension has not been allowed shows "Ask" in Settings.
+                statusText: status == .missing ? "Ask" : PermissionRow.label(for: status),
                 items: items
             )
         }

@@ -25,8 +25,11 @@ test("grant page requests only declared origins, synchronously in the tap handle
   assert.ok(fs.existsSync(path.join(ROOT, "src/grant/grant.html")));
 });
 
-test("permission report confirms each declared origin with contains()", () => {
-  assert.match(read("background.js"), /permissionContains\(origin\)/);
+test("contains() is diagnostics only; grants come from getAll()", () => {
+  const bg = read("background.js");
+  assert.match(bg, /containsOrigins\.push\(origin\)/);
+  assert.match(bg, /const grantedOrigins = \[\.\.\.new Set\(\[\.\.\.listed, \.\.\.declared\.filter\(covered\)\]\)\]/);
+  assert.match(read("src/grant/grant.js"), /verifyAndReturn/);
 });
 
 test("Allow buttons no longer route to Settings", () => {

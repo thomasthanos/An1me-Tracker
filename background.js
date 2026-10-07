@@ -3560,14 +3560,20 @@ async function buildPermissionReport() {
   const listed = Array.isArray(all?.origins)
     ? all.origins.filter((origin) => typeof origin === "string")
     : [];
-  // Safari does not always list a site the user allowed from its own prompt in getAll() under the
-  // manifest's spelling (and a required host granted per site may be missing from it entirely), which left
-  // the app showing "Needs access" after Always Allow. contains() per declared origin is answered for that
-  // exact pattern, so it is asked too and either answer counts.
-  const confirmed = await Promise.all(declared.map((origin) => (listed.includes(origin)
-    ? Promise.resolve(true)
-    : permissionContains(origin))));
-  const grantedOrigins = [...new Set([...listed, ...declared.filter((_origin, index) => confirmed[index])])];
+  // Only getAll() counts as evidence. On Safari iOS, contains() answers true for a declared host that is
+  // still at "Ask" in Settings (8.3.4 reported Ready while Settings showed Ask), so it is recorded for
+  // Diagnostics only. getAll() may spell a grant differently from the manifest (*://host/*, no path), so
+  // hosts are compared, not strings.
+  const hostOf = (origin) => String(origin).replace(/^[a-z*]+:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+  const listedHosts = listed.map(hostOf);
+  const covered = (origin) => {
+    const host = hostOf(origin);
+    return listedHosts.some((granted) => granted === host ||
+      (granted.startsWith("*.") && (host === granted.slice(2) || host.endsWith(granted.slice(1)))));
+  };
+  const containsOrigins = [];
+  for (const origin of declared) if (await permissionContains(origin)) containsOrigins.push(origin);
+  const grantedOrigins = [...new Set([...listed, ...declared.filter(covered)])];
   const allWebsites = grantedOrigins.some(permissionPatternIsBroad);
   const blockedOrigins = allWebsites
     ? []
@@ -3581,6 +3587,9 @@ async function buildPermissionReport() {
     ...(Array.isArray(all?.permissions)
       ? { grantedPermissions: all.permissions.filter((permission) => typeof permission === "string") }
       : {}),
+    // Diagnostics only — not a grant (see above).
+    containsOrigins,
+    reportedOrigins: listed,
     extensionVersion: manifest.version,
     capturedAt: Date.now(),
   };
