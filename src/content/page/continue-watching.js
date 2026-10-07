@@ -611,6 +611,12 @@
                 .at-cw-actions { padding: 0 7px 6px; }
                 .at-cw-btn { padding: 4px 6px; font-size: 9.5px; }
             }
+            /* Touch: iOS keeps :hover after a tap, so the lift would stick; and the 30px close needs a
+               larger tap area. */
+            @media (hover: none) and (pointer: coarse) {
+                .at-cw-card:hover { transform: none; }
+                .at-cw-close::before { content: ""; position: absolute; inset: -7px; border-radius: 50%; }
+            }
         `;
   };
 })();
