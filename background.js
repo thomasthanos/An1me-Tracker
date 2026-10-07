@@ -3530,6 +3530,42 @@ function permissionContains(origin) {
   });
 }
 
+// Paths that answer directly: a redirect to another host would be CORS-filtered and read as "ask".
+const PERMISSION_PROBE_PATHS = { "s4.anilist.co": "/file/anilistcdn/", "api.jikan.moe": "/v4" };
+
+async function probeHost(host) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch(`https://${host}${PERMISSION_PROBE_PATHS[host] || "/"}`, {
+      method: "GET", credentials: "omit", cache: "no-store", redirect: "manual", signal: controller.signal,
+    });
+    try { response.body?.cancel?.(); } catch {}
+    // "basic" = the extension's privileged, CORS-exempt access. "cors" is what an unprivileged request to a
+    // CORS-enabled API also gets, so it proves nothing either way and is reported as such.
+    if (response.type === "basic" || response.type === "default") return "allowed";
+    return response.type === "cors" ? "unverified" : "blocked";
+  } catch {
+    return "blocked";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Wildcard hosts have no address of their own; they follow their apex (*.an1me.to follows an1me.to).
+// A failure is "ask" when some other host answered (the network works), "unreachable" when none did.
+async function probeDeclaredHosts(declared, hostOf) {
+  const concrete = (origin) => hostOf(origin).replace(/^\*\./, "");
+  const hosts = [...new Set(declared.map(concrete))];
+  const results = Object.fromEntries(await Promise.all(hosts.map(async (host) => [host, await probeHost(host)])));
+  const online = Object.values(results).some((result) => result !== "blocked");
+  return Object.fromEntries(declared.map((origin) => {
+    const result = results[concrete(origin)];
+    if (result === "allowed" || result === "unverified") return [origin, result];
+    return [origin, online ? "ask" : "unreachable"];
+  }));
+}
+
 async function buildPermissionReport() {
   const manifest = chrome.runtime.getManifest();
   const declared = [...(manifest.host_permissions || []), ...(manifest.optional_host_permissions || [])]
@@ -3560,21 +3596,15 @@ async function buildPermissionReport() {
   const listed = Array.isArray(all?.origins)
     ? all.origins.filter((origin) => typeof origin === "string")
     : [];
-  // Only getAll() counts as evidence. On Safari iOS, contains() answers true for a declared host that is
-  // still at "Ask" in Settings (8.3.4 reported Ready while Settings showed Ask), so it is recorded for
-  // Diagnostics only. getAll() may spell a grant differently from the manifest (*://host/*, no path), so
-  // hosts are compared, not strings.
+  // Neither API is evidence on Safari iOS: getAll() and contains() both answer "granted" for every declared
+  // host while Settings shows it at "Ask" (8.3.5 Diagnostics: 11/11 via getAll, 9 at Ask in Settings). So
+  // access is measured: each host is fetched once (no credentials). A host the extension may access is
+  // exempt from CORS, so the response is "basic"; one it may not is CORS-filtered ("cors"/"opaque") or
+  // refused outright. Both answers are kept so Diagnostics can show them side by side.
   const hostOf = (origin) => String(origin).replace(/^[a-z*]+:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
-  const listedHosts = listed.map(hostOf);
-  const covered = (origin) => {
-    const host = hostOf(origin);
-    return listedHosts.some((granted) => granted === host ||
-      (granted.startsWith("*.") && (host === granted.slice(2) || host.endsWith(granted.slice(1)))));
-  };
-  const containsOrigins = [];
-  for (const origin of declared) if (await permissionContains(origin)) containsOrigins.push(origin);
-  const grantedOrigins = [...new Set([...listed, ...declared.filter(covered)])];
-  const allWebsites = grantedOrigins.some(permissionPatternIsBroad);
+  const allWebsites = false; // getAll()'s broad grant is reported as allWebsitesReported, never trusted
+  const probes = await probeDeclaredHosts(declared, hostOf);
+  const grantedOrigins = declared.filter((origin) => probes[origin] === "allowed");
   const blockedOrigins = allWebsites
     ? []
     : declared.filter((origin) => !grantedOrigins.includes(origin));
@@ -3588,8 +3618,9 @@ async function buildPermissionReport() {
       ? { grantedPermissions: all.permissions.filter((permission) => typeof permission === "string") }
       : {}),
     // Diagnostics only — not a grant (see above).
-    containsOrigins,
-    reportedOrigins: listed,
+    apiOrigins: listed,
+    allWebsitesReported: listed.some(permissionPatternIsBroad),
+    probes,
     extensionVersion: manifest.version,
     capturedAt: Date.now(),
   };

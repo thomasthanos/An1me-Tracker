@@ -52,6 +52,12 @@ final class PermissionCoordinator: ObservableObject {
         defer { isRefreshing = false }
 
         let state = await statusService.currentState()
+        // A report measured by a different extension version (an app update) describes a manifest that no
+        // longer exists; drop it so the next reading is the only truth.
+        if let stored = store.load(), let reported = stored.extensionVersion, !reported.isEmpty,
+           let current = SafariExtensionIdentity.version, reported != current {
+            store.clear()
+        }
         apply(state: state, snapshot: store.load())
     }
 

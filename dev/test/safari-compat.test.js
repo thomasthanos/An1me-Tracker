@@ -14,7 +14,7 @@ const vm = require("vm");
 const { execFileSync } = require("child_process");
 // The iOS host set is decided by dev/scripts/ios-permissions.js, not by the desktop manifest: the two
 // builds answer to different questions.
-const { REQUIRED_ORIGINS, OPTIONAL_ORIGINS, ALL_WEBSITES, UNSUPPORTED_IOS_PERMISSIONS } = require("../scripts/ios-permissions");
+const { REQUIRED_ORIGINS, OPTIONAL_ORIGINS, UNSUPPORTED_IOS_PERMISSIONS } = require("../scripts/ios-permissions");
 
 const REPO = path.join(__dirname, "../..");
 
@@ -78,13 +78,13 @@ function loadCoordinator(withNotifications) {
   check("Safari manifest keeps every other permission", packaged.permissions, source.permissions.filter((p) => !UNSUPPORTED_IOS_PERMISSIONS.includes(p)));
   check("Safari manifest keeps the content scripts and version", [packaged.content_scripts, packaged.version], [source.content_scripts, source.version]);
   const core = ["https://an1me.to/*", "https://*.an1me.to/*"];
-  // Safari prompts only for optional hosts requested from a tap, so every non-required group ships as one
-  // requestable block, with the all-websites switch beside it.
+  // Safari iOS reports every declared host as granted even at "Ask", so optional hosts gave no truthful
+  // request flow: every iOS host is required, and real access is measured by probing (see background.js).
   const iosHosts = [...REQUIRED_ORIGINS, ...OPTIONAL_ORIGINS];
-  check("only the tracking site stays required in Safari", packaged.host_permissions, core);
-  check("required origins are exactly the tracking-site group", packaged.host_permissions, [...REQUIRED_ORIGINS]);
-  check("one tap can request every service, and Settings has an All Websites switch", packaged.optional_host_permissions, [...OPTIONAL_ORIGINS, ALL_WEBSITES]);
-  check("the disabled mobile AniList API is not requested", packaged.optional_host_permissions.includes("https://graphql.anilist.co/*"), false);
+  check("every iOS host is required, the tracking site first", packaged.host_permissions.slice(0, 2), core);
+  check("required origins are exactly the iOS groups", packaged.host_permissions, [...REQUIRED_ORIGINS]);
+  check("nothing optional is declared", [OPTIONAL_ORIGINS.length, "optional_host_permissions" in packaged], [0, false]);
+  check("the disabled mobile AniList API is not requested", packaged.host_permissions.includes("https://graphql.anilist.co/*"), false);
   check("desktop-only hosts stay out of the iOS build",
     ["https://graphql.anilist.co/*", "https://anilist.co/*", "https://accounts.google.com/*"].filter((host) => iosHosts.includes(host)), []);
   // These three were inherited from the desktop manifest and no code path in this repository produces a
