@@ -71,8 +71,10 @@ struct HomeViewModel {
 
     func perform(_ action: DashboardAction) async {
         switch action {
-        case .enableExtension, .allowRequiredAccess:
+        case .enableExtension:
             await coordinator.openExtensionSettings()
+        case .allowRequiredAccess:
+            permissions.requestAll()
         case .verifyAccess:
             coordinator.startVerificationInSafari()
         case .openSite:

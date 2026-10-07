@@ -16,10 +16,13 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
-                Button {
-                    Task { await coordinator.openExtensionSettings() }
-                } label: {
-                    Label("Open Extension Settings", systemImage: "gear")
+                if !WebsiteAccessViewModel(coordinator: coordinator).extensionConfirmed {
+                    // Last resort: only Settings can switch the extension on.
+                    Button {
+                        Task { await coordinator.openExtensionSettings() }
+                    } label: {
+                        Label("Open Extension Settings", systemImage: "gear")
+                    }
                 }
 
                 Button {

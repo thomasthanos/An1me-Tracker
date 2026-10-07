@@ -93,10 +93,13 @@ struct SafariExtensionView: View {
 
     private var actionsSection: some View {
         Section {
-            Button {
-                Task { await model.openSettings() }
-            } label: {
-                Label("Open Safari Extension Settings", systemImage: "gear")
+            if !model.isConfirmed {
+                // Last resort: only Settings can switch the extension on.
+                Button {
+                    Task { await model.openSettings() }
+                } label: {
+                    Label("Open Safari Extension Settings", systemImage: "gear")
+                }
             }
 
             Button {

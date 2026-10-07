@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <title>An1me Tracker · Website Access</title>
+  <link rel="stylesheet" href="grant.css" />
+</head>
+<body>
+  <main class="sheet" role="dialog" aria-labelledby="grantTitle" aria-describedby="grantDetail">
+    <img class="icon" src="../icons/icon128.png" alt="" width="56" height="56" />
+    <h1 id="grantTitle">Allow access</h1>
+    <p id="grantDetail" class="detail">Safari will ask you to allow these websites for An1me Tracker.</p>
+    <ul id="grantHosts" class="hosts"></ul>
+    <p id="grantStatus" class="status" role="status" aria-live="polite"></p>
+    <button id="grantAllow" class="primary" type="button">Allow</button>
+    <button id="grantCancel" class="secondary" type="button">Not Now</button>
+  </main>
+  <script src="grant.js"></script>
+</body>
+</html>

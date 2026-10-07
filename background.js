@@ -3510,6 +3510,26 @@ function permissionPatternIsBroad(origin) {
   return origin === "<all_urls>" || origin === "*://*/*";
 }
 
+function permissionContains(origin) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), 1500);
+    const done = (value) => { clearTimeout(timer); resolve(value === true); };
+    try {
+      const browserApi = self.browser?.permissions;
+      if (typeof browserApi?.contains === "function") {
+        browserApi.contains({ origins: [origin] }).then(done, () => done(false));
+        return;
+      }
+      const chromeApi = self.chrome?.permissions;
+      if (typeof chromeApi?.contains === "function") {
+        chromeApi.contains({ origins: [origin] }, (value) => done(self.chrome.runtime.lastError ? false : value));
+        return;
+      }
+    } catch {}
+    done(false);
+  });
+}
+
 async function buildPermissionReport() {
   const manifest = chrome.runtime.getManifest();
   const declared = [...(manifest.host_permissions || []), ...(manifest.optional_host_permissions || [])]
@@ -3537,9 +3557,17 @@ async function buildPermissionReport() {
     resolve(null);
   });
 
-  const grantedOrigins = Array.isArray(all?.origins)
+  const listed = Array.isArray(all?.origins)
     ? all.origins.filter((origin) => typeof origin === "string")
     : [];
+  // Safari does not always list a site the user allowed from its own prompt in getAll() under the
+  // manifest's spelling (and a required host granted per site may be missing from it entirely), which left
+  // the app showing "Needs access" after Always Allow. contains() per declared origin is answered for that
+  // exact pattern, so it is asked too and either answer counts.
+  const confirmed = await Promise.all(declared.map((origin) => (listed.includes(origin)
+    ? Promise.resolve(true)
+    : permissionContains(origin))));
+  const grantedOrigins = [...new Set([...listed, ...declared.filter((_origin, index) => confirmed[index])])];
   const allWebsites = grantedOrigins.some(permissionPatternIsBroad);
   const blockedOrigins = allWebsites
     ? []
@@ -3563,6 +3591,23 @@ const messageHandlers = {
     buildPermissionReport()
       .then((report) => sendResponse({ success: true, report }))
       .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
+    return true;
+  },
+  // The app's Allow buttons open https://an1me.to/?at_grant=… ; the content script there cannot call
+  // permissions.request, so the tab is moved to the extension's own grant page, where a tap can.
+  OPEN_GRANT_PAGE(message, sender, sendResponse) {
+    const tabId = sender?.tab?.id;
+    if (typeof tabId !== "number") {
+      sendResponse({ success: false, error: "no_tab" });
+      return false;
+    }
+    const query = new URLSearchParams();
+    query.set("hosts", String(message.hosts || "all").slice(0, 2000));
+    if (message.title) query.set("title", String(message.title).slice(0, 80));
+    chrome.tabs.update(tabId, { url: chrome.runtime.getURL(`src/grant/grant.html?${query}`) }, () => {
+      const error = chrome.runtime.lastError;
+      sendResponse(error ? { success: false, error: error.message } : { success: true });
+    });
     return true;
   },
   GET_WEBSITE_ACCESS(_message, _sender, sendResponse) {

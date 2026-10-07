@@ -30,8 +30,10 @@ struct TrackedService: Identifiable, Equatable {
     let symbol: String
     let hosts: [String]
 
-    /// Any HTTP answer from the first host counts as reachable; the status code is the service's business.
-    var probeURL: URL? { hosts.first.flatMap { URL(string: "https://\($0)/") } }
+    /// Any HTTP answer from any of the service's hosts counts as reachable; the status code is the
+    /// service's business. A service is one name over several hosts (MyAnimeList's site and CDN), so one
+    /// host refusing the probe must not mark the whole service offline.
+    var probeURLs: [URL] { hosts.compactMap { URL(string: "https://\($0)/") } }
 
     /// Every specific manifest host, wildcards dropped (they have no single address to probe).
     static var all: [TrackedService] {
@@ -92,13 +94,13 @@ final class ServiceStatusMonitor: ObservableObject {
         defer { isChecking = false }
         for service in services where states[service.id] == nil { states[service.id] = .checking }
 
-        let probes = services.map { ($0.id, $0.probeURL) }
+        let probes = services.map { ($0.id, $0.probeURLs) }
         let results = await withTaskGroup(
             of: (String, ServiceReachability).self,
             returning: [(String, ServiceReachability)].self
         ) { group in
-            for (id, url) in probes {
-                group.addTask { (id, await ServiceStatusMonitor.probe(url)) }
+            for (id, urls) in probes {
+                group.addTask { (id, await ServiceStatusMonitor.probe(urls)) }
             }
             var collected: [(String, ServiceReachability)] = []
             for await result in group { collected.append(result) }
@@ -108,15 +110,25 @@ final class ServiceStatusMonitor: ObservableObject {
         lastChecked = Date()
     }
 
-    nonisolated private static func probe(_ url: URL?) async -> ServiceReachability {
-        guard let url else { return .offline }
+    nonisolated private static func probe(_ urls: [URL]) async -> ServiceReachability {
+        for url in urls {
+            // HEAD first (no body). Some API edges (Cloudflare in front of Jikan, for one) drop or reset a
+            // HEAD to the root instead of answering it, so a failed HEAD is retried once as GET.
+            for method in ["HEAD", "GET"] {
+                if await answers(url, method: method) { return .online }
+            }
+        }
+        return .offline
+    }
+
+    nonisolated private static func answers(_ url: URL, method: String) async -> Bool {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
-        request.httpMethod = "HEAD"
+        request.httpMethod = method
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
-            return response is HTTPURLResponse ? .online : .offline
+            return response is HTTPURLResponse
         } catch {
-            return .offline
+            return false
         }
     }
 

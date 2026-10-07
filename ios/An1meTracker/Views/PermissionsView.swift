@@ -27,7 +27,7 @@ struct PermissionsView: View {
                     Text("Optional")
                 } footer: {
                     if model.offersAllWebsites {
-                        Text("Turning on All Websites in Safari covers every optional website.")
+                        Text("Allow asks Safari for that group's websites. Safari's All Websites switch also covers them.")
                     }
                 }
             }
@@ -67,10 +67,20 @@ struct PermissionsView: View {
     }
 
     private func link(for row: PermissionRow) -> some View {
-        NavigationLink(value: row.id == PermissionRow.extensionID ? AppRoute.safariExtension : AppRoute.permission(row.id)) {
-            SettingsRow(symbol: row.symbol, title: row.title, value: row.statusText,
-                        valueColor: AppTheme.color(for: row.status),
-                        tint: row.status == .missing ? .orange : AppTheme.accent)
+        let requestable = model.canRequest(row)
+        return HStack(spacing: 8) {
+            NavigationLink(value: row.id == PermissionRow.extensionID ? AppRoute.safariExtension : AppRoute.permission(row.id)) {
+                SettingsRow(symbol: row.symbol, title: row.title, value: requestable ? nil : row.statusText,
+                            valueColor: AppTheme.color(for: row.status),
+                            tint: row.status == .missing ? .orange : AppTheme.accent)
+            }
+            if requestable {
+                Button("Allow") { model.request(row) }
+                    .buttonStyle(.borderless)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(AppTheme.accent)
+                    .accessibilityLabel("Allow \(row.title)")
+            }
         }
     }
 }
@@ -113,15 +123,15 @@ struct PermissionDetailView: View {
                     }
                 }
 
-                if row.status == .missing {
+                if model.canRequest(row) {
                     Section {
                         Button {
-                            Task { await coordinator.openExtensionSettings() }
+                            model.request(row)
                         } label: {
-                            Label("Open Safari Settings", systemImage: "gear")
+                            Label("Allow \(row.title)", systemImage: "checkmark.shield")
                         }
                     } footer: {
-                        Text("Safari decides website access. Allow it there; the app rechecks when you return.")
+                        Text("Opens Safari, where the tracker asks for these websites. The app updates when you come back.")
                     }
                 }
             } else {
