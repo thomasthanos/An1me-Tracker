@@ -123,7 +123,7 @@ struct RootView: View {
     // MARK: - Permissions
 
     private var permissions: some View {
-        Section("Permissions") {
+        Section {
             ForEach(visibleRows) { row in
                 SettingsRow(symbol: row.symbol,
                             title: row.title,
@@ -131,6 +131,8 @@ struct RootView: View {
                             valueColor: AppTheme.color(for: row.status),
                             tint: row.status == .missing ? .orange : AppTheme.accent)
             }
+        } header: {
+            Text("Permissions")
         } footer: {
             Text(model.lastVerifiedText)
         }
@@ -139,7 +141,7 @@ struct RootView: View {
     // MARK: - Permissions that need approval
 
     private var approvals: some View {
-        Section("Needs approval") {
+        Section {
             ForEach(pendingRows) { row in
                 Button {
                     model.request(row)
@@ -150,6 +152,8 @@ struct RootView: View {
                                 tint: AppTheme.accent)
                 }
             }
+        } header: {
+            Text("Needs approval")
         } footer: {
             Text("Safari asks once, on this device. Each button shows Safari's own permission sheet.")
         }
