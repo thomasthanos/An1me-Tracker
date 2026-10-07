@@ -27,6 +27,15 @@ The version in `manifest.json` is the single source of truth.
   `applyCloudUpdate`'s real debounce, removing a flaky "cancelled" result. A reserved list min-height stops
   near-empty categories from collapsing.
 
+### Changed
+
+- **iOS app rebuilt around Safari's own state, minimum iOS 26.2.** The companion app now reads the
+  extension's bundled `manifest.json` at runtime as the source of truth for *what* exists (Required vs
+  Optional websites and API permissions), and Safari's own extension state as the source of truth for
+  *Ready*. A Settings-style Permissions screen and a Services screen (real `HEAD` reachability probes, never
+  on a timer) replace the earlier website-access list. The extension report now also carries granted API
+  permissions. The deployment target is raised to iOS 26.2, removing the pre-26.2 "unable to check" paths.
+
 ## [8.3.1] — 2026-10-06
 
 ### Added

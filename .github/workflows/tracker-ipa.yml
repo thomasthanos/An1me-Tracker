@@ -27,7 +27,7 @@ env:
   APP_NAME: An1me Tracker
   # Match the iOS host ID generated for APP_NAME, including its case and hyphen.
   BUNDLE_ID: io.github.thomasthanos.An1me-Tracker
-  IOS_DEPLOYMENT_TARGET: "18.0"
+  IOS_DEPLOYMENT_TARGET: "26.2"
 
 jobs:
   ipa:
