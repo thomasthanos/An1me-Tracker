@@ -28,6 +28,9 @@ enum TrackerURLEvent: Equatable {
 
 enum PermissionBridge {
 
+    /// A report is a few hundred bytes at most; anything near this is not one of ours.
+    private static let maxPayloadBytes = 32 * 1024
+
     // MARK: - Reading
 
     static func event(from url: URL) -> TrackerURLEvent {
@@ -44,10 +47,11 @@ enum PermissionBridge {
     }
 
     /// Decodes the payload the extension attached. Returns `nil` for anything it cannot fully trust, so a
-    /// truncated or foreign link can never be shown as a verified reading.
+    /// truncated, stale or foreign link can never be shown as a verified reading.
     static func snapshot(from url: URL) -> PermissionSnapshot? {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let encoded = components.queryItems?.first(where: { $0.name == "p" })?.value,
+              encoded.utf8.count <= maxPayloadBytes,
               let data = decodeBase64URL(encoded)
         else { return nil }
 
@@ -66,9 +70,17 @@ enum PermissionBridge {
         let apiOrigins = payload["apiOrigins"] as? [String]
         let probes = payload["probes"] as? [String: String]
 
-        // `capturedAt` is milliseconds since the epoch, which is what JavaScript produces without help.
-        let milliseconds = (payload["capturedAt"] as? NSNumber)?.doubleValue
-        let capturedAt = milliseconds.map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date()
+        // Only origins the extension's own manifest can declare may be reported; anything else is forged.
+        let allowed = Set(ExtensionManifest.current.requiredHosts
+                          + ExtensionManifest.current.optionalHosts
+                          + ["<all_urls>", "*://*/*"])
+        guard Set(granted).isSubset(of: allowed), Set(blocked).isSubset(of: allowed) else { return nil }
+
+        // A report must carry the moment it was measured. A missing or far-off timestamp is rejected rather
+        // than silently replaced with "now", which would turn malformed input into a fresh-looking snapshot.
+        guard let milliseconds = (payload["capturedAt"] as? NSNumber)?.doubleValue else { return nil }
+        let capturedAt = Date(timeIntervalSince1970: milliseconds / 1000)
+        guard abs(capturedAt.timeIntervalSinceNow) <= 5 * 60 else { return nil }
 
         return PermissionSnapshot(
             grantedOrigins: granted,

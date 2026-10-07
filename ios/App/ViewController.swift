@@ -35,7 +35,6 @@ final class ViewController: UIViewController {
         view.backgroundColor = .black
 
         let root = RootView().environmentObject(PermissionCoordinator.shared)
-            .environmentObject(ServiceStatusMonitor.shared)
         let host = UIHostingController(rootView: root)
         host.view.backgroundColor = .black
         addChild(host)

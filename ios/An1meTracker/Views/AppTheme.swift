@@ -39,14 +39,6 @@ enum AppTheme {
         case .unknown: return .secondary
         }
     }
-
-    static func color(for state: ServiceReachability?) -> Color {
-        switch state {
-        case .some(.online): return .green
-        case .some(.offline): return .red
-        case .some(.checking), .none: return .secondary
-        }
-    }
 }
 
 extension View {

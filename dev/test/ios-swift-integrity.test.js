@@ -165,7 +165,7 @@ function check(label, condition, explanation) {
 
 // ─── Every file exists and is balanced ───────────────────────────────────────────────────────────────
 
-check("the app has Swift sources to check", files.length >= 25, `found ${files.length}`);
+check("the app has Swift sources to check", files.length >= 18, `found ${files.length}`);
 
 const unbalanced = [];
 for (const [file, source] of sources) {
@@ -330,18 +330,13 @@ const permissionModels = sources.get(path.join(IOS, "An1meTracker/Models/Permiss
 const extensionStatus = sources.get(path.join(IOS, "An1meTracker/Models/ExtensionStatus.swift"));
 
 const SWITCH_SITES = [
-  { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/ViewModels/HomeViewModel.swift", anchor: "func perform(_ action: DashboardAction) async" },
   { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/ViewModels/WebsiteAccessViewModel.swift", anchor: "func perform(_ action: DashboardAction) async" },
   { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/Models/DashboardModels.swift", anchor: "var title: String" },
   { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/Models/DashboardModels.swift", anchor: "var symbol: String" },
-  { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/ViewModels/HomeViewModel.swift", anchor: "private func tone(for state: AccessState)" },
   { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/ViewModels/WebsiteAccessViewModel.swift", anchor: "var statusTitle: String" },
   { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/Models/PermissionModels.swift", anchor: "var summary: String" },
   { enumSource: extensionStatus, enumName: "ExtensionEnabledState", file: "An1meTracker/Models/ExtensionStatus.swift", anchor: "var title: String" },
-  { enumSource: extensionStatus, enumName: "ExtensionEnabledState", file: "An1meTracker/ViewModels/HomeViewModel.swift", anchor: "private func tone(for state: ExtensionEnabledState)" },
-  { enumSource: extensionStatus, enumName: "ExtensionEnabledState", file: "An1meTracker/ViewModels/SafariExtensionViewModel.swift", anchor: "var stateLimitation: String?" },
   { enumSource: extensionStatus, enumName: "ExtensionEnabledState", file: "An1meTracker/Services/DiagnosticsService.swift", anchor: "private static func tone(for state: ExtensionEnabledState)" },
-  { enumSource: extensionStatus, enumName: "ExtensionEnabledState", file: "An1meTracker/Views/SafariExtensionView.swift", anchor: "private var stateSymbol: String" },
   { enumSource: permissionModels, enumName: "UnverifiedReason", file: "An1meTracker/Models/PermissionModels.swift", anchor: "var title: String" },
 ];
 
@@ -358,16 +353,17 @@ for (const site of SWITCH_SITES) {
   );
 }
 
-// ─── Every route has a destination ───────────────────────────────────────────────────────────────────
+// ─── The app is one screen, in the agreed order ───────────────────────────────────────────────────────
 
 const rootView = sources.get(path.join(IOS, "An1meTracker/Views/RootView.swift"));
-const rootCases = casesOf(rootView, "AppRoute");
-const destination = rootView ? bodyAfter(rootView, "navigationDestination(for: AppRoute.self)") : null;
-const missingRoutes = rootCases.filter((name) => destination && !destination.includes(`case .${name}`));
+const sections = ["header", "status", "permissions", "approvals", "diagnostics"];
+const order = sections.map((name) => rootView ? rootView.indexOf(`private var ${name}: some View`) : -1);
 check(
-  "every AppRoute has a destination",
-  rootCases.length > 0 && destination !== null && missingRoutes.length === 0,
-  destination === null ? "navigationDestination not found" : `unhandled: ${missingRoutes.join(", ")}`,
+  "the app is one screen: header, status, permissions, approvals, diagnostics",
+  rootView !== null &&
+    !/NavigationStack|navigationDestination/.test(rootView) &&
+    order.every((index, i) => index > -1 && (i === 0 || index > order[i - 1])),
+  `missing or out of order: ${sections.filter((name, i) => order[i] < 0 || (i > 0 && order[i] <= order[i - 1])).join(", ") || "none"}`,
 );
 
 console.log(failures === 0 ? "\nPASS" : `\nFAIL (${failures})`);

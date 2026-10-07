@@ -11,7 +11,9 @@
 //
 // `required: true` groups land in `host_permissions`; everything else lands in
 // `optional_host_permissions`, which is what lets one tap (or the Safari "All Websites" switch) grant the
-// rest. `graphql.anilist.co` is deliberately absent: the AniList API is disabled on mobile.
+// rest. Only the tracking site is required — content scripts run there — while the nine service origins are
+// optional so `browser.permissions.request()` shows Safari's native "would like to access …" sheet.
+// `graphql.anilist.co` is deliberately absent: the AniList API is disabled on mobile.
 "use strict";
 
 const ALL_WEBSITES = "<all_urls>";
@@ -31,7 +33,7 @@ const GROUPS = Object.freeze([
     id: "account",
     title: "Account & Sync",
     summary: "Sign-in and cloud library sync",
-    required: true,
+    required: false,
     hosts: Object.freeze([
       { origin: "https://identitytoolkit.googleapis.com/*", feature: "Email and password sign-in" },
       { origin: "https://securetoken.googleapis.com/*", feature: "Refreshing the sign-in session" },
@@ -42,7 +44,7 @@ const GROUPS = Object.freeze([
     id: "info",
     title: "Anime Information",
     summary: "Episode counts, filler flags and airing data",
-    required: true,
+    required: false,
     hosts: Object.freeze([
       { origin: "https://www.animefillerlist.com/*", feature: "Filler and canon episode lists" },
       { origin: "https://api.jikan.moe/*", feature: "Episode metadata and filler stand-in" },
@@ -53,7 +55,7 @@ const GROUPS = Object.freeze([
     id: "artwork",
     title: "Artwork",
     summary: "Cover images for library entries",
-    required: true,
+    required: false,
     hosts: Object.freeze([
       { origin: "https://s4.anilist.co/*", feature: "AniList cover images already stored in your library" },
       { origin: "https://cdn.myanimelist.net/*", feature: "MyAnimeList cover images" },
@@ -63,7 +65,7 @@ const GROUPS = Object.freeze([
     id: "skip",
     title: "Skip Data",
     summary: "Intro and outro times for Skip Outro",
-    required: true,
+    required: false,
     hosts: Object.freeze([
       { origin: "https://api.aniskip.com/*", feature: "Intro and outro timestamps" },
     ]),
@@ -107,9 +109,9 @@ function toSafariManifest(manifest, groups = GROUPS) {
   };
   delete safari.side_panel;
   safari.host_permissions = groups.filter((g) => g.required).flatMap((g) => g.hosts.map((h) => h.origin));
-  // Every host is required (8.3.6). Safari iOS answers permissions.contains()/getAll() as granted for any
-  // declared host even at "Ask", so optional hosts bought no truthful request flow — only a second list.
-  // Whatever stays optional is still emitted; with none, the key is omitted.
+  // Only the tracking site is required; the nine service origins are optional so the extension page can
+  // request them at runtime and Safari shows its own sheet. contains()/getAll() may over-report, which is
+  // why the report is measured by probing in background.js rather than trusting this list as "granted".
   const optional = groups.filter((g) => !g.required).flatMap((g) => g.hosts.map((h) => h.origin));
   if (optional.length) safari.optional_host_permissions = optional;
   else delete safari.optional_host_permissions;

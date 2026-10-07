@@ -11,6 +11,23 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.7] — 2026-10-07
+
+### Changed
+
+- **Optional service permissions.** Only `an1me.to` stays required; the nine service origins are now
+  `optional_host_permissions`, so the app's Approve button opens the extension grant page and Safari shows
+  its own "would like to access …" sheet instead of sending the user to Settings.
+- **One-screen app.** The native app is a single flow — logo, title, description, permissions, the ones
+  needing approval, and diagnostics. The Permissions, Services, Settings and About screens are gone.
+- **No fetch-to-trigger-prompt.** The grant page no longer contacts every host after the request; the
+  native Safari sheet is the one and only prompt.
+
+### Fixed
+
+- **Stricter bridge.** The `an1metracker://state` report now requires a fresh timestamp, validates every
+  origin against the extension's own manifest, and rejects payloads over 32 KiB.
+
 ## [8.3.6] — 2026-10-07
 
 ### Changed

@@ -24,9 +24,7 @@ const status = read("ios/An1meTracker/Models/ExtensionStatus.swift");
 const bridge = read("ios/An1meTracker/Services/PermissionBridge.swift");
 const coordinator = read("ios/An1meTracker/Services/PermissionCoordinator.swift");
 const viewModels = [
-  "ios/An1meTracker/ViewModels/HomeViewModel.swift",
   "ios/An1meTracker/ViewModels/WebsiteAccessViewModel.swift",
-  "ios/An1meTracker/ViewModels/SafariExtensionViewModel.swift",
 ].map(read);
 
 let failures = 0;
@@ -109,6 +107,13 @@ check(
 );
 
 check(
+  "the bridge requires a fresh timestamp instead of defaulting to now",
+  bridge.includes('guard let milliseconds = (payload["capturedAt"] as? NSNumber)?.doubleValue else { return nil }') &&
+    bridge.includes("abs(capturedAt.timeIntervalSinceNow)"),
+  "a malformed link must not become a fresh-looking snapshot",
+);
+
+check(
   "the bridge reports an unreadable link rather than an empty state",
   /case \.unrecognised:\s*noteBridgeFailure\(\)/.test(coordinator),
   "a malformed link must surface, not silently read as 'nothing allowed'",
@@ -131,19 +136,14 @@ check(
 // ─── Screens derive their wording from state, never from constants ───────────────────────────────────
 
 check(
-  "the dashboard's headline comes from the assessment",
-  /if isReady \{ return "Ready" \}/.test(viewModels[0]) && /coordinator\.assessment/.test(viewModels[0]),
+  "the screen's Ready comes from the assessment",
+  /private var isReady: Bool \{ coordinator\.assessment\.isReady \}/.test(rootView),
   "a hard-coded Ready would defeat the whole model",
 );
 check(
-  "the website-access status comes from the assessment",
-  /switch coordinator\.assessment\.state/.test(viewModels[1]),
+  "the permission status comes from the assessment",
+  /switch coordinator\.assessment\.state/.test(viewModels[0]),
   "the screen must render the state it derived, not a stored boolean",
-);
-check(
-  "the extension screen explains an unknown state instead of showing a value",
-  /case \.unknown\(\.queryFailed\):/.test(viewModels[2]),
-  "when Safari does not answer, the app has to say so rather than show a value",
 );
 
 console.log(failures === 0 ? "\nPASS" : `\nFAIL (${failures})`);

@@ -78,13 +78,13 @@ function loadCoordinator(withNotifications) {
   check("Safari manifest keeps every other permission", packaged.permissions, source.permissions.filter((p) => !UNSUPPORTED_IOS_PERMISSIONS.includes(p)));
   check("Safari manifest keeps the content scripts and version", [packaged.content_scripts, packaged.version], [source.content_scripts, source.version]);
   const core = ["https://an1me.to/*", "https://*.an1me.to/*"];
-  // Safari iOS reports every declared host as granted even at "Ask", so optional hosts gave no truthful
-  // request flow: every iOS host is required, and real access is measured by probing (see background.js).
+  // Only the tracking site is required (content scripts run there); the nine service origins are optional
+  // so the extension page can request them at runtime and Safari shows its own "would like to access" sheet.
   const iosHosts = [...REQUIRED_ORIGINS, ...OPTIONAL_ORIGINS];
-  check("every iOS host is required, the tracking site first", packaged.host_permissions.slice(0, 2), core);
-  check("required origins are exactly the iOS groups", packaged.host_permissions, [...REQUIRED_ORIGINS]);
-  check("nothing optional is declared", [OPTIONAL_ORIGINS.length, "optional_host_permissions" in packaged], [0, false]);
-  check("the disabled mobile AniList API is not requested", packaged.host_permissions.includes("https://graphql.anilist.co/*"), false);
+  check("only the tracking site is required", packaged.host_permissions, core);
+  check("required origins are exactly the two an1me.to patterns", packaged.host_permissions, [...REQUIRED_ORIGINS]);
+  check("the nine service origins are optional", [packaged.optional_host_permissions, OPTIONAL_ORIGINS.length], [[...OPTIONAL_ORIGINS], 9]);
+  check("the disabled mobile AniList API is not requested", iosHosts.includes("https://graphql.anilist.co/*"), false);
   check("desktop-only hosts stay out of the iOS build",
     ["https://graphql.anilist.co/*", "https://anilist.co/*", "https://accounts.google.com/*"].filter((host) => iosHosts.includes(host)), []);
   // These three were inherited from the desktop manifest and no code path in this repository produces a

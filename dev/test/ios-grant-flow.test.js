@@ -51,6 +51,10 @@ test("a report from another extension version is dropped on refresh", () => {
 test("Allow buttons no longer route to Settings", () => {
   const vm = read("ios/An1meTracker/ViewModels/WebsiteAccessViewModel.swift");
   assert.match(vm, /case \.allowRequiredAccess:\s*requestAll\(\)/);
-  assert.match(read("ios/An1meTracker/ViewModels/HomeViewModel.swift"), /case \.allowRequiredAccess:\s*permissions\.requestAll\(\)/);
-  assert.doesNotMatch(read("ios/An1meTracker/Views/PermissionsView.swift"), /Open Safari Settings/);
+  // The app's Approve buttons open the grant page (Safari's own sheet); the only Settings hop is for
+  // switching the extension on, which Safari cannot do from anywhere else.
+  const root = read("ios/An1meTracker/Views/RootView.swift");
+  assert.match(root, /model\.request\(row\)/);
+  assert.match(root, /Turn the extension on/);
+  assert.doesNotMatch(root, /openExtensionsSettings\(\)[\s\S]*?model\.request/);
 });

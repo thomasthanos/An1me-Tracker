@@ -8,7 +8,7 @@
 //  model; state comes only from the extension's dated report and Safari's answer about the extension.
 //
 //  A value type: it derives everything from the coordinator and owns nothing, so there is no state to
-//  republish. See `HomeViewModel` for why that matters.
+//  republish.
 //
 
 import Foundation
@@ -213,8 +213,8 @@ struct WebsiteAccessViewModel {
                 symbol: PermissionRow.symbol(forGroup: group?.id),
                 isRequired: isRequired,
                 status: status,
-                // Safari's own word: a website the extension has not been allowed shows "Ask" in Settings.
-                statusText: status == .missing ? "Ask" : PermissionRow.label(for: status),
+                // The app cannot read Safari's Settings, so a missing host is "Needs access", never "Ask".
+                statusText: PermissionRow.label(for: status),
                 items: items
             )
         }

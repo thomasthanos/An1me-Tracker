@@ -64,31 +64,16 @@
   const stillAsking = (payload) => payload?.allWebsites ? [] :
     origins.filter((origin) => !(payload?.grantedOrigins || []).includes(origin));
 
-  // Safari iOS can resolve request() without a prompt for hosts it already counts as declared (they stay
-  // at "Ask" in Settings). Safari's own "would like to access …" sheet also appears when the extension
-  // actually reaches a host, so each missing host is contacted once (no credentials, no body read).
-  async function touch(missing) {
-    await Promise.all(missing.map((origin) => fetch(`https://${hostOf(origin)}/`, {
-      method: "GET", mode: "no-cors", credentials: "omit", cache: "no-store",
-    }).catch(() => null)));
-  }
-
-  // Never claims success without evidence: the page reports what getAll() says after the tap.
+  // Never claims success without evidence: the page reports what the background measured after the tap.
   async function verifyAndReturn() {
     $("grantAllow").disabled = true;
     $("grantCancel").disabled = true;
-    let payload = await report();
-    let missing = stillAsking(payload);
+    const payload = await report();
+    const missing = stillAsking(payload);
     if (missing.length) {
-      setStatus("Asking Safari for each website…");
-      await touch(missing);
-      payload = await report();
-      missing = stillAsking(payload);
-    }
-    if (missing.length) {
-      setStatus(`Safari still has ${missing.length === 1 ? "1 website" : `${missing.length} websites`} at Ask. ` +
+      setStatus(`Safari still has ${missing.length === 1 ? "1 website" : `${missing.length} websites`} not allowed. ` +
         "Returning to the app…", true);
-      setTimeout(() => returnWith(payload), 1800);
+      setTimeout(() => returnWith(payload), 1200);
       return;
     }
     setStatus("Allowed. Returning to the app…");
