@@ -28,7 +28,7 @@ enum ExtensionEnabledState: Equatable {
             case .notChecked:
                 return "Asking Safari…"
             case .queryFailed:
-                return "Safari didn't report it. Verify in Safari: the extension reports back when it's on."
+                return "Safari didn't say. Verify on an1me.to: the extension reports back when it's on."
             }
         }
     }

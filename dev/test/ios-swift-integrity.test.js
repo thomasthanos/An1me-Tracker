@@ -165,7 +165,7 @@ function check(label, condition, explanation) {
 
 // ─── Every file exists and is balanced ───────────────────────────────────────────────────────────────
 
-check("the app has Swift sources to check", files.length >= 18, `found ${files.length}`);
+check("the app has Swift sources to check", files.length >= 14, `found ${files.length}`);
 
 const unbalanced = [];
 for (const [file, source] of sources) {
@@ -325,19 +325,17 @@ check("no try!, as! or fatalError in the app", unsafe.length === 0, unsafe.join(
 
 // ─── Every enum case is handled wherever it is switched on ───────────────────────────────────────────
 
-const dashboard = sources.get(path.join(IOS, "An1meTracker/Models/DashboardModels.swift"));
-const permissionModels = sources.get(path.join(IOS, "An1meTracker/Models/PermissionModels.swift"));
+const reportModels = sources.get(path.join(IOS, "An1meTracker/Models/ExtensionReport.swift"));
 const extensionStatus = sources.get(path.join(IOS, "An1meTracker/Models/ExtensionStatus.swift"));
+const serviceMonitor = sources.get(path.join(IOS, "An1meTracker/Services/ServiceStatusMonitor.swift"));
 
 const SWITCH_SITES = [
-  { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/ViewModels/WebsiteAccessViewModel.swift", anchor: "func perform(_ action: DashboardAction) async" },
-  { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/Models/DashboardModels.swift", anchor: "var title: String" },
-  { enumSource: dashboard, enumName: "DashboardAction", file: "An1meTracker/Models/DashboardModels.swift", anchor: "var symbol: String" },
-  { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/ViewModels/WebsiteAccessViewModel.swift", anchor: "var statusTitle: String" },
-  { enumSource: permissionModels, enumName: "AccessState", file: "An1meTracker/Models/PermissionModels.swift", anchor: "var summary: String" },
+  { enumSource: reportModels, enumName: "SiteAccess", file: "An1meTracker/Models/ExtensionReport.swift", anchor: "var title: String" },
+  { enumSource: reportModels, enumName: "SiteAccess", file: "An1meTracker/Views/RootView.swift", anchor: "switch status.siteAccess" },
   { enumSource: extensionStatus, enumName: "ExtensionEnabledState", file: "An1meTracker/Models/ExtensionStatus.swift", anchor: "var title: String" },
-  { enumSource: extensionStatus, enumName: "ExtensionEnabledState", file: "An1meTracker/Services/DiagnosticsService.swift", anchor: "private static func tone(for state: ExtensionEnabledState)" },
-  { enumSource: permissionModels, enumName: "UnverifiedReason", file: "An1meTracker/Models/PermissionModels.swift", anchor: "var title: String" },
+  { enumSource: extensionStatus, enumName: "ExtensionEnabledState", file: "An1meTracker/Models/ExtensionReport.swift", anchor: "switch extensionState" },
+  { enumSource: serviceMonitor, enumName: "ServiceReachability", file: "An1meTracker/Services/ServiceStatusMonitor.swift", anchor: "var title: String" },
+  { enumSource: sources.get(path.join(IOS, "An1meTracker/Services/PermissionBridge.swift")), enumName: "TrackerURLEvent", file: "An1meTracker/Services/PermissionCoordinator.swift", anchor: "func handle(_ event: TrackerURLEvent)" },
 ];
 
 for (const site of SWITCH_SITES) {
@@ -356,10 +354,10 @@ for (const site of SWITCH_SITES) {
 // ─── The app is one screen, in the agreed order ───────────────────────────────────────────────────────
 
 const rootView = sources.get(path.join(IOS, "An1meTracker/Views/RootView.swift"));
-const sections = ["header", "status", "permissions", "approvals", "diagnostics"];
+const sections = ["header", "statusSection", "action", "servicesSection", "diagnostics"];
 const order = sections.map((name) => rootView ? rootView.indexOf(`private var ${name}: some View`) : -1);
 check(
-  "the app is one screen: header, status, permissions, approvals, diagnostics",
+  "the app is one screen: header, status, action, services, diagnostics",
   rootView !== null &&
     !/NavigationStack|navigationDestination/.test(rootView) &&
     order.every((index, i) => index > -1 && (i === 0 || index > order[i - 1])),

@@ -2,8 +2,8 @@
 //  PermissionCoordinator.swift
 //  An1me Tracker
 //
-//  The one place that answers "what is the permission state, and when was it measured?". Every screen
-//  reads this object; nothing recomputes permissions on its own and nothing stores a verdict.
+//  The one place that answers "is the extension on, and has it run on an1me.to?". The screen reads this
+//  object; nothing recomputes the status on its own and nothing stores a verdict.
 //
 
 import Combine
@@ -13,96 +13,67 @@ import SwiftUI
 @MainActor
 final class PermissionCoordinator: ObservableObject {
 
-    @Published private(set) var assessment: AccessAssessment
     @Published private(set) var extensionState: ExtensionEnabledState
-    @Published private(set) var snapshot: PermissionSnapshot?
+    @Published private(set) var report: ExtensionReport?
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastBridgeError: String?
 
     private let statusService: SafariExtensionStatusProviding
-    private let store: PermissionSnapshotStoring
+    private let store: ExtensionReportStoring
     let settingsLauncher: ExtensionSettingsLaunching
 
     init(
         statusService: SafariExtensionStatusProviding = SafariExtensionStatusService(),
-        store: PermissionSnapshotStoring = UserDefaultsPermissionSnapshotStore(),
+        store: ExtensionReportStoring = UserDefaultsExtensionReportStore(),
         settingsLauncher: ExtensionSettingsLaunching? = nil
     ) {
-        let stored = store.load()
-        let unknown = ExtensionEnabledState.unknown(.notChecked)
         self.statusService = statusService
         self.store = store
-        // Built here rather than as a default argument. Swift evaluates default arguments in a nonisolated
-        // context, and this initializer is main-actor isolated — which is a compile error under the strict
-        // concurrency the app is built with, not a warning.
+        // Built here rather than as a default argument: Swift evaluates default arguments in a nonisolated
+        // context, and this initializer is main-actor isolated.
         self.settingsLauncher = settingsLauncher ?? SettingsLauncher()
-        self.snapshot = stored
-        self.extensionState = unknown
-        self.assessment = AccessAssessment.make(extensionEnabled: unknown, snapshot: stored)
+        self.extensionState = .unknown(.notChecked)
+        self.report = store.load()
     }
+
+    var status: TrackerStatus { TrackerStatus(extensionState: extensionState, report: report) }
 
     // MARK: - Refreshing
 
-    /// Re-reads everything the app can read without the user leaving it: Safari's answer about the
-    /// extension, and the last snapshot the extension handed over. Runs when the app appears, when the
-    /// permission screen appears, when the app returns to the foreground, and on Recheck.
+    /// Asks Safari about the extension again and re-reads the stored report. Runs on launch, on return to the
+    /// foreground and on pull to refresh — never on a timer.
     func refresh() async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
-        let state = await statusService.currentState()
-        // A report measured by a different extension version (an app update) describes a manifest that no
-        // longer exists; drop it so the next reading is the only truth.
-        if let stored = store.load(), let reported = stored.extensionVersion, !reported.isEmpty,
+        extensionState = await statusService.currentState()
+        // A report from another extension version (an app update) says nothing about this one.
+        if let stored = store.load(), let reported = stored.extensionVersion,
            let current = SafariExtensionIdentity.version, reported != current {
             store.clear()
         }
-        apply(state: state, snapshot: store.load())
+        report = store.load()
     }
 
-    /// Records a snapshot the extension handed over through the bridge and re-renders immediately.
-    func ingest(_ snapshot: PermissionSnapshot) {
-        store.save(snapshot)
+    func ingest(_ report: ExtensionReport) {
+        store.save(report)
         lastBridgeError = nil
-        apply(state: extensionState, snapshot: snapshot)
-    }
-
-    /// Used when the bridge received something it could not read, so the UI can say so instead of leaving
-    /// the user wondering why nothing changed.
-    func noteBridgeFailure() {
-        lastBridgeError = "The tracker sent a report this app could not read."
-    }
-
-    func clearCachedSnapshot() {
-        store.clear()
-        apply(state: extensionState, snapshot: nil)
+        self.report = report
     }
 
     // MARK: - Actions
 
-    /// Sends the user to the website in Safari with the verification marker. The extension answers by
-    /// reopening this app with a fresh snapshot — the only entitlement-free way to read a host state.
-    func startVerificationInSafari() {
+    /// Opens an1me.to with the verify marker; the extension answers by reopening this app with a report.
+    func verifyInSafari() {
         SystemLinks.open(Tracker.verifyURL)
-    }
-
-    /// Asks Safari for website access: opens the extension's grant page (via an1me.to) for `origins`, where
-    /// one tap triggers Safari's own permission prompt. The app rechecks when the extension hands back its
-    /// report, and again on return to the foreground.
-    func requestAccess(origins: [String], title: String?) {
-        let hosts = origins.map {
-            $0.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "/*", with: "")
-        }
-        SystemLinks.open(Tracker.grantURL(hosts: hosts, title: title))
     }
 
     func openSite() {
         SystemLinks.open(Tracker.siteURL)
     }
 
-    /// Opens the extension's own page in Settings, where its websites are listed. Returns whether the deep
-    /// link was taken, so the caller can explain the fallback.
+    /// Only for an extension that is off: Settings is the one place it can be switched on.
     @discardableResult
     func openExtensionSettings() async -> Bool {
         await settingsLauncher.openExtensionSettings()
@@ -112,25 +83,17 @@ final class PermissionCoordinator: ObservableObject {
 
     func handle(_ event: TrackerURLEvent) {
         switch event {
-        case .permissionSnapshot(let snapshot):
-            ingest(snapshot)
+        case .report(let report):
+            ingest(report)
         case .openExtensionSettings:
             Task { await openExtensionSettings() }
         case .unrecognised:
-            noteBridgeFailure()
+            lastBridgeError = "The tracker sent a report this app could not read."
         }
-    }
-
-    // MARK: - Derivation
-
-    private func apply(state: ExtensionEnabledState, snapshot: PermissionSnapshot?) {
-        extensionState = state
-        self.snapshot = snapshot
-        assessment = AccessAssessment.make(extensionEnabled: state, snapshot: snapshot)
     }
 }
 
 extension PermissionCoordinator {
-    /// The shared instance the app's scene uses. Screens receive it from the environment.
+    /// The shared instance the app's scene uses. The screen receives it from the environment.
     static let shared = PermissionCoordinator()
 }

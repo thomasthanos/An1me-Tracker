@@ -46,7 +46,10 @@ async function getMetadataRepairBlockedOrigins(previous = []) {
   const browserApi = globalThis.browser?.permissions;
   const promiseOnly = typeof browserApi?.contains === "function";
   const api = promiseOnly ? browserApi : globalThis.chrome?.permissions;
-  const answers = await Promise.all(METADATA_REPAIR_HOST_ORIGINS.map(origin => new Promise(resolve => {
+  // Only hosts the manifest declares can be withheld. The Safari build reaches Jikan over CORS without a
+  // host permission, so contains() answers false for it forever; asking would pause the repair for good.
+  const origins = metadataRepairDeclaredOrigins();
+  const answers = await Promise.all(origins.map(origin => new Promise(resolve => {
     if (typeof api?.contains !== "function") { resolve(null); return; }
     const timer = setTimeout(() => resolve(null), 1500);
     const done = value => { clearTimeout(timer); resolve(typeof value === "boolean" ? value : null); };
@@ -57,8 +60,18 @@ async function getMetadataRepairBlockedOrigins(previous = []) {
       if (pending?.then) pending.then(done, () => done(null));
     } catch { done(null); }
   })));
-  return METADATA_REPAIR_HOST_ORIGINS.filter((origin, index) =>
+  return origins.filter((origin, index) =>
     answers[index] === false || (answers[index] === null && previous.includes(origin)));
+}
+
+function metadataRepairDeclaredOrigins() {
+  let manifest = null;
+  try { manifest = chrome.runtime.getManifest(); } catch {}
+  if (!manifest || (!Array.isArray(manifest.host_permissions) && !Array.isArray(manifest.optional_host_permissions))) {
+    return [...METADATA_REPAIR_HOST_ORIGINS];
+  }
+  const declared = new Set([...(manifest.host_permissions || []), ...(manifest.optional_host_permissions || [])]);
+  return METADATA_REPAIR_HOST_ORIGINS.filter(origin => declared.has(origin));
 }
 
 function normalizeMetadataRepairOrigin(value, isTargeted = false, isAuto = null) {
@@ -458,7 +471,7 @@ async function repairAnimeInfoCacheUncoalesced(slug, forceRefresh = true) {
   }
 
   try {
-    const info = await fetchAnimePageInfo(slug);
+    const info = await fetchAnimePageInfo(slug, { preferredSlug: cached?.resolvedSlug || null });
     const entry = { ...info, cachedAt: Date.now() };
 
     const schedule = typeof getAiringScheduleEntry === "function" ? await getAiringScheduleEntry(slug).catch(() => null) : null;

@@ -76,9 +76,18 @@
     }
     const provider = permissionsApi();
     if (!provider) return [];
-    const all = GROUPS.flatMap((group) => group.origins);
+    // A host the manifest does not declare is reached over CORS (Jikan in the Safari build): contains() is
+    // false for it forever, and there is nothing to allow.
+    const all = GROUPS.flatMap((group) => group.origins).filter(isDeclared);
     const allowed = await Promise.all(all.map((origin) => isAllowed(provider, origin)));
     return all.filter((_origin, index) => !allowed[index]);
+  }
+
+  function isDeclared(origin) {
+    let manifest = null;
+    try { manifest = (globalThis.browser?.runtime || globalThis.chrome?.runtime)?.getManifest?.() || null; } catch {}
+    if (!manifest || (!Array.isArray(manifest.host_permissions) && !Array.isArray(manifest.optional_host_permissions))) return true;
+    return [...(manifest.host_permissions || []), ...(manifest.optional_host_permissions || [])].includes(origin);
   }
 
   // Must run straight from a click: browsers only show the permission prompt for a user gesture. Calls back

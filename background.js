@@ -3497,158 +3497,25 @@ function updateSpeedControlPreferences(message) {
   return result;
 }
 
-// ─── Permission report for the native iOS app ────────────────────────────────────────────────────────
+// ─── Report for the native iOS app ───────────────────────────────────────────────────────────────────
 //
-// The Safari Web Extension is the only thing that can ask Safari which websites it has been allowed, so it
-// is the only side that can answer the companion app. iOS exposes no public API for a containing app to
-// read a WebExtension's host permissions (SFSafariExtensionManager answers only whether the extension is
-// enabled, and only from iOS 26.2), and the app ships without entitlements because SideStore signs it with
-// the user's own Apple ID — a capability the profile cannot grant turns into a failed signature. So the
-// reading travels over the app's URL scheme, and the app treats it as a dated measurement, never a verdict.
+// The app cannot see into Safari, so it asks the extension to prove it is running: it opens
+// https://an1me.to/?at_verify=1, the content script there (which only runs where Safari lets the extension
+// in) asks this worker for a report, and hands it back over an1metracker://state?p=… . Host permissions are
+// deliberately not reported: on Safari iOS permissions.getAll()/contains() answer "granted" for every
+// declared host even while Settings shows "Ask", and that switch does not block these fetches anyway.
 
-function permissionPatternIsBroad(origin) {
-  return origin === "<all_urls>" || origin === "*://*/*";
-}
-
-function permissionContains(origin) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(false), 1500);
-    const done = (value) => { clearTimeout(timer); resolve(value === true); };
-    try {
-      const browserApi = self.browser?.permissions;
-      if (typeof browserApi?.contains === "function") {
-        browserApi.contains({ origins: [origin] }).then(done, () => done(false));
-        return;
-      }
-      const chromeApi = self.chrome?.permissions;
-      if (typeof chromeApi?.contains === "function") {
-        chromeApi.contains({ origins: [origin] }, (value) => done(self.chrome.runtime.lastError ? false : value));
-        return;
-      }
-    } catch {}
-    done(false);
-  });
-}
-
-// Paths that answer directly: a redirect to another host would be CORS-filtered and read as "ask".
-const PERMISSION_PROBE_PATHS = { "s4.anilist.co": "/file/anilistcdn/", "api.jikan.moe": "/v4" };
-
-async function probeHost(host) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
-  try {
-    const response = await fetch(`https://${host}${PERMISSION_PROBE_PATHS[host] || "/"}`, {
-      method: "GET", credentials: "omit", cache: "no-store", redirect: "manual", signal: controller.signal,
-    });
-    try { response.body?.cancel?.(); } catch {}
-    // "basic" = the extension's privileged, CORS-exempt access. "cors" is what an unprivileged request to a
-    // CORS-enabled API also gets, so it proves nothing either way and is reported as such.
-    if (response.type === "basic" || response.type === "default") return "allowed";
-    return response.type === "cors" ? "unverified" : "blocked";
-  } catch {
-    return "blocked";
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Wildcard hosts have no address of their own; they follow their apex (*.an1me.to follows an1me.to).
-// A failure is "ask" when some other host answered (the network works), "unreachable" when none did.
-async function probeDeclaredHosts(declared, hostOf) {
-  const concrete = (origin) => hostOf(origin).replace(/^\*\./, "");
-  const hosts = [...new Set(declared.map(concrete))];
-  const results = Object.fromEntries(await Promise.all(hosts.map(async (host) => [host, await probeHost(host)])));
-  const online = Object.values(results).some((result) => result !== "blocked");
-  return Object.fromEntries(declared.map((origin) => {
-    const result = results[concrete(origin)];
-    if (result === "allowed" || result === "unverified") return [origin, result];
-    return [origin, online ? "ask" : "unreachable"];
-  }));
-}
-
-async function buildPermissionReport() {
-  const manifest = chrome.runtime.getManifest();
-  const declared = [...(manifest.host_permissions || []), ...(manifest.optional_host_permissions || [])]
-    .filter((origin) => !permissionPatternIsBroad(origin));
-
-  // getAll() is the authoritative answer. Safari records "All Websites" as *://*/* even when the manifest
-  // asks for <all_urls>, and contains() answers per spelling — which is why the gate in
-  // src/common/website-access.js prefers getAll() too.
-  const all = await new Promise((resolve) => {
-    try {
-      const browserApi = self.browser?.permissions;
-      if (typeof browserApi?.getAll === "function") {
-        const pending = browserApi.getAll();
-        if (pending?.then) {
-          pending.then(resolve, () => resolve(null));
-          return;
-        }
-      }
-      const chromeApi = self.chrome?.permissions;
-      if (typeof chromeApi?.getAll === "function") {
-        chromeApi.getAll((result) => resolve(result || null));
-        return;
-      }
-    } catch {}
-    resolve(null);
-  });
-
-  const listed = Array.isArray(all?.origins)
-    ? all.origins.filter((origin) => typeof origin === "string")
-    : [];
-  // Neither API is evidence on Safari iOS: getAll() and contains() both answer "granted" for every declared
-  // host while Settings shows it at "Ask" (8.3.5 Diagnostics: 11/11 via getAll, 9 at Ask in Settings). So
-  // access is measured: each host is fetched once (no credentials). A host the extension may access is
-  // exempt from CORS, so the response is "basic"; one it may not is CORS-filtered ("cors"/"opaque") or
-  // refused outright. Both answers are kept so Diagnostics can show them side by side.
-  const hostOf = (origin) => String(origin).replace(/^[a-z*]+:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
-  const allWebsites = false; // getAll()'s broad grant is reported as allWebsitesReported, never trusted
-  const probes = await probeDeclaredHosts(declared, hostOf);
-  const grantedOrigins = declared.filter((origin) => probes[origin] === "allowed");
-  const blockedOrigins = allWebsites
-    ? []
-    : declared.filter((origin) => !grantedOrigins.includes(origin));
-
+function buildExtensionReport() {
   return {
-    grantedOrigins,
-    blockedOrigins,
-    allWebsites,
-    // API permissions ride along for the app's Permissions screen; absent when Safari did not answer.
-    ...(Array.isArray(all?.permissions)
-      ? { grantedPermissions: all.permissions.filter((permission) => typeof permission === "string") }
-      : {}),
-    // Diagnostics only — not a grant (see above).
-    apiOrigins: listed,
-    allWebsitesReported: listed.some(permissionPatternIsBroad),
-    probes,
-    extensionVersion: manifest.version,
+    extensionVersion: chrome.runtime.getManifest().version,
     capturedAt: Date.now(),
   };
 }
 
 const messageHandlers = {
   GET_PERMISSION_REPORT(_message, _sender, sendResponse) {
-    buildPermissionReport()
-      .then((report) => sendResponse({ success: true, report }))
-      .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
-    return true;
-  },
-  // The app's Allow buttons open https://an1me.to/?at_grant=… ; the content script there cannot call
-  // permissions.request, so the tab is moved to the extension's own grant page, where a tap can.
-  OPEN_GRANT_PAGE(message, sender, sendResponse) {
-    const tabId = sender?.tab?.id;
-    if (typeof tabId !== "number") {
-      sendResponse({ success: false, error: "no_tab" });
-      return false;
-    }
-    const query = new URLSearchParams();
-    query.set("hosts", String(message.hosts || "all").slice(0, 2000));
-    if (message.title) query.set("title", String(message.title).slice(0, 80));
-    chrome.tabs.update(tabId, { url: chrome.runtime.getURL(`src/grant/grant.html?${query}`) }, () => {
-      const error = chrome.runtime.lastError;
-      sendResponse(error ? { success: false, error: error.message } : { success: true });
-    });
-    return true;
+    sendResponse({ success: true, report: buildExtensionReport() });
+    return false;
   },
   GET_WEBSITE_ACCESS(_message, _sender, sendResponse) {
     self.AnimeTrackerWebsiteAccess.refresh().then(state => sendResponse({ success: true, state }));
