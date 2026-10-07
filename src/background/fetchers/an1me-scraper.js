@@ -195,11 +195,15 @@ async function fetchAn1mePage(url, timeoutMs) {
   if (res.unreachable) throw new Error(AN1ME_UNREACHABLE);
   return res;
 }
-async function fetchAnimePageInfo(slug) {
+// `preferredSlug` is the candidate that answered last time (the cached entry's resolvedSlug). Trying it first
+// spares every later refresh of a renamed show the 404 on the library slug before the working page.
+async function fetchAnimePageInfo(slug, { preferredSlug = null } = {}) {
   const candidates = buildAnimeInfoSlugCandidates(slug);
   if (candidates.length === 0) {
     throw new Error("Missing slug");
   }
+  const preferredAt = preferredSlug ? candidates.indexOf(String(preferredSlug).toLowerCase()) : -1;
+  if (preferredAt > 0) candidates.unshift(...candidates.splice(preferredAt, 1));
 
   let resolvedSlug = candidates[0];
   let url = `https://an1me.to/anime/${resolvedSlug}/`;

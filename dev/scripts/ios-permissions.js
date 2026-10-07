@@ -1,18 +1,22 @@
-// ios-permissions.js — the single source of truth for every website the iOS build asks Safari for.
+// ios-permissions.js — the single source of truth for every website the iOS build talks to, and for which
+// of them Safari must grant host access to.
 //
 //   node dev/scripts/ios-permissions.js            → print the resolved manifest block
 //   node dev/scripts/ios-permissions.js --swift    → print the generated Swift model for the app
 //
-// Why this file exists: the Safari build used to derive its optional hosts from the Chrome manifest
-// (`host_permissions` minus the tracking site minus AniList). That coupled iOS to whatever desktop
-// happened to need, and it kept asking for image CDNs no code path in this repository ever produces.
-// The list below is evidence-based: each origin names the feature that reaches it, and the audit script
-// (.agents/ios-permission-audit.cjs) fails the build's expectations when one stops being used.
+// What a Safari host permission is actually for (verified on iOS 27, 8.3.7):
+//   * Safari's per-site "Allow / Ask / Deny" in Settings governs page access (content scripts, tabs). It did
+//     not block the extension's own background fetches: with every host at "Ask", the info refresh still
+//     fetched an1me.to, AnimeFillerList and MyAnimeList. permissions.contains()/getAll() say "granted" for
+//     every declared host either way, so they cannot measure that switch.
+//   * What a host permission really buys a background fetch is a CORS exemption. So a host is declared only
+//     when the extension reads a response the site does not share cross-origin.
 //
-// `required: true` groups land in `host_permissions`; everything else lands in
-// `optional_host_permissions`, which is what lets one tap (or the Safari "All Websites" switch) grant the
-// rest. Only the tracking site is required — content scripts run there — while the nine service origins are
-// optional so `browser.permissions.request()` shows Safari's native "would like to access …" sheet.
+// Each service lists its hosts with `access`:
+//   "host" — declared in host_permissions (content scripts run there, the DNR header rule applies there, or
+//            the endpoint sends no CORS header the extension's origin would pass);
+//   "cors" — not declared: the endpoint answers cross-origin requests from any origin, so a plain fetch
+//            works without asking Safari for anything.
 // `graphql.anilist.co` is deliberately absent: the AniList API is disabled on mobile.
 "use strict";
 
@@ -22,59 +26,71 @@ const GROUPS = Object.freeze([
   Object.freeze({
     id: "site",
     title: "An1me.to",
-    summary: "Tracking, resume and the player bridge",
-    required: true,
+    symbol: "play.rectangle.fill",
     hosts: Object.freeze([
-      { origin: "https://an1me.to/*", feature: "Watch pages, watchlists and progress tracking" },
-      { origin: "https://*.an1me.to/*", feature: "Player and mirror subdomains" },
+      { origin: "https://an1me.to/*", access: "host", feature: "Content scripts, the DNR referer rule, page fetches" },
+      { origin: "https://*.an1me.to/*", access: "host", feature: "Player and mirror subdomains" },
     ]),
   }),
   Object.freeze({
     id: "account",
-    title: "Account & Sync",
-    summary: "Sign-in and cloud library sync",
-    required: false,
+    title: "Firebase",
+    symbol: "icloud.fill",
     hosts: Object.freeze([
-      { origin: "https://identitytoolkit.googleapis.com/*", feature: "Email and password sign-in" },
-      { origin: "https://securetoken.googleapis.com/*", feature: "Refreshing the sign-in session" },
-      { origin: "https://firestore.googleapis.com/*", feature: "Library, progress and settings sync" },
+      { origin: "https://identitytoolkit.googleapis.com/*", access: "cors", feature: "Sign-in (CORS: reflects the caller's origin)" },
+      { origin: "https://securetoken.googleapis.com/*", access: "cors", feature: "Session refresh (CORS: reflects the caller's origin)" },
+      { origin: "https://firestore.googleapis.com/*", access: "cors", feature: "Library sync (CORS: reflects the caller's origin)" },
     ]),
   }),
   Object.freeze({
-    id: "info",
-    title: "Anime Information",
-    summary: "Episode counts, filler flags and airing data",
-    required: false,
+    id: "afl",
+    title: "AnimeFillerList",
+    symbol: "list.star",
     hosts: Object.freeze([
-      { origin: "https://www.animefillerlist.com/*", feature: "Filler and canon episode lists" },
-      { origin: "https://api.jikan.moe/*", feature: "Episode metadata and filler stand-in" },
-      { origin: "https://myanimelist.net/*", feature: "Filler fallback when AnimeFillerList is unreachable" },
+      { origin: "https://www.animefillerlist.com/*", access: "host", feature: "Filler lists, scraped from HTML that sends no CORS header" },
     ]),
   }),
   Object.freeze({
-    id: "artwork",
-    title: "Artwork",
-    summary: "Cover images for library entries",
-    required: false,
+    id: "jikan",
+    title: "Jikan",
+    symbol: "list.bullet.rectangle.fill",
     hosts: Object.freeze([
-      { origin: "https://s4.anilist.co/*", feature: "AniList cover images already stored in your library" },
-      { origin: "https://cdn.myanimelist.net/*", feature: "MyAnimeList cover images" },
+      { origin: "https://api.jikan.moe/*", access: "cors", feature: "Episode metadata (public API, Access-Control-Allow-Origin: *)" },
     ]),
   }),
   Object.freeze({
-    id: "skip",
-    title: "Skip Data",
-    summary: "Intro and outro times for Skip Outro",
-    required: false,
+    id: "mal",
+    title: "MyAnimeList",
+    symbol: "books.vertical.fill",
     hosts: Object.freeze([
-      { origin: "https://api.aniskip.com/*", feature: "Intro and outro timestamps" },
+      { origin: "https://myanimelist.net/*", access: "host", feature: "Search and episode pages, which send no CORS header" },
+      { origin: "https://cdn.myanimelist.net/*", access: "cors", feature: "Cover images (Access-Control-Allow-Origin: *)" },
+    ]),
+  }),
+  Object.freeze({
+    id: "anilist",
+    title: "AniList Images",
+    symbol: "photo.fill",
+    hosts: Object.freeze([
+      { origin: "https://s4.anilist.co/*", access: "host", feature: "Cover cache fetch; the CDN answers Access-Control-Allow-Origin: null" },
+    ]),
+  }),
+  Object.freeze({
+    id: "aniskip",
+    title: "AniSkip",
+    symbol: "forward.end.fill",
+    hosts: Object.freeze([
+      { origin: "https://api.aniskip.com/*", access: "cors", feature: "Outro times (Access-Control-Allow-Origin: *)" },
     ]),
   }),
 ]);
 
-const REQUIRED_ORIGINS = Object.freeze(GROUPS.filter((g) => g.required).flatMap((g) => g.hosts.map((h) => h.origin)));
-const OPTIONAL_ORIGINS = Object.freeze(GROUPS.filter((g) => !g.required).flatMap((g) => g.hosts.map((h) => h.origin)));
-const ALL_ORIGINS = Object.freeze([...REQUIRED_ORIGINS, ...OPTIONAL_ORIGINS]);
+const HOST_ORIGINS = Object.freeze(GROUPS.flatMap((g) => g.hosts.filter((h) => h.access === "host").map((h) => h.origin)));
+const CORS_ORIGINS = Object.freeze(GROUPS.flatMap((g) => g.hosts.filter((h) => h.access === "cors").map((h) => h.origin)));
+// Kept for callers of the old names: everything declared is required; nothing is optional.
+const REQUIRED_ORIGINS = HOST_ORIGINS;
+const OPTIONAL_ORIGINS = Object.freeze([]);
+const ALL_ORIGINS = Object.freeze([...HOST_ORIGINS, ...CORS_ORIGINS]);
 
 // Safari has no identity, notifications or side panel API. Kept here so both the packager and the tests
 // agree about what the iOS manifest must not ask for.
@@ -89,6 +105,7 @@ function validate(groups = GROUPS) {
       if (!/^https:\/\/[^/\s]+\/\*$/.test(host.origin)) {
         throw new Error(`ios-permissions: "${host.origin}" is not an https origin pattern`);
       }
+      if (!["host", "cors"].includes(host.access)) throw new Error(`ios-permissions: "${host.origin}" needs access "host" or "cors"`);
       if (!host.feature) throw new Error(`ios-permissions: "${host.origin}" has no feature description`);
       if (seen.has(host.origin)) throw new Error(`ios-permissions: "${host.origin}" is listed twice`);
       seen.add(host.origin);
@@ -108,13 +125,10 @@ function toSafariManifest(manifest, groups = GROUPS) {
     permissions: (manifest.permissions || []).filter((p) => !UNSUPPORTED_IOS_PERMISSIONS.includes(p)),
   };
   delete safari.side_panel;
-  safari.host_permissions = groups.filter((g) => g.required).flatMap((g) => g.hosts.map((h) => h.origin));
-  // Only the tracking site is required; the nine service origins are optional so the extension page can
-  // request them at runtime and Safari shows its own sheet. contains()/getAll() may over-report, which is
-  // why the report is measured by probing in background.js rather than trusting this list as "granted".
-  const optional = groups.filter((g) => !g.required).flatMap((g) => g.hosts.map((h) => h.origin));
-  if (optional.length) safari.optional_host_permissions = optional;
-  else delete safari.optional_host_permissions;
+  safari.host_permissions = groups.flatMap((g) => g.hosts.filter((h) => h.access === "host").map((h) => h.origin));
+  // Nothing optional: with no optional hosts the website-access gate (src/common/website-access.js) stays
+  // off, exactly as on desktop, and there is no request flow whose answer Safari would misreport.
+  delete safari.optional_host_permissions;
   return safari;
 }
 
@@ -122,81 +136,37 @@ function swiftString(value) {
   return JSON.stringify(String(value));
 }
 
-// The native app needs the same groups, with the same wording, so the user reads one vocabulary in both
-// places. Generating Swift from this file keeps that from drifting.
+// The app's Services list: every service the extension talks to, with the hosts to probe for reachability.
 function swiftSource(groups = GROUPS) {
   validate(groups);
-  const groupBlocks = groups
+  const blocks = groups
     .map((group) => {
       const hosts = group.hosts
-        .map((host) => `            HostPermission(origin: ${swiftString(host.origin)}, feature: ${swiftString(host.feature)}),`)
-        .join("\n");
-      return [
-        "        HostPermissionGroup(",
-        `            id: ${swiftString(group.id)},`,
-        `            title: ${swiftString(group.title)},`,
-        `            summary: ${swiftString(group.summary)},`,
-        `            isRequired: ${group.required ? "true" : "false"},`,
-        "            hosts: [",
-        hosts,
-        "            ]",
-        "        ),",
-      ].join("\n");
+        .filter((host) => !host.origin.includes("*."))
+        .map((host) => swiftString(host.origin.replace("https://", "").replace("/*", "")))
+        .join(", ");
+      return `        TrackedService(id: ${swiftString(group.id)}, name: ${swiftString(group.title)}, symbol: ${swiftString(group.symbol || "globe")}, hosts: [${hosts}]),`;
     })
     .join("\n");
 
   return `// Generated by dev/scripts/setup-ios-ui.js from dev/scripts/ios-permissions.js — do not edit by hand.
 //
-// One source of truth for what the iOS build asks Safari for, mirrored into the native app so both show
-// the same groups with the same wording.
+// The services the extension talks to, mirrored into the app's Services section so both list the same ones.
 
 import Foundation
 
-struct HostPermission: Hashable, Identifiable {
-    let origin: String
-    let feature: String
-
-    var id: String { origin }
-
-    /// "api.jikan.moe" — the host without the scheme and the trailing wildcard.
-    var display: String {
-        origin
-            .replacingOccurrences(of: "https://", with: "")
-            .replacingOccurrences(of: "/*", with: "")
-    }
-}
-
-struct HostPermissionGroup: Hashable, Identifiable {
+struct TrackedService: Hashable, Identifiable {
     let id: String
-    let title: String
-    let summary: String
-    let isRequired: Bool
-    let hosts: [HostPermission]
+    let name: String
+    let symbol: String
+    /// Hosts to probe for reachability, without scheme or path.
+    let hosts: [String]
 }
 
-enum HostPermissions {
-    /// Safari's single "All Websites" switch. Never requested directly; Settings owns it.
-    static let allWebsitesPattern = ${swiftString(ALL_WEBSITES)}
-
-    static let groups: [HostPermissionGroup] = [
-${groupBlocks}
+enum TrackedServices {
+    static let all: [TrackedService] = [
+${blocks}
     ]
-
-    static var requiredOrigins: [String] { groups.filter(\\.isRequired).flatMap { $0.hosts.map(\\.origin) } }
-
-    static var optionalOrigins: [String] { groups.filter { !$0.isRequired }.flatMap { $0.hosts.map(\\.origin) } }
-
-    static var allOrigins: [String] { requiredOrigins + optionalOrigins }
-
-    static var hostCount: Int { allOrigins.count }
-
-    static func group(forOrigin origin: String) -> HostPermissionGroup? {
-        groups.first { group in group.hosts.contains { $0.origin == origin } }
-    }
-
-    /// The groups an "All Websites" grant covers — every group except the always-required tracking site,
-    /// which Safari keeps as its own row and always allows.
-    static var coverableGroups: [HostPermissionGroup] { groups.filter { !$0.isRequired } }
 }
 `;
 }
@@ -204,6 +174,8 @@ ${groupBlocks}
 module.exports = {
   ALL_WEBSITES,
   GROUPS,
+  HOST_ORIGINS,
+  CORS_ORIGINS,
   REQUIRED_ORIGINS,
   OPTIONAL_ORIGINS,
   ALL_ORIGINS,
@@ -222,11 +194,7 @@ if (require.main === module) {
     const path = require("node:path");
     const chrome = JSON.parse(fs.readFileSync(path.join(__dirname, "../../manifest.json"), "utf8"));
     const safari = toSafariManifest(chrome);
-    console.log(JSON.stringify({
-      host_permissions: safari.host_permissions,
-      optional_host_permissions: safari.optional_host_permissions,
-      permissions: safari.permissions,
-    }, null, 2));
-    console.log(`\n${ALL_ORIGINS.length} website${ALL_ORIGINS.length === 1 ? "" : "s"} across ${GROUPS.length} groups`);
+    console.log(JSON.stringify({ host_permissions: safari.host_permissions, permissions: safari.permissions }, null, 2));
+    console.log(`\n${HOST_ORIGINS.length} declared, ${CORS_ORIGINS.length} reached over CORS`);
   }
 }

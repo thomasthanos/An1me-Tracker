@@ -14,7 +14,7 @@ const vm = require("vm");
 const { execFileSync } = require("child_process");
 // The iOS host set is decided by dev/scripts/ios-permissions.js, not by the desktop manifest: the two
 // builds answer to different questions.
-const { REQUIRED_ORIGINS, OPTIONAL_ORIGINS, UNSUPPORTED_IOS_PERMISSIONS } = require("../scripts/ios-permissions");
+const { HOST_ORIGINS, CORS_ORIGINS, ALL_ORIGINS, UNSUPPORTED_IOS_PERMISSIONS } = require("../scripts/ios-permissions");
 
 const REPO = path.join(__dirname, "../..");
 
@@ -78,12 +78,16 @@ function loadCoordinator(withNotifications) {
   check("Safari manifest keeps every other permission", packaged.permissions, source.permissions.filter((p) => !UNSUPPORTED_IOS_PERMISSIONS.includes(p)));
   check("Safari manifest keeps the content scripts and version", [packaged.content_scripts, packaged.version], [source.content_scripts, source.version]);
   const core = ["https://an1me.to/*", "https://*.an1me.to/*"];
-  // Only the tracking site is required (content scripts run there); the nine service origins are optional
-  // so the extension page can request them at runtime and Safari shows its own "would like to access" sheet.
-  const iosHosts = [...REQUIRED_ORIGINS, ...OPTIONAL_ORIGINS];
-  check("only the tracking site is required", packaged.host_permissions, core);
-  check("required origins are exactly the two an1me.to patterns", packaged.host_permissions, [...REQUIRED_ORIGINS]);
-  check("the nine service origins are optional", [packaged.optional_host_permissions, OPTIONAL_ORIGINS.length], [[...OPTIONAL_ORIGINS], 9]);
+  // Safari's per-site switches do not gate background fetches, and its permissions API misreports them, so a
+  // host is declared only where the extension needs it: content scripts / the DNR rule (an1me.to), or a
+  // response the site does not share cross-origin (AnimeFillerList and MyAnimeList HTML, the AniList CDN's
+  // "Access-Control-Allow-Origin: null"). Everything else is reached over CORS.
+  const iosHosts = [...ALL_ORIGINS];
+  check("declared hosts: the tracking site plus the three non-CORS services", packaged.host_permissions,
+    [...core, "https://www.animefillerlist.com/*", "https://myanimelist.net/*", "https://s4.anilist.co/*"]);
+  check("declared hosts are exactly the ios-permissions 'host' entries", packaged.host_permissions, [...HOST_ORIGINS]);
+  check("CORS services are not declared", CORS_ORIGINS.filter((origin) => packaged.host_permissions.includes(origin)), []);
+  check("nothing optional is declared", "optional_host_permissions" in packaged, false);
   check("the disabled mobile AniList API is not requested", iosHosts.includes("https://graphql.anilist.co/*"), false);
   check("desktop-only hosts stay out of the iOS build",
     ["https://graphql.anilist.co/*", "https://anilist.co/*", "https://accounts.google.com/*"].filter((host) => iosHosts.includes(host)), []);

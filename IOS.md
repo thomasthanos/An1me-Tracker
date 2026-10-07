@@ -51,39 +51,36 @@ versions. In short, from a Windows PC:
 
 ## 3. Set it up from the app
 
-The **An1me Tracker** app is the place to see and fix access. It shows the state Safari reports and never
-guesses: until the extension has measured something, it says **Not verified yet** rather than **Allowed**.
+The **An1me Tracker** app is one short screen. It shows only what it can prove.
 
-1. **Settings → Apps → Safari → Extensions → An1me.to Tracker** → turn it on.
-2. Open the **An1me Tracker** app. It shows **Ready**, or **Setup required** with how many permissions need
-   attention.
-3. Tap **Enable Required Access**. When Safari reports something missing (or the extension off), this opens
-   the extension's own page in Settings, where you turn it on and allow the websites it lists — or turn on
-   **All Websites**. When nothing has been verified yet, it opens an1me.to once so the extension can
-   measure what Safari allows and hand the result back. The app rechecks whenever you return to it.
-4. **Permissions** lists exactly what the extension's `manifest.json` declares, as Required and Optional;
-   **Services** shows whether Firebase, Firestore, AniList, AniSkip, Jikan and the others answer from your
-   network. Those are reachability checks, not permissions.
+1. **Settings → Apps → Safari → Extensions → An1me.to Tracker** → turn it on. (If it is off, the app's only
+   button is **Turn On in Settings**.)
+2. Open the **An1me Tracker** app and tap **Verify on an1me.to**. Safari opens an1me.to, the extension
+   answers from the page, and Safari brings you back to the app (it asks "Open in An1me Tracker?" first).
+3. The app shows **Ready**: *Safari Extension On* and *an1me.to Allowed*, with *Last seen on an1me.to …*.
+   After that the button is simply **Open an1me.to**.
 
-Open **an1me.to** in Safari and allow the tracker **Always on This Website** so it can save watch progress.
+**Services** shows whether An1me.to, Firebase, AnimeFillerList, Jikan, MyAnimeList, AniList images and
+AniSkip answer from your network. These are reachability checks, not permissions. Pull down to recheck.
 
-### What the app can and cannot do
+### Why there is no list of website permissions
 
-Safari decides website access, and no app may grant a Safari Web Extension's host permissions for you —
-there is no public API for it. What the app does instead:
+On Safari for iOS the per-site switches in Settings (Allow / Ask / Deny) govern what the extension may do
+*on web pages*. They did not stop the extension's own background requests: with every site at **Ask**, the
+tracker still read an1me.to, AnimeFillerList and MyAnimeList. And `browser.permissions.getAll()` /
+`contains()` answer "granted" for every declared site whatever Settings shows, so no app or extension can
+read those switches truthfully. The app therefore shows two facts instead:
 
-- **Opening the right screen** uses `SFSafariSettings.openExtensionsSettings`, the app's one supported way
-  to land on the extension's own Settings page. If Safari refuses, the app opens its own page in Settings.
-- **Reading the state** uses `SFSafariExtensionManager` for "is the extension on" and the extension's own
-  `browser.permissions` reading, sent back over the `an1metracker://` link. **Ready** needs both: Safari's
-  own "enabled" answer and a fresh reading with every website allowed.
-- These APIs are why the app requires iOS 26.2. If Safari does not answer, the app says **Unable to check**
-  instead of showing a value it cannot stand behind.
+- **Safari Extension** — `SFSafariExtensionManager` (iOS 26.2+). If Safari does not answer, a recent report
+  from the extension stands in, because it can only report while it is on.
+- **an1me.to** — *Allowed* when the extension's content script answered from an1me.to in the last 7 days.
+  It only runs where Safari lets the extension in, so the answer itself is the evidence. A report from an
+  older extension version is discarded after an update.
 
-> [!IMPORTANT]
-> The app holds no permission verdict of its own. It stores the extension's measurement with the time it
-> was taken, marks a reading older than 12 hours as stale, and shows **Last verified …** beside it.
-> [Apple's Safari extension permission documentation](https://developer.apple.com/documentation/safariservices/managing-safari-web-extension-permissions)
+The Safari build declares host access only where it is needed: an1me.to (content scripts and the
+request-header rule), and AnimeFillerList, MyAnimeList and the AniList image CDN, whose responses are not
+shared cross-origin. Firebase, Jikan, AniSkip and MyAnimeList's image CDN allow cross-origin requests, so
+the extension reaches them without asking Safari for anything.
 
 ## 4. Sign in
 
