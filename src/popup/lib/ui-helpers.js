@@ -219,7 +219,7 @@ const UIHelpers = {
       const src = resolved === safeUrl && window.AnimeTracker?.LibraryCoverLoader
         ? "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
         : resolved;
-      return `<img class="${cls}" src="${this.escapeHtml(src)}" data-at-cover-url="${this.escapeHtml(safeUrl)}" alt="${safeTitle}" loading="lazy" decoding="async" fetchpriority="low">`;
+      return `<img class="${cls}" src="${this.escapeHtml(src)}" data-at-cover-url="${this.escapeHtml(safeUrl)}" alt="${safeTitle}" width="40" height="56" loading="lazy" decoding="async" fetchpriority="low">`;
     }
 
     const letter = (title || "").trim().charAt(0).toUpperCase();

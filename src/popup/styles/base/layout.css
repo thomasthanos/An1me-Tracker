@@ -139,6 +139,7 @@
   flex: 1;
   overflow-y: scroll;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
   padding: 4px var(--pad-h) var(--pad-h);
   display: flex;
   flex-direction: column;
