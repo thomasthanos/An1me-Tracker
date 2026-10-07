@@ -26,7 +26,7 @@ test("grant page requests only declared origins, synchronously in the tap handle
 });
 
 test("grants come from probes, not from the permissions API", async () => {
-  const bg = read("background.js");
+  const bg = read("background.js").replace(/\r\n/g, "\n");
   assert.match(bg, /const grantedOrigins = declared\.filter\(\(origin\) => probes\[origin\] === "allowed"\)/);
   assert.match(bg, /apiOrigins: listed/);
   const vm = require("node:vm");
