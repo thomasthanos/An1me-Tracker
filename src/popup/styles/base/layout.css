@@ -9,6 +9,10 @@
   min-height: var(--h);
   background: var(--bg-0);
   background-image: radial-gradient(ellipse at 50% 0%, rgba(var(--primary-rgb), 0.04) 0%, transparent 60%);
+  /* viewport-fit=cover: keep content clear of the notch/rounded corners in landscape (0 on desktop). */
+  box-sizing: border-box;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .main-app {
@@ -24,7 +28,7 @@
 .header {
   background: var(--bg-1);
   border-bottom: 1px solid var(--b0);
-  padding: 14px 18px 0;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 0;
   flex-shrink: 0;
   position: relative;
   z-index: 20;

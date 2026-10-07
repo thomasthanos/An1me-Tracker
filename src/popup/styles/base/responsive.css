@@ -83,7 +83,7 @@ html.is-mobile .main-app {
 }
 
 @media (hover: none) and (pointer: coarse) and (max-height: 620px) {
-  .header { padding-top: 10px; }
+  .header { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
   .header-content { margin-bottom: 8px; }
   .stats-bar { padding: 4px 14px 4px; }
   .footer { min-height: 24px; padding: 3px 14px calc(3px + env(safe-area-inset-bottom, 0px)); font-size: 9.5px; }

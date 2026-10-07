@@ -2,7 +2,7 @@
 
 .at-toast {
   position: fixed;
-  bottom: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translate(-50%, 14px);
   display: flex;
