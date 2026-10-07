@@ -97,7 +97,10 @@ enum DiagnosticsService {
 
     private static func originState(_ origin: String, snapshot: PermissionSnapshot?) -> String {
         guard let snapshot, snapshot.isUsable else { return "unknown" }
-        return snapshot.isGranted(origin) ? "allowed" : "missing"
+        let probe = snapshot.probes?[origin] ?? "not probed"
+        guard let api = snapshot.apiOrigins else { return probe }
+        let apiAnswer = api.contains(origin) || snapshot.allWebsites ? "granted" : "not granted"
+        return "API \(apiAnswer) · probe \(probe)"
     }
 
     private static func originTone(_ origin: String, snapshot: PermissionSnapshot?) -> DiagnosticsReport.Tone {

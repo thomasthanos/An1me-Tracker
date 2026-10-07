@@ -22,6 +22,12 @@ struct PermissionSnapshot: Codable, Equatable {
     var capturedAt: Date
     /// API permissions from `permissions.getAll()`. `nil` for readings from extensions that predate it.
     var grantedPermissions: [String]? = nil
+    /// What `permissions.getAll()` claimed, kept for Diagnostics only. Safari iOS lists declared hosts here
+    /// even while Settings shows them at "Ask", so it is never used as a grant.
+    var apiOrigins: [String]? = nil
+    /// The extension's empirical reading per origin: "allowed", "ask" or "unreachable". This, not the API,
+    /// is what `grantedOrigins` is built from.
+    var probes: [String: String]? = nil
 
     static let empty = PermissionSnapshot(
         grantedOrigins: [],

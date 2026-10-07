@@ -25,11 +25,27 @@ test("grant page requests only declared origins, synchronously in the tap handle
   assert.ok(fs.existsSync(path.join(ROOT, "src/grant/grant.html")));
 });
 
-test("contains() is diagnostics only; grants come from getAll()", () => {
+test("grants come from probes, not from the permissions API", async () => {
   const bg = read("background.js");
-  assert.match(bg, /containsOrigins\.push\(origin\)/);
-  assert.match(bg, /const grantedOrigins = \[\.\.\.new Set\(\[\.\.\.listed, \.\.\.declared\.filter\(covered\)\]\)\]/);
-  assert.match(read("src/grant/grant.js"), /verifyAndReturn/);
+  assert.match(bg, /const grantedOrigins = declared\.filter\(\(origin\) => probes\[origin\] === "allowed"\)/);
+  assert.match(bg, /apiOrigins: listed/);
+  const vm = require("node:vm");
+  const pick = (name) => bg.slice(bg.indexOf(name), bg.indexOf("\n}\n", bg.indexOf(name)) + 2);
+  const answers = { "an1me.to": { type: "basic" }, "api.aniskip.com": { type: "cors" } };
+  const context = { AbortController, setTimeout, clearTimeout, URL,
+    fetch: async (url) => { const r = answers[new URL(url).host]; if (!r) throw new TypeError("blocked"); return r; } };
+  vm.runInNewContext(`const PERMISSION_PROBE_PATHS = {};\n${pick("async function probeHost")}\n${pick("async function probeDeclaredHosts")}\nthis.run = probeDeclaredHosts;`, context);
+  const hostOf = (o) => o.replace(/^[a-z*]+:\/\//i, "").replace(/\/.*$/, "");
+  const probes = await context.run(["https://an1me.to/*", "https://*.an1me.to/*", "https://api.aniskip.com/*", "https://myanimelist.net/*"], hostOf);
+  assert.deepEqual({ ...probes }, { "https://an1me.to/*": "allowed", "https://*.an1me.to/*": "allowed",
+    "https://api.aniskip.com/*": "unverified", "https://myanimelist.net/*": "ask" });
+  answers["an1me.to"] = undefined; delete answers["api.aniskip.com"];
+  const offline = await context.run(["https://an1me.to/*"], hostOf);
+  assert.equal(offline["https://an1me.to/*"], "unreachable");
+});
+
+test("a report from another extension version is dropped on refresh", () => {
+  assert.match(read("ios/An1meTracker/Services/PermissionCoordinator.swift"), /reported != current \{\s*store\.clear\(\)/);
 });
 
 test("Allow buttons no longer route to Settings", () => {

@@ -222,7 +222,12 @@ struct WebsiteAccessViewModel {
 
     private func hostStatus(_ origin: String) -> PermissionRow.Status {
         guard let snapshot = freshSnapshot else { return .unknown }
-        return snapshot.isGranted(origin) ? .granted : .missing
+        if snapshot.isGranted(origin) { return .granted }
+        // The probe could not tell (a CORS-enabled API answers the same with or without access): say so.
+        switch snapshot.probes?[origin] {
+        case "unverified", "unreachable": return .unknown
+        default: return .missing
+        }
     }
 
     private func apiStatus(_ name: String) -> PermissionRow.Status {

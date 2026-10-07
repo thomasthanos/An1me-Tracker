@@ -31,7 +31,7 @@ const GROUPS = Object.freeze([
     id: "account",
     title: "Account & Sync",
     summary: "Sign-in and cloud library sync",
-    required: false,
+    required: true,
     hosts: Object.freeze([
       { origin: "https://identitytoolkit.googleapis.com/*", feature: "Email and password sign-in" },
       { origin: "https://securetoken.googleapis.com/*", feature: "Refreshing the sign-in session" },
@@ -42,7 +42,7 @@ const GROUPS = Object.freeze([
     id: "info",
     title: "Anime Information",
     summary: "Episode counts, filler flags and airing data",
-    required: false,
+    required: true,
     hosts: Object.freeze([
       { origin: "https://www.animefillerlist.com/*", feature: "Filler and canon episode lists" },
       { origin: "https://api.jikan.moe/*", feature: "Episode metadata and filler stand-in" },
@@ -53,7 +53,7 @@ const GROUPS = Object.freeze([
     id: "artwork",
     title: "Artwork",
     summary: "Cover images for library entries",
-    required: false,
+    required: true,
     hosts: Object.freeze([
       { origin: "https://s4.anilist.co/*", feature: "AniList cover images already stored in your library" },
       { origin: "https://cdn.myanimelist.net/*", feature: "MyAnimeList cover images" },
@@ -63,7 +63,7 @@ const GROUPS = Object.freeze([
     id: "skip",
     title: "Skip Data",
     summary: "Intro and outro times for Skip Outro",
-    required: false,
+    required: true,
     hosts: Object.freeze([
       { origin: "https://api.aniskip.com/*", feature: "Intro and outro timestamps" },
     ]),
@@ -107,10 +107,12 @@ function toSafariManifest(manifest, groups = GROUPS) {
   };
   delete safari.side_panel;
   safari.host_permissions = groups.filter((g) => g.required).flatMap((g) => g.hosts.map((h) => h.origin));
-  safari.optional_host_permissions = [
-    ...groups.filter((g) => !g.required).flatMap((g) => g.hosts.map((h) => h.origin)),
-    ALL_WEBSITES,
-  ];
+  // Every host is required (8.3.6). Safari iOS answers permissions.contains()/getAll() as granted for any
+  // declared host even at "Ask", so optional hosts bought no truthful request flow — only a second list.
+  // Whatever stays optional is still emitted; with none, the key is omitted.
+  const optional = groups.filter((g) => !g.required).flatMap((g) => g.hosts.map((h) => h.origin));
+  if (optional.length) safari.optional_host_permissions = optional;
+  else delete safari.optional_host_permissions;
   return safari;
 }
 
