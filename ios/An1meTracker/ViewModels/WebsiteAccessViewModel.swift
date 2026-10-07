@@ -89,8 +89,11 @@ struct WebsiteAccessViewModel {
 
     func perform(_ action: DashboardAction) async {
         switch action {
-        case .enableExtension, .allowRequiredAccess:
+        case .enableExtension:
+            // Last resort: Safari offers no way to switch an extension on from outside Settings.
             await coordinator.openExtensionSettings()
+        case .allowRequiredAccess:
+            requestAll()
         case .verifyAccess:
             coordinator.startVerificationInSafari()
         case .recheck:
@@ -98,6 +101,31 @@ struct WebsiteAccessViewModel {
         case .openSite:
             coordinator.openSite()
         }
+    }
+
+    /// Every declared website that is not confirmed allowed. With no fresh report, all of them: the grant
+    /// page asks Safari, and Safari skips what is already allowed.
+    var originsNeedingAccess: [String] {
+        let declared = manifest.requiredHosts + manifest.optionalHosts
+        guard let snapshot = freshSnapshot else { return declared }
+        return declared.filter { !snapshot.isGranted($0) }
+    }
+
+    /// "Enable Required Access": one Safari prompt for an1me.to and every service still missing.
+    func requestAll() {
+        let origins = originsNeedingAccess
+        coordinator.requestAccess(origins: origins.isEmpty ? manifest.requiredHosts : origins, title: nil)
+    }
+
+    /// A row's own Allow button: only that group's websites.
+    func request(_ row: PermissionRow) {
+        let missing = row.items.filter { $0.status != .granted }.map(\.id)
+        coordinator.requestAccess(origins: missing.isEmpty ? row.items.map(\.id) : missing, title: row.title)
+    }
+
+    /// Host rows can be requested from the extension; the Safari Extension and API rows cannot.
+    func canRequest(_ row: PermissionRow) -> Bool {
+        row.id.hasPrefix("host:") && row.status != .granted && coordinator.extensionState.isEnabled != false
     }
 
     func recheck() async {

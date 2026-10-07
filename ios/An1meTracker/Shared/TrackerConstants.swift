@@ -24,6 +24,21 @@ enum Tracker {
         URL(string: "https://an1me.to/?\(verifyMarker)=1")!
     }
 
+    /// Where the app's Allow buttons send the user. The extension's content script on an1me.to sees the
+    /// marker and moves the tab to the extension's own grant page, whose one tap calls
+    /// `browser.permissions.request` for these hosts (Safari shows its native prompt) and then hands a
+    /// fresh report back through `an1metracker://state?…`. `hosts` are manifest hosts without scheme or
+    /// path (`an1me.to`, `*.an1me.to`); the extension ignores anything its manifest does not declare.
+    static let grantMarker = "at_grant"
+    static func grantURL(hosts: [String], title: String?) -> URL {
+        var components = URLComponents(url: siteURL, resolvingAgainstBaseURL: false)!
+        components.path = "/"
+        var items = [URLQueryItem(name: grantMarker, value: hosts.isEmpty ? "all" : hosts.joined(separator: ","))]
+        if let title, !title.isEmpty { items.append(URLQueryItem(name: "at_title", value: title)) }
+        components.queryItems = items
+        return components.url ?? verifyURL
+    }
+
     /// Safari cannot open `https://` from the containing app's own settings deep links, so the app asks
     /// Safari through Safari's own scheme first and falls back to the plain URL.
     static var openInSafariURL: URL { siteURL }

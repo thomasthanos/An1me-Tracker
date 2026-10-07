@@ -14,13 +14,32 @@
   const SCHEME = "an1metracker";
   const TIMEOUT_MS = 5000;
 
-  let requested = false;
+  const GRANT_MARKER = "at_grant";
+  let params = null;
   try {
-    requested = new URLSearchParams(location.search).has(MARKER);
+    params = new URLSearchParams(location.search);
   } catch {
-    requested = false;
+    params = null;
   }
-  if (!requested) return;
+
+  // ?at_grant=<hosts|all>&at_title=<row> — the app's Allow / Enable Required Access buttons. A content
+  // script cannot call permissions.request, so the background moves this tab to the extension's own grant
+  // page, where one tap asks Safari and the result is handed back to the app.
+  if (params?.has(GRANT_MARKER)) {
+    try {
+      history.replaceState(null, "", location.pathname + location.hash);
+    } catch {}
+    try {
+      chrome.runtime.sendMessage({
+        type: "OPEN_GRANT_PAGE",
+        hosts: params.get(GRANT_MARKER) || "all",
+        title: params.get("at_title") || "",
+      }, () => void chrome.runtime.lastError);
+    } catch {}
+    return;
+  }
+
+  if (!params?.has(MARKER)) return;
 
   // UTF-8 safe, URL safe base64: JSON.stringify can produce characters btoa alone would reject.
   function encodeBase64Url(value) {

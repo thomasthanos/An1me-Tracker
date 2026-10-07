@@ -81,6 +81,16 @@ final class PermissionCoordinator: ObservableObject {
         SystemLinks.open(Tracker.verifyURL)
     }
 
+    /// Asks Safari for website access: opens the extension's grant page (via an1me.to) for `origins`, where
+    /// one tap triggers Safari's own permission prompt. The app rechecks when the extension hands back its
+    /// report, and again on return to the foreground.
+    func requestAccess(origins: [String], title: String?) {
+        let hosts = origins.map {
+            $0.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "/*", with: "")
+        }
+        SystemLinks.open(Tracker.grantURL(hosts: hosts, title: title))
+    }
+
     func openSite() {
         SystemLinks.open(Tracker.siteURL)
     }

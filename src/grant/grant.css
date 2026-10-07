@@ -1,0 +1,24 @@
+/* Extension-owned page the iOS app sends Safari to: one compact, native-looking sheet. */
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: #000; color: #fff;
+  font: 17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+body { display: flex; align-items: center; justify-content: center;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px))
+           calc(20px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px)); }
+.sheet { width: 100%; max-width: 380px; background: #1c1c1e; border-radius: 22px; padding: 24px 20px 16px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; }
+.icon { border-radius: 13px; margin-bottom: 12px; }
+h1 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+.detail { margin: 0 0 12px; color: rgba(235, 235, 245, 0.6); font-size: 15px; }
+.hosts { list-style: none; margin: 0 0 12px; padding: 0; width: 100%; max-height: 40vh; overflow-y: auto;
+  color: rgba(235, 235, 245, 0.6); font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+.hosts li { padding: 2px 0; overflow-wrap: anywhere; }
+.status { margin: 0 0 10px; min-height: 1.35em; font-size: 14px; color: rgba(235, 235, 245, 0.6); }
+.status.error { color: #ff9f0a; }
+button { width: 100%; min-height: 50px; border: 0; border-radius: 14px; font: inherit; font-weight: 600;
+  -webkit-tap-highlight-color: transparent; cursor: pointer; }
+.primary { background: #0a84ff; color: #fff; margin-bottom: 8px; }
+.secondary { background: transparent; color: #0a84ff; font-weight: 400; }
+button:disabled { opacity: 0.5; }
+button:focus-visible { outline: 2px solid #64d2ff; outline-offset: 2px; }
