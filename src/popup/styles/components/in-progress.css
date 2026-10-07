@@ -152,7 +152,7 @@
 
 .ip-cover-wrap{ position: relative; display: flex; flex-shrink: 0; line-height: 0; }
 
-.ip-cover{ width: 54px; height: 72px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+.ip-cover{ width: 54px; height: 72px; aspect-ratio: 3 / 4; background: rgba(var(--ink-rgb), 0.06); border-radius: 6px; object-fit: cover; flex-shrink: 0; }
 
 .ip-cover-placeholder {
   width: 54px;

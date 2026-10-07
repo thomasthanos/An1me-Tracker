@@ -137,7 +137,8 @@ body.is-suppressing-hover #animeList .airing-list-cards .anime-movie-group:hover
   box-shadow: 0 3px 10px rgba(var(--shadow-rgb), 0.55);
 }
 
-.at-cover{ flex-shrink: 0; border-radius: 8px; object-fit: cover; display: block; }
+/* Reserve the poster box before artwork decodes so cards never collapse or jump between renders. */
+.at-cover{ flex-shrink: 0; width: 40px; height: 56px; aspect-ratio: 5 / 7; border-radius: 8px; object-fit: cover; display: block; background: rgba(var(--ink-rgb), 0.06); }
 
 .at-cover--placeholder {
   border: 1px solid var(--accent);

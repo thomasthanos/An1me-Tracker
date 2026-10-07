@@ -48,7 +48,7 @@
     flex-direction: column;
   }
 
-  .main-content{ flex: 1 1 0; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 16px; }
+  .main-content{ flex: 1 1 0; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; -webkit-overflow-scrolling: touch; padding-bottom: 16px; }
 
   .footer{ flex-shrink: 0; min-height: 30px; padding: 5px 18px; font-size: 10px; }
 

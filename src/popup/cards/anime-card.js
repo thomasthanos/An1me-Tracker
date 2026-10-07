@@ -596,7 +596,7 @@ window.AnimeTracker.AnimeCardRenderer = AnimeCardRenderer;
 
       const safeCoverImage = UIHelpers.sanitizeImageUrl(anime.coverImage);
       const coverHtml = safeCoverImage
-        ? `<span class="ip-cover-wrap"><img class="ip-cover" src="${UIHelpers.escapeHtml(globalThis.AnimeTrackerWebsiteAccess?.imageUrl(safeCoverImage) || safeCoverImage)}" alt=""></span>`
+        ? `<span class="ip-cover-wrap"><img class="ip-cover" width="54" height="72" decoding="async" src="${UIHelpers.escapeHtml(globalThis.AnimeTrackerWebsiteAccess?.imageUrl(safeCoverImage) || safeCoverImage)}" alt=""></span>`
         : `<span class="ip-cover-wrap"><span class="ip-cover-placeholder">&#9654;</span></span>`;
 
       const savedTimeStr = (latestEp.savedAt && UIHelpers.formatTimeAgo(latestEp.savedAt, 7)) || "just now";
