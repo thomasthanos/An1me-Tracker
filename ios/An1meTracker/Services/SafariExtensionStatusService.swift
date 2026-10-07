@@ -2,15 +2,20 @@
 //  SafariExtensionStatusService.swift
 //  An1me Tracker
 //
-//  Asks Safari whether the extension is enabled.
+//  Asks Safari whether the extension is enabled, with `SFSafariExtensionManager.stateOfExtension(withIdentifier:)`
+//  (SafariServices, iOS 26.2 — the app's minimum).
 //
-//  `SFSafariExtensionManager` and `SFSafariExtensionState` are public API on iOS 26.2, the app's minimum.
-//  They are still reached through `NSClassFromString`/`class_getClassMethod`, so a missing symbol becomes an
-//  honest "Safari did not answer" instead of a crash or a made-up "Enabled".
+//  It used to be looked up by name at runtime. That failed on iPhone for two reasons: the selector was the
+//  macOS spelling (`getStateOfSafariExtensionWithIdentifier:`; iOS declares `getStateOfExtensionWithIdentifier:`),
+//  and nothing imported SafariServices, so `NSClassFromString` could not find a class from a framework that was
+//  never loaded. Calling the API directly links the framework and lets the compiler check the name.
+//
+//  If Safari still cannot answer, the result is `.unknown(.queryFailed)`, never a made-up "Enabled"; the
+//  extension's own fresh report then confirms it (see `WebsiteAccessViewModel.extensionConfirmed`).
 //
 
 import Foundation
-import ObjectiveC
+import SafariServices
 
 /// `Sendable` because the coordinator `await`s it from the main actor. A non-`Sendable` service would have
 /// to be sent across an isolation boundary to run its nonisolated async work, which strict concurrency
@@ -22,41 +27,15 @@ protocol SafariExtensionStatusProviding: Sendable {
 /// A value type with no stored state, and therefore `Sendable` for free.
 struct SafariExtensionStatusService: SafariExtensionStatusProviding {
 
-    private typealias GetStateImplementation =
-        @convention(c) (AnyObject, Selector, NSString, @escaping @convention(block) (AnyObject?, NSError?) -> Void) -> Void
-
-    private static let selectorName = "getStateOfSafariExtensionWithIdentifier:completionHandler:"
-
     func currentState() async -> ExtensionEnabledState {
         guard let identifier = SafariExtensionIdentity.bundleIdentifier else {
             return .unknown(.extensionNotFound)
         }
-        guard let manager: AnyClass = NSClassFromString("SFSafariExtensionManager") else {
-            return .unknown(.queryFailed("SFSafariExtensionManager is unavailable"))
+        do {
+            let state = try await SFSafariExtensionManager.stateOfExtension(withIdentifier: identifier)
+            return state.isEnabled ? .enabled : .disabled
+        } catch {
+            return .unknown(.queryFailed(error.localizedDescription))
         }
-        let selector = NSSelectorFromString(Self.selectorName)
-        guard let method = class_getClassMethod(manager, selector) else {
-            return .unknown(.queryFailed("SFSafariExtensionManager is unavailable"))
-        }
-
-        let answer = await withCheckedContinuation { (continuation: CheckedContinuation<AnyObject?, Never>) in
-            let implementation = unsafeBitCast(method_getImplementation(method), to: GetStateImplementation.self)
-            implementation(manager as AnyObject, selector, identifier as NSString) { state, error in
-                continuation.resume(returning: error == nil ? state : nil)
-            }
-        }
-
-        guard let state = answer else {
-            return .unknown(.queryFailed("no answer from Safari"))
-        }
-        // Objective-C exposes the property as `enabled` (Swift `isEnabled`); read it through KVC so no
-        // compile-time knowledge of SFSafariExtensionState is needed. Casting to NSObject first keeps the
-        // KVC call unambiguous rather than relying on dynamic member lookup on AnyObject.
-        let enabled = ((state as? NSObject)?.value(forKey: "enabled") as? NSNumber)?.boolValue
-        guard let enabled else {
-            return .unknown(.queryFailed("unexpected state object"))
-        }
-        return enabled ? .enabled : .disabled
     }
-
 }

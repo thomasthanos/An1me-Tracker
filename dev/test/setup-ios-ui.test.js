@@ -184,15 +184,16 @@ test("the extension and the app agree about the URL scheme and the settings sele
   const constants = fs.readFileSync(path.join(REPO, "ios/An1meTracker/Shared/TrackerConstants.swift"), "utf8");
   assert.match(constants, /static let urlScheme = "an1metracker"/);
 
-  // Opening the extension's own Settings page is a runtime lookup, so the app also builds against SDKs
-  // without the symbol, and a missing class reads as "Safari did not answer" rather than a guess.
+  // Called directly (iOS 26.2 is the minimum): the old by-name lookup used the macOS selector and failed on
+  // iPhone because SafariServices was never loaded.
   const launcher = fs.readFileSync(path.join(REPO, "ios/An1meTracker/Services/SettingsLauncher.swift"), "utf8");
-  assert.match(launcher, /openExtensionsSettingsForIdentifiers:completionHandler:/);
-  assert.match(launcher, /NSClassFromString\("SFSafariSettings"\)/);
+  assert.match(launcher, /import SafariServices/);
+  assert.match(launcher, /SFSafariSettings\.openExtensionsSettings\(forIdentifiers:/);
 
   const status = fs.readFileSync(path.join(REPO, "ios/An1meTracker/Services/SafariExtensionStatusService.swift"), "utf8");
-  assert.match(status, /getStateOfSafariExtensionWithIdentifier:completionHandler:/);
-  assert.match(status, /NSClassFromString\("SFSafariExtensionManager"\)/);
+  assert.match(status, /import SafariServices/);
+  assert.match(status, /SFSafariExtensionManager\.stateOfExtension\(withIdentifier:/);
+  assert.doesNotMatch(status, /"getStateOfSafariExtensionWithIdentifier:/);
 });
 
 test("setupUI stamps iOS 26.2 on every target of the generated project", () => {

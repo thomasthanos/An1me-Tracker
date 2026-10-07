@@ -18,13 +18,16 @@ enum DiagnosticsService {
         var sections: [DiagnosticsReport.Section] = []
 
         // MARK: Extension
-        let extensionRows: [DiagnosticsReport.Row] = [
+        var extensionRows: [DiagnosticsReport.Row] = [
             .init("Safari Extension", coordinator.extensionState.title, tone: tone(for: coordinator.extensionState)),
             .init("Extension version", SafariExtensionIdentity.version ?? "not found",
                   tone: SafariExtensionIdentity.version == nil ? .bad : .normal),
             .init("Bundle identifier", SafariExtensionIdentity.bundleIdentifier ?? "not found",
                   tone: SafariExtensionIdentity.bundleIdentifier == nil ? .bad : .normal),
         ]
+        if case .unknown(.queryFailed(let message)) = coordinator.extensionState {
+            extensionRows.append(.init("Safari state query", message, tone: .warning))
+        }
         sections.append(.init(title: "Extension", rows: extensionRows))
 
         // MARK: Website access

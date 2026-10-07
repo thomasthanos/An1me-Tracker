@@ -18,7 +18,7 @@ enum ExtensionEnabledState: Equatable {
         case extensionNotFound
         /// Safari has not been asked yet (the moment between launch and the first answer).
         case notChecked
-        /// The API exists but refused to answer.
+        /// Safari did not answer. The message is kept for Diagnostics only, never shown as the status.
         case queryFailed(String)
 
         var detail: String {
@@ -27,8 +27,8 @@ enum ExtensionEnabledState: Equatable {
                 return "The Safari extension is missing from this app. Reinstall An1me Tracker."
             case .notChecked:
                 return "Asking Safari…"
-            case .queryFailed(let message):
-                return "Safari did not answer (\(message)). Open Safari Settings and check the extension there."
+            case .queryFailed:
+                return "Safari didn't report it. Verify in Safari: the extension reports back when it's on."
             }
         }
     }

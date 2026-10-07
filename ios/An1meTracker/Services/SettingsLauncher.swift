@@ -12,7 +12,7 @@
 //
 
 import Foundation
-import ObjectiveC
+import SafariServices
 import UIKit
 
 @MainActor
@@ -26,29 +26,18 @@ protocol ExtensionSettingsLaunching: AnyObject {
 @MainActor
 final class SettingsLauncher: ExtensionSettingsLaunching {
 
-    private typealias OpenSettingsImplementation =
-        @convention(c) (AnyObject, Selector, NSArray, @escaping @convention(block) (NSError?) -> Void) -> Void
-
-    private static let selectorName = "openExtensionsSettingsForIdentifiers:completionHandler:"
-
     func openExtensionSettings() async -> Bool {
-        guard let identifier = SafariExtensionIdentity.bundleIdentifier,
-              let settings: AnyClass = NSClassFromString("SFSafariSettings"),
-              let method = class_getClassMethod(settings, NSSelectorFromString(Self.selectorName))
-        else {
+        guard let identifier = SafariExtensionIdentity.bundleIdentifier else {
             await openSettingsApp()
             return false
         }
-
-        let selector = NSSelectorFromString(Self.selectorName)
-        let took = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            let implementation = unsafeBitCast(method_getImplementation(method), to: OpenSettingsImplementation.self)
-            implementation(settings as AnyObject, selector, [identifier] as NSArray) { error in
-                continuation.resume(returning: error == nil)
-            }
+        do {
+            try await SFSafariSettings.openExtensionsSettings(forIdentifiers: [identifier])
+            return true
+        } catch {
+            await openSettingsApp()
+            return false
         }
-        if !took { await openSettingsApp() }
-        return took
     }
 
     func openSettingsApp() async {
