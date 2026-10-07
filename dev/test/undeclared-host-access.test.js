@@ -11,8 +11,9 @@ const SAFARI_HOSTS = ["https://an1me.to/*", "https://*.an1me.to/*", "https://www
   "https://myanimelist.net/*", "https://s4.anilist.co/*"];
 
 function pick(source, name) {
-  const start = source.indexOf(name);
-  return source.slice(start, source.indexOf("\n}\n", start) + 2);
+  const normalized = source.replace(/\r\n/g, "\n");
+  const start = normalized.indexOf(name);
+  return normalized.slice(start, normalized.indexOf("\n}\n", start) + 2);
 }
 
 function repairContext(manifest, granted) {
