@@ -11,6 +11,13 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.5] — 2026-10-07
+
+### Fixed
+
+- **Accurate website access reporting on iOS.** `buildPermissionReport` counts only `getAll()` as confirmed grants (comparing origins by hostname), avoiding false "Allowed" statuses when Safari extensions remain set to "Ask".
+- **Verification and host prompting during grant.** The in-extension grant flow checks remaining "Ask" domains after permission requests and triggers lightweight host touches to prompt Safari before returning state.
+
 ## [8.3.4] — 2026-10-07
 
 ### Added
