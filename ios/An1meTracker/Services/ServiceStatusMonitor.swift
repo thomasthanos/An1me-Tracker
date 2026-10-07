@@ -7,6 +7,7 @@
 //  blocked website. The list is the extension's own manifest hosts, grouped under a service name.
 //
 
+import Combine
 import Foundation
 
 enum ServiceReachability: Equatable {

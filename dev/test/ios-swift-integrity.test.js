@@ -242,6 +242,26 @@ check(
 );
 check("the app does observe something", wrappers.length > 0, "no property wrapper was found at all; the scan is probably broken");
 
+// `@Published`'s init and the `ObservableObject` synthesis live in Combine. `import SwiftUI` is not enough
+// for a file that *declares* them: the build fails with "initializer 'init(wrappedValue:)' is not available
+// due to missing import of defining module 'Combine'". Views that only use @EnvironmentObject are fine with
+// SwiftUI and are deliberately not flagged.
+const combineMissing = [];
+const codeOnly = (text) => text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+for (const [file, source] of sources) {
+  const code = codeOnly(source);
+  const usesPublished = /@Published\b/.test(code);
+  const declaresObservableObject = /^[ \t]*(?:public |internal |private |fileprivate |final |open )*(?:class|struct)\s+[A-Z]\w*[^\n{]*:\s*[^\n{]*\bObservableObject\b/m.test(code);
+  if ((usesPublished || declaresObservableObject) && !/^import Combine\b/m.test(code)) {
+    combineMissing.push(rel(file));
+  }
+}
+check(
+  "every file declaring @Published or ObservableObject imports Combine",
+  combineMissing.length === 0,
+  combineMissing.join(", "),
+);
+
 // ─── Strict concurrency ──────────────────────────────────────────────────────────────────────────────
 //
 // The app is compiled with strict concurrency, so both of these are errors rather than warnings. Each one
