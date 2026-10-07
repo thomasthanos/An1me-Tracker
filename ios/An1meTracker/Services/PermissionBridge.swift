@@ -62,6 +62,7 @@ enum PermissionBridge {
 
         let blocked = (payload["blockedOrigins"] as? [String]) ?? []
         let version = payload["extensionVersion"] as? String
+        let apiPermissions = payload["grantedPermissions"] as? [String]
 
         // `capturedAt` is milliseconds since the epoch, which is what JavaScript produces without help.
         let milliseconds = (payload["capturedAt"] as? NSNumber)?.doubleValue
@@ -72,7 +73,8 @@ enum PermissionBridge {
             allWebsites: allWebsites,
             blockedOrigins: blocked,
             extensionVersion: version,
-            capturedAt: capturedAt
+            capturedAt: capturedAt,
+            grantedPermissions: apiPermissions
         )
     }
 
@@ -85,13 +87,14 @@ enum PermissionBridge {
     // MARK: - Writing (the extension does this; the encoder is here so one file owns the format)
 
     static func url(for snapshot: PermissionSnapshot) -> URL? {
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "grantedOrigins": snapshot.grantedOrigins,
             "blockedOrigins": snapshot.blockedOrigins,
             "allWebsites": snapshot.allWebsites,
             "extensionVersion": snapshot.extensionVersion ?? "",
             "capturedAt": snapshot.capturedAt.timeIntervalSince1970 * 1000,
         ]
+        if let granted = snapshot.grantedPermissions { payload["grantedPermissions"] = granted }
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
         let encoded = data.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")

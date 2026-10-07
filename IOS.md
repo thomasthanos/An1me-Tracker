@@ -55,15 +55,16 @@ The **An1me Tracker** app is the place to see and fix access. It shows the state
 guesses: until the extension has measured something, it says **Not verified yet** rather than **Allowed**.
 
 1. **Settings → Apps → Safari → Extensions → An1me.to Tracker** → turn it on.
-2. Open the **An1me Tracker** app. The dashboard shows the extension state, website access and how many of
-   the tracker's services are allowed.
-3. Tap **Allow Required Access**. On iOS 26.2 and later this opens the extension's own page in Settings; on
-   earlier versions it opens Settings, where you continue to
-   **Apps → Safari → Extensions → An1me.to Tracker**. Under **Permissions**, allow the websites the tracker
-   lists — or turn on **All Websites**, which covers every one of them at once.
-4. Back in the app, tap **Verify Access**. This opens an1me.to once; the extension measures what Safari has
-   actually allowed and hands the result back, and the app shows **Allowed** (or which services are still
-   missing) together with when it was verified. **Recheck** re-reads that measurement without opening Safari.
+2. Open the **An1me Tracker** app. It shows **Ready**, or **Setup required** with how many permissions need
+   attention.
+3. Tap **Enable Required Access**. When Safari reports something missing (or the extension off), this opens
+   the extension's own page in Settings on iOS 26.2 and later, or Settings on earlier versions, where you
+   continue to **Apps → Safari → Extensions → An1me.to Tracker** and allow the websites it lists — or turn
+   on **All Websites**. When nothing has been verified yet, it opens an1me.to once so the extension can
+   measure what Safari allows and hand the result back. The app rechecks whenever you return to it.
+4. **Permissions** lists exactly what the extension's `manifest.json` declares, as Required and Optional;
+   **Services** shows whether Firebase, Firestore, AniList, AniSkip, Jikan and the others answer from your
+   network. Those are reachability checks, not permissions.
 
 Open **an1me.to** in Safari and allow the tracker **Always on This Website** so it can save watch progress.
 

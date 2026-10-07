@@ -21,7 +21,7 @@ struct SafariExtensionView: View {
             buildSection
             actionsSection
         }
-        .listStyle(.insetGrouped)
+        .trackerList()
         .navigationTitle("Safari Extension")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.recheck() }
@@ -31,25 +31,16 @@ struct SafariExtensionView: View {
     private var stateSection: some View {
         Section {
             HStack(spacing: 12) {
-                Image(systemName: stateSymbol)
-                    .font(.title3)
-                    .foregroundStyle(AppTheme.color(for: stateTone))
-                    .frame(width: 32, height: 32)
-                    .background(
-                        AppTheme.color(for: stateTone).opacity(0.14),
-                        in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    )
-                    .accessibilityHidden(true)
+                SettingsIcon(symbol: stateSymbol, tint: AppTheme.color(for: stateTone))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.state.title)
-                        .font(.headline)
+                        .font(.body.weight(.semibold))
                     Text(model.state.detail)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.vertical, 4)
             .accessibilityElement(children: .combine)
 
             if let limitation = model.stateLimitation {
@@ -83,8 +74,8 @@ struct SafariExtensionView: View {
             }
             .accessibilityElement(children: .combine)
 
-            NavigationLink(value: AppRoute.websiteAccess) {
-                Text("Manage website access")
+            NavigationLink(value: AppRoute.permissions) {
+                Text("Permissions")
             }
         } header: {
             Text("Access")
@@ -122,7 +113,7 @@ struct SafariExtensionView: View {
             }
             .disabled(model.isChecking)
         } footer: {
-            Text("Safari decides website access; no app can grant it for you. “Verify Access in Safari” opens the site so the extension can measure what Safari has actually allowed and report it back.")
+            Text("Safari decides website access. Verify opens an1me.to so the extension can report what Safari allows.")
         }
     }
 

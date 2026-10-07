@@ -2,9 +2,9 @@
 //  HomeViewModel.swift
 //  An1me Tracker
 //
-//  The dashboard's presenter: turns the coordinator's assessment into the headline, the status rows and
-//  the single next step. It never invents a state — when nothing is verified it says so and offers the
-//  verification instead.
+//  The home screen's presenter: Ready, or "Setup required" with a count and the one action that fixes it.
+//  It never invents a state — the rows and the count come from the same presenter the Permissions screen
+//  uses, which reads only the coordinator.
 //
 //  This is a value type on purpose. It owns no state: every value below is derived from the coordinator,
 //  which is the object that actually changes and the one the views observe. A class conforming to
@@ -19,87 +19,55 @@ struct HomeViewModel {
 
     let coordinator: PermissionCoordinator
 
-    // MARK: - Headline
+    private var permissions: WebsiteAccessViewModel { WebsiteAccessViewModel(coordinator: coordinator) }
 
     var isChecking: Bool { coordinator.isRefreshing }
-    var isReady: Bool { coordinator.assessment.isReady }
-    var hasSnapshot: Bool { coordinator.snapshot != nil }
+
+    /// Verified access plus an extension Safari reports as on — or, where iOS cannot report it, one that
+    /// just sent a fresh reading of its own (see `WebsiteAccessViewModel.extensionConfirmed`).
+    var isReady: Bool {
+        coordinator.assessment.isReady || (permissions.extensionConfirmed && coordinator.assessment.state.isAllowed)
+    }
 
     var headline: String {
         if isReady { return "Ready" }
-        if coordinator.extensionState.isEnabled == false { return "Action Required" }
-        if !coordinator.assessment.state.missingOrigins.isEmpty { return "Action Required" }
-        return "Finish setup"
+        return "Setup required"
     }
 
-    var headlineDetail: String {
-        if isReady { return "Everything the tracker needs is allowed." }
-        switch coordinator.assessment.state {
-        case .allowed:
-            return "Website access looks complete. Verify once so the app can confirm it."
-        case .missing(let origins):
-            let count = origins.count
-            return count == 1 ? "1 required service is blocked." : "\(count) required services are blocked."
-        case .unableToVerify(let reason):
-            return reason.detail
+    var attentionDetail: String {
+        let count = permissions.attentionCount
+        if count > 0 {
+            return count == 1 ? "1 permission needs attention" : "\(count) permissions need attention"
         }
+        if case .unableToVerify(let reason) = coordinator.assessment.state { return reason.title }
+        return "Safari has not confirmed the extension yet"
     }
 
-    var headlineTone: StatusRow.Tone {
-        if isReady { return .good }
-        if coordinator.extensionState.isEnabled == false { return .bad }
-        if !coordinator.assessment.state.missingOrigins.isEmpty { return .bad }
-        return .warning
-    }
-
-    var headlineSymbol: String {
-        if isReady { return "checkmark.seal.fill" }
-        if coordinator.extensionState.isEnabled == false { return "exclamationmark.triangle.fill" }
-        return "exclamationmark.circle.fill"
-    }
-
-    // MARK: - Status rows
-
-    var statusRows: [StatusRow] {
-        let assessment = coordinator.assessment
-        return [
-            StatusRow(
-                id: "extension",
-                symbol: "puzzlepiece.extension",
-                title: "Safari Extension",
-                value: coordinator.extensionState.title,
-                tone: tone(for: coordinator.extensionState)
-            ),
-            StatusRow(
-                id: "access",
-                symbol: "lock.shield",
-                title: "Website Access",
-                value: assessment.summary,
-                tone: tone(for: assessment.state)
-            ),
-            StatusRow(
-                id: "services",
-                symbol: "server.rack",
-                title: "Required Services",
-                value: "\(assessment.grantedHostCount) / \(assessment.totalHostCount)",
-                tone: assessment.grantedHostCount == assessment.totalHostCount ? .good : .warning
-            ),
+    /// The three facts behind "Ready". Only shown when `isReady`, so each is already established.
+    var readyRows: [StatusRow] {
+        [
+            StatusRow(id: "extension", symbol: "puzzlepiece.extension.fill", title: "Safari Extension",
+                      value: "Enabled", tone: tone(for: coordinator.extensionState)),
+            StatusRow(id: "access", symbol: "lock.shield.fill", title: "Website Access",
+                      value: "Allowed", tone: tone(for: coordinator.assessment.state)),
+            StatusRow(id: "permissions", symbol: "checkmark.shield.fill", title: "Permissions",
+                      value: "Ready", tone: permissions.attentionCount == 0 ? .good : .warning),
         ]
+    }
+
+    /// Short value for the Permissions row in the list.
+    var permissionsValue: String {
+        let count = permissions.attentionCount
+        if count > 0 { return "\(count) to fix" }
+        return isReady ? "Ready" : "Not verified"
     }
 
     // MARK: - Actions
 
-    /// The one thing worth doing next. Exactly one action is returned, so the dashboard never presents a
-    /// wall of equally-weighted buttons.
-    var primaryAction: DashboardAction {
-        if coordinator.extensionState.isEnabled == false { return .enableExtension }
-        if !coordinator.assessment.state.missingOrigins.isEmpty { return .allowRequiredAccess }
-        if coordinator.assessment.state.isAllowed { return .openSite }
-        return .verifyAccess
-    }
-
-    var showsSettingsFallback: Bool {
-        coordinator.extensionState.isEnabled == false || !coordinator.assessment.state.missingOrigins.isEmpty
+    /// What "Enable Required Access" really does on this device, in this state. Each case is an action the
+    /// app can perform; nothing here pretends to grant a permission itself.
+    var setupAction: DashboardAction {
+        permissions.primaryAction ?? .verifyAccess
     }
 
     func perform(_ action: DashboardAction) async {
@@ -121,7 +89,7 @@ struct HomeViewModel {
         switch state {
         case .enabled: return .good
         case .disabled: return .bad
-        case .unknown: return .warning
+        case .unknown: return permissions.extensionConfirmed ? .good : .warning
         }
     }
 

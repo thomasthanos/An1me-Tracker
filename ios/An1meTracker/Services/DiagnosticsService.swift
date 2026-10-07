@@ -53,6 +53,18 @@ enum DiagnosticsService {
         }
         sections.append(.init(title: "Website access", rows: accessRows))
 
+        // MARK: Manifest (what Safari enforces)
+        let manifest = ExtensionManifest.current
+        sections.append(.init(title: "Manifest", rows: [
+            .init("Source", manifest.source == .bundled ? "extension manifest.json" : "built-in model",
+                  tone: manifest.source == .bundled ? .normal : .warning),
+            .init("Required websites", "\(manifest.requiredHosts.count)"),
+            .init("Optional websites", "\(manifest.optionalHosts.count)"),
+            .init("APIs", manifest.apiPermissions.isEmpty ? "none" : manifest.apiPermissions.joined(separator: ", ")),
+            .init("Matches app model", manifest.matchesAppModel ? "yes" : "no",
+                  tone: manifest.matchesAppModel ? .good : .warning),
+        ]))
+
         // MARK: Every origin
         let originRows = HostPermissions.groups.flatMap { group -> [DiagnosticsReport.Row] in
             group.hosts.map { host in
