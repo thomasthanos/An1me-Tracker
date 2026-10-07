@@ -18,16 +18,13 @@ enum DiagnosticsService {
         var sections: [DiagnosticsReport.Section] = []
 
         // MARK: Extension
-        var extensionRows: [DiagnosticsReport.Row] = [
+        let extensionRows: [DiagnosticsReport.Row] = [
             .init("Safari Extension", coordinator.extensionState.title, tone: tone(for: coordinator.extensionState)),
             .init("Extension version", SafariExtensionIdentity.version ?? "not found",
                   tone: SafariExtensionIdentity.version == nil ? .bad : .normal),
             .init("Bundle identifier", SafariExtensionIdentity.bundleIdentifier ?? "not found",
                   tone: SafariExtensionIdentity.bundleIdentifier == nil ? .bad : .normal),
         ]
-        if !SystemInfo.supportsExtensionStateQuery {
-            extensionRows.append(.init("State query", "Not available before iOS 26.2", tone: .warning))
-        }
         sections.append(.init(title: "Extension", rows: extensionRows))
 
         // MARK: Website access
@@ -52,6 +49,18 @@ enum DiagnosticsService {
             accessRows.append(.init("Bridge", error, tone: .bad))
         }
         sections.append(.init(title: "Website access", rows: accessRows))
+
+        // MARK: Manifest (what Safari enforces)
+        let manifest = ExtensionManifest.current
+        sections.append(.init(title: "Manifest", rows: [
+            .init("Source", manifest.source == .bundled ? "extension manifest.json" : "built-in model",
+                  tone: manifest.source == .bundled ? .normal : .warning),
+            .init("Required websites", "\(manifest.requiredHosts.count)"),
+            .init("Optional websites", "\(manifest.optionalHosts.count)"),
+            .init("APIs", manifest.apiPermissions.isEmpty ? "none" : manifest.apiPermissions.joined(separator: ", ")),
+            .init("Matches app model", manifest.matchesAppModel ? "yes" : "no",
+                  tone: manifest.matchesAppModel ? .good : .warning),
+        ]))
 
         // MARK: Every origin
         let originRows = HostPermissions.groups.flatMap { group -> [DiagnosticsReport.Row] in

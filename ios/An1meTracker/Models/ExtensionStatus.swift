@@ -2,8 +2,8 @@
 //  ExtensionStatus.swift
 //  An1me Tracker
 //
-//  What Safari will tell the app about the extension itself. `SFSafariExtensionManager` only exposes this
-//  on iOS 26.2 and later, so "unknown" is a first-class answer rather than a false "Enabled".
+//  What Safari will tell the app about the extension itself, through `SFSafariExtensionManager` (the app
+//  requires iOS 26.2, where it exists). "Unknown" stays a first-class answer rather than a false "Enabled".
 //
 
 import Foundation
@@ -16,8 +16,8 @@ enum ExtensionEnabledState: Equatable {
     enum UnknownReason: Equatable {
         /// The extension is inside this app, but no `.appex` bundle could be found beside it.
         case extensionNotFound
-        /// Safari exposes the state to a containing app only from iOS 26.2. Older systems have no public API.
-        case unsupportedSystem(currentVersion: String)
+        /// Safari has not been asked yet (the moment between launch and the first answer).
+        case notChecked
         /// The API exists but refused to answer.
         case queryFailed(String)
 
@@ -25,8 +25,8 @@ enum ExtensionEnabledState: Equatable {
             switch self {
             case .extensionNotFound:
                 return "The Safari extension is missing from this app. Reinstall An1me Tracker."
-            case .unsupportedSystem(let version):
-                return "iOS \(version) cannot report whether a Safari extension is on. Enable it in Settings → Apps → Safari → Extensions, then verify access."
+            case .notChecked:
+                return "Asking Safari…"
             case .queryFailed(let message):
                 return "Safari did not answer (\(message)). Open Safari Settings and check the extension there."
             }

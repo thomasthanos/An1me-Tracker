@@ -185,7 +185,7 @@ test("the extension and the app agree about the URL scheme and the settings sele
   assert.match(constants, /static let urlScheme = "an1metracker"/);
 
   // Opening the extension's own Settings page is a runtime lookup, so the app also builds against SDKs
-  // that predate the API and runs on iOS 18, where it answers "unsupported" rather than guessing.
+  // without the symbol, and a missing class reads as "Safari did not answer" rather than a guess.
   const launcher = fs.readFileSync(path.join(REPO, "ios/An1meTracker/Services/SettingsLauncher.swift"), "utf8");
   assert.match(launcher, /openExtensionsSettingsForIdentifiers:completionHandler:/);
   assert.match(launcher, /NSClassFromString\("SFSafariSettings"\)/);
@@ -193,4 +193,9 @@ test("the extension and the app agree about the URL scheme and the settings sele
   const status = fs.readFileSync(path.join(REPO, "ios/An1meTracker/Services/SafariExtensionStatusService.swift"), "utf8");
   assert.match(status, /getStateOfSafariExtensionWithIdentifier:completionHandler:/);
   assert.match(status, /NSClassFromString\("SFSafariExtensionManager"\)/);
+});
+
+test("setupUI stamps iOS 26.2 on every target of the generated project", () => {
+  const { IOS_DEPLOYMENT_TARGET } = require("../scripts/setup-ios-ui");
+  assert.equal(IOS_DEPLOYMENT_TARGET, "26.2");
 });

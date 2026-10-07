@@ -4,10 +4,9 @@
 //
 //  Asks Safari whether the extension is enabled.
 //
-//  `SFSafariExtensionManager` and `SFSafariExtensionState` are public API, but only for iOS 26.2 and later.
-//  They are reached through `NSClassFromString`/`class_getClassMethod` rather than by importing the symbol:
-//  the app still has to build against an SDK that may predate them, and it has to run on iOS 18, where the
-//  honest answer is "this system cannot tell you" instead of a made-up "Enabled".
+//  `SFSafariExtensionManager` and `SFSafariExtensionState` are public API on iOS 26.2, the app's minimum.
+//  They are still reached through `NSClassFromString`/`class_getClassMethod`, so a missing symbol becomes an
+//  honest "Safari did not answer" instead of a crash or a made-up "Enabled".
 //
 
 import Foundation
@@ -33,11 +32,11 @@ struct SafariExtensionStatusService: SafariExtensionStatusProviding {
             return .unknown(.extensionNotFound)
         }
         guard let manager: AnyClass = NSClassFromString("SFSafariExtensionManager") else {
-            return .unknown(.unsupportedSystem(currentVersion: Self.systemVersion))
+            return .unknown(.queryFailed("SFSafariExtensionManager is unavailable"))
         }
         let selector = NSSelectorFromString(Self.selectorName)
         guard let method = class_getClassMethod(manager, selector) else {
-            return .unknown(.unsupportedSystem(currentVersion: Self.systemVersion))
+            return .unknown(.queryFailed("SFSafariExtensionManager is unavailable"))
         }
 
         let answer = await withCheckedContinuation { (continuation: CheckedContinuation<AnyObject?, Never>) in
@@ -60,8 +59,4 @@ struct SafariExtensionStatusService: SafariExtensionStatusProviding {
         return enabled ? .enabled : .disabled
     }
 
-    private static var systemVersion: String {
-        let version = ProcessInfo.processInfo.operatingSystemVersion
-        return "\(version.majorVersion).\(version.minorVersion)"
-    }
 }

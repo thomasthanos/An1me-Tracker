@@ -33,9 +33,4 @@ enum SystemInfo {
         return machine.isEmpty ? "iPhone" : machine
     }
 
-    /// Whether Safari can answer questions about an extension at all. Everything that needs
-    /// `SFSafariExtensionManager` is guarded by this, and the UI explains itself when it is false.
-    static var supportsExtensionStateQuery: Bool {
-        NSClassFromString("SFSafariExtensionManager") != nil
-    }
 }

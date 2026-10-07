@@ -37,6 +37,10 @@ const APP_FOLDER = "An1meTracker";
 /// Where the generated permission model lands inside that folder.
 const PERMISSIONS_FOLDER = "ExtensionPermissions";
 
+/// The oldest iOS the app supports: the first with SFSafariExtensionManager and SFSafariSettings. Stamped on
+/// every target (app and extension) so a local Xcode build matches the release workflow.
+const IOS_DEPLOYMENT_TARGET = "26.2";
+
 /// The link the Safari extension opens to send the user to its website settings (see ios/SceneDelegate.swift).
 const URL_SCHEME = "an1metracker";
 
@@ -257,6 +261,13 @@ function setupUI(buildDir = path.join(ROOT, "build")) {
     console.log(`[setup-ios-ui] Installed the native app sources in: ${destination}`);
   }
 
+  // 2b. Every target, app and extension, requires iOS 26.2.
+  for (const projectFile of findProjects(buildDir)) {
+    const project = fs.readFileSync(projectFile, "utf8");
+    const stamped = project.replace(/IPHONEOS_DEPLOYMENT_TARGET = [^;]+;/g, `IPHONEOS_DEPLOYMENT_TARGET = ${IOS_DEPLOYMENT_TARGET};`);
+    if (stamped !== project) fs.writeFileSync(projectFile, stamped);
+  }
+
   // 3. The URL scheme the extension links back with.
   for (const plistPath of findFilesByName(buildDir, "Info.plist")) {
     if (plistPath.includes("Extension") || /\.(?:xcodeproj|xcassets|app|appex)(?:\/|\\)/.test(plistPath)) continue;
@@ -301,6 +312,7 @@ if (require.main === module) {
 
 module.exports = {
   setupUI,
+  IOS_DEPLOYMENT_TARGET,
   findFilesByName,
   findAssetCatalogs,
   findProjects,

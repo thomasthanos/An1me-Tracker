@@ -5,78 +5,16 @@
 //  Only rows that do something. The tracker's own preferences (fillers, resume, speed, alerts) live in the
 //  Safari extension's settings: they change how a watched page behaves, they are stored in the extension,
 //  and this app has no way to write them. Offering toggles here would be theatre, so the screen says where
-//  they are instead and links to the page that owns them.
+//  they are instead. Permissions, Services and Diagnostics are on the home screen, not repeated here.
 //
 
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var coordinator: PermissionCoordinator
-    @State private var isChecking = false
 
     var body: some View {
         List {
-            Section {
-                NavigationLink(value: AppRoute.websiteAccess) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Website Access")
-                            Text(coordinator.assessment.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "lock.shield").foregroundStyle(AppTheme.accent)
-                    }
-                }
-
-                NavigationLink(value: AppRoute.safariExtension) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Safari Extension")
-                            Text(coordinator.extensionState.title)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "puzzlepiece.extension").foregroundStyle(AppTheme.accent)
-                    }
-                }
-            } header: {
-                Text("Safari")
-            }
-
-            Section {
-                Button {
-                    coordinator.startVerificationInSafari()
-                } label: {
-                    Label("Verify Access in Safari", systemImage: "arrow.triangle.2.circlepath")
-                }
-
-                Button {
-                    Task {
-                        isChecking = true
-                        await coordinator.refresh()
-                        isChecking = false
-                    }
-                } label: {
-                    Label {
-                        Text("Recheck")
-                    } icon: {
-                        if isChecking {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                }
-                .disabled(isChecking)
-            } header: {
-                Text("Verification")
-            } footer: {
-                Text("Verification opens an1me.to once. The extension measures what Safari allows and hands the result back to this app.")
-            }
-
             Section {
                 Button {
                     Task { await coordinator.openExtensionSettings() }
@@ -84,23 +22,43 @@ struct SettingsView: View {
                     Label("Open Extension Settings", systemImage: "gear")
                 }
 
-                NavigationLink(value: AppRoute.diagnostics) {
-                    Label("Diagnostics", systemImage: "stethoscope")
+                Button {
+                    coordinator.startVerificationInSafari()
+                } label: {
+                    Label("Verify Access in Safari", systemImage: "arrow.triangle.2.circlepath")
                 }
 
+                Button {
+                    Task { await coordinator.refresh() }
+                } label: {
+                    Label {
+                        Text("Recheck")
+                    } icon: {
+                        if coordinator.isRefreshing {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                }
+                .disabled(coordinator.isRefreshing)
+            } header: {
+                Text("Safari")
+            } footer: {
+                Text("Verify opens an1me.to once; the extension reports what Safari allows back to this app.")
+            }
+
+            Section {
                 NavigationLink(value: AppRoute.about) {
                     Label("About", systemImage: "info.circle")
                 }
-            } header: {
-                Text("Support")
             } footer: {
-                Text("Speed, fillers, resume, alerts and Copy Guard are extension preferences. Open the tracker's popup on an1me.to to change them — they are stored by the extension, not by this app.")
+                Text("Speed, fillers, resume, alerts and Copy Guard are extension preferences. Change them in the tracker's popup on an1me.to.")
             }
         }
-        .listStyle(.insetGrouped)
+        .trackerList()
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await coordinator.refresh() }
     }
 }
 
@@ -139,7 +97,7 @@ struct AboutView: View {
                 Text("Installation")
             }
         }
-        .listStyle(.insetGrouped)
+        .trackerList()
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)
     }

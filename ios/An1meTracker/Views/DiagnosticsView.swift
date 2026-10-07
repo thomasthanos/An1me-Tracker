@@ -64,7 +64,7 @@ struct DiagnosticsView: View {
                 Text("Clearing the cached reading only removes what this app stored. It never changes what Safari allows, and it does not touch your library.")
             }
         }
-        .listStyle(.insetGrouped)
+        .trackerList()
         .navigationTitle("Diagnostics")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.refresh() }

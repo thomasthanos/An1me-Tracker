@@ -3549,6 +3549,10 @@ async function buildPermissionReport() {
     grantedOrigins,
     blockedOrigins,
     allWebsites,
+    // API permissions ride along for the app's Permissions screen; absent when Safari did not answer.
+    ...(Array.isArray(all?.permissions)
+      ? { grantedPermissions: all.permissions.filter((permission) => typeof permission === "string") }
+      : {}),
     extensionVersion: manifest.version,
     capturedAt: Date.now(),
   };

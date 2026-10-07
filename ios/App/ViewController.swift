@@ -30,10 +30,14 @@ final class ViewController: UIViewController {
         webView?.scrollView.isScrollEnabled = false
         webView?.isUserInteractionEnabled = false
 
-        view.backgroundColor = .systemGroupedBackground
+        // Always dark: black background with the tracker's cyan accent, like the extension's popup.
+        overrideUserInterfaceStyle = .dark
+        view.backgroundColor = .black
 
-        let host = UIHostingController(rootView: RootView().environmentObject(PermissionCoordinator.shared))
-        host.view.backgroundColor = .systemGroupedBackground
+        let root = RootView().environmentObject(PermissionCoordinator.shared)
+            .environmentObject(ServiceStatusMonitor.shared)
+        let host = UIHostingController(rootView: root)
+        host.view.backgroundColor = .black
         addChild(host)
         host.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(host.view)

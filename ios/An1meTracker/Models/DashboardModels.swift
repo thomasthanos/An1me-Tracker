@@ -2,8 +2,8 @@
 //  DashboardModels.swift
 //  An1me Tracker
 //
-//  Small presentation types shared by the dashboard and the website-access screen. They are derived from
-//  `AccessAssessment` at render time and never persisted.
+//  Small presentation types shared by the home screen and the Permissions screen. They are derived from
+//  `AccessAssessment` and the bundled manifest at render time and never persisted.
 //
 
 import Foundation
@@ -38,7 +38,7 @@ enum DashboardAction: String, Identifiable, Equatable {
     var title: String {
         switch self {
         case .enableExtension: return "Enable Extension"
-        case .allowRequiredAccess: return "Allow Required Access"
+        case .allowRequiredAccess: return "Enable Required Access"
         case .verifyAccess: return "Verify Access"
         case .openSite: return "Open an1me.to"
         case .recheck: return "Recheck"
@@ -52,6 +52,59 @@ enum DashboardAction: String, Identifiable, Equatable {
         case .verifyAccess: return "arrow.triangle.2.circlepath"
         case .openSite: return "safari"
         case .recheck: return "arrow.clockwise"
+        }
+    }
+}
+
+/// One Settings-style row on the Permissions screen: a group of manifest entries with one combined state.
+/// Built from the extension's manifest.json; the state comes only from the extension's own report.
+struct PermissionRow: Identifiable, Equatable {
+    enum Status: Equatable {
+        case granted
+        case missing
+        /// Nothing fresh has been measured. Never shown as granted.
+        case unknown
+    }
+
+    struct Item: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let detail: String
+        let status: Status
+    }
+
+    static let extensionID = "extension"
+
+    let id: String
+    let title: String
+    let summary: String
+    let symbol: String
+    let isRequired: Bool
+    let status: Status
+    let statusText: String
+    let items: [Item]
+
+    static func combined(_ statuses: [Status]) -> Status {
+        if statuses.isEmpty || statuses.contains(.unknown) { return .unknown }
+        return statuses.contains(.missing) ? .missing : .granted
+    }
+
+    static func label(for status: Status) -> String {
+        switch status {
+        case .granted: return "Allowed"
+        case .missing: return "Needs access"
+        case .unknown: return "Not verified"
+        }
+    }
+
+    static func symbol(forGroup id: String?) -> String {
+        switch id {
+        case "site": return "play.rectangle.fill"
+        case "account": return "person.crop.circle.fill"
+        case "info": return "list.bullet.rectangle.fill"
+        case "artwork": return "photo.fill"
+        case "skip": return "forward.end.fill"
+        default: return "globe"
         }
     }
 }

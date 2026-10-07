@@ -20,6 +20,8 @@ struct PermissionSnapshot: Codable, Equatable {
     var blockedOrigins: [String]
     var extensionVersion: String?
     var capturedAt: Date
+    /// API permissions from `permissions.getAll()`. `nil` for readings from extensions that predate it.
+    var grantedPermissions: [String]? = nil
 
     static let empty = PermissionSnapshot(
         grantedOrigins: [],
