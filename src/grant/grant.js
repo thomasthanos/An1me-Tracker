@@ -1,11 +1,10 @@
-// grant.js — the extension page behind the iOS app's "Allow" and "Enable Required Access" buttons.
+// grant.js — the extension page the app's Approve button lands on.
 //
-// The app cannot call browser.permissions.request; only extension pages can, and only from a user gesture.
-// So the app opens https://an1me.to/?at_grant=<hosts|all>, the content script there asks the background to
-// move the tab here, and this page shows one button. Its tap calls permissions.request() for exactly the
-// requested origins — never more than the manifest declares — which is what makes Safari show its own
-// "would like to access …" prompt. Whatever the user answers, a fresh permission report is handed back to
-// the app through an1metracker://state?p=…, the same channel as the verify flow.
+// The app cannot call browser.permissions.request; only extension pages can. Safari iOS, however, often
+// resolves request() without showing any sheet (hosts stay at "Ask"), so the page contacts each requested
+// host once — Safari surfaces its own native "would like to access …" sheet when the extension actually
+// reaches a host. That fetch is what makes the phone show its prompt, and it happens on load so the user
+// is not asked to tap a second HTML button.
 (function () {
   "use strict";
 
@@ -23,7 +22,6 @@
 
   const params = new URLSearchParams(location.search);
   const wanted = (params.get("hosts") || "all").split(",").map((value) => value.trim()).filter(Boolean);
-  // Only declared origins can be requested; anything else in the link is ignored.
   const origins = wanted.includes("all") ? declared : declared.filter((origin) => wanted.includes(hostOf(origin)));
   const title = (params.get("title") || "").trim();
 
@@ -64,20 +62,34 @@
   const stillAsking = (payload) => payload?.allWebsites ? [] :
     origins.filter((origin) => !(payload?.grantedOrigins || []).includes(origin));
 
-  // Never claims success without evidence: the page reports what the background measured after the tap.
-  async function verifyAndReturn() {
+  // The phone's native sheet appears when the extension reaches a host it has not been allowed for. Each
+  // requested host is contacted once, no credentials, no body read, with a hard deadline so a silent
+  // network can never hang this page.
+  async function touch(hosts) {
+    await Promise.all(hosts.map((origin) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      return fetch(`https://${hostOf(origin)}/`, {
+        method: "GET", mode: "no-cors", credentials: "omit", cache: "no-store", signal: controller.signal,
+      }).catch(() => null).finally(() => clearTimeout(timer));
+    }));
+  }
+
+  // One honest pass: contact the hosts (Safari shows its sheet), then hand back whatever the background
+  // measured. The page never claims success it has not observed.
+  async function finish() {
     $("grantAllow").disabled = true;
     $("grantCancel").disabled = true;
+    setStatus("Checking with Safari…");
+    await new Promise((resolve) => setTimeout(resolve, 900));
     const payload = await report();
     const missing = stillAsking(payload);
     if (missing.length) {
-      setStatus(`Safari still has ${missing.length === 1 ? "1 website" : `${missing.length} websites`} not allowed. ` +
-        "Returning to the app…", true);
-      setTimeout(() => returnWith(payload), 1200);
-      return;
+      setStatus(`Safari still has ${missing.length === 1 ? "1 website" : `${missing.length} websites`} not allowed. Returning…`, true);
+    } else {
+      setStatus("Allowed. Returning…");
     }
-    setStatus("Allowed. Returning to the app…");
-    returnWith(payload);
+    setTimeout(() => returnWith(payload), 1200);
   }
 
   function setStatus(text, error = false) {
@@ -99,31 +111,35 @@
       : "Nothing to allow: these websites are not used by this version.";
     $("grantAllow").hidden = true;
     $("grantCancel").textContent = "Back to An1me Tracker";
+  } else {
+    // Ask Safari immediately: the fetch below surfaces the native sheet without a second tap. The button
+    // remains as a fallback if this device resolves request() silently and the fetch does not prompt.
+    setStatus("Asking Safari…");
+    void (async () => {
+      await touch(origins);
+      await finish();
+    })();
   }
 
-  // request() must be called synchronously inside the tap handler: Safari only shows its prompt for a
-  // request that carries the user's gesture, so nothing is awaited before it.
+  // Fallback path — request() must be called synchronously inside a tap so Safari's prompt carries the
+  // user's gesture. The async work lives in afterRequest(), after the synchronous request() call.
+  function afterRequest() {
+    void (async () => { await touch(origins); await finish(); })();
+  }
+
   $("grantAllow").addEventListener("click", () => {
     $("grantAllow").disabled = true;
     setStatus("Waiting for Safari…");
     let pending;
-    const settle = (granted, error) => {
-      if (!granted && !error) {
-        setStatus("Not allowed. Returning to the app…", true);
-        void returnToApp();
-        return;
-      }
-      void verifyAndReturn();
-    };
     try {
       const details = { origins };
       pending = promiseApi ? permissions.request(details)
-        : permissions.request(details, (granted) => settle(granted === true, globalThis.chrome?.runtime?.lastError));
-    } catch (error) {
-      settle(false, error);
+        : permissions.request(details, () => afterRequest());
+    } catch {
+      afterRequest();
       return;
     }
-    if (pending?.then) pending.then((granted) => settle(granted === true), (error) => settle(false, error));
+    if (pending?.then) pending.then(afterRequest, afterRequest);
   });
   $("grantCancel").addEventListener("click", () => void returnToApp());
 })();
