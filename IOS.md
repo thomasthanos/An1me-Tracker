@@ -4,7 +4,7 @@
 
 <p align="center"><a href="README.md">Overview</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="PRIVACY.md">Privacy</a> · <a href="SECURITY.md">Security</a></p>
 
-[![Version 8.3.1](.github/assets/badge-v-tracker.svg)](CHANGELOG.md) · **iOS 18+** · **Free Apple ID**
+[![Version 8.3.1](.github/assets/badge-v-tracker.svg)](CHANGELOG.md) · **iOS 26.2+** · **Free Apple ID**
 
 # iPhone setup
 
@@ -15,7 +15,7 @@ release attaches an unsigned `An1meTracker-<version>.ipa`, and **SideStore** sig
 free Apple ID and keeps it signed.
 
 > [!NOTE]
-> **Before you start.** You need iOS 18 or later, a free Apple ID and Wi-Fi. The first setup needs a
+> **Before you start.** You need iOS 26.2 or later, a free Apple ID and Wi-Fi. The first setup needs a
 > Windows, macOS or Linux computer once — or none at all on iOS 27, where **SideInstaller** installs
 > SideStore on the device.
 
@@ -58,9 +58,8 @@ guesses: until the extension has measured something, it says **Not verified yet*
 2. Open the **An1me Tracker** app. It shows **Ready**, or **Setup required** with how many permissions need
    attention.
 3. Tap **Enable Required Access**. When Safari reports something missing (or the extension off), this opens
-   the extension's own page in Settings on iOS 26.2 and later, or Settings on earlier versions, where you
-   continue to **Apps → Safari → Extensions → An1me.to Tracker** and allow the websites it lists — or turn
-   on **All Websites**. When nothing has been verified yet, it opens an1me.to once so the extension can
+   the extension's own page in Settings, where you turn it on and allow the websites it lists — or turn on
+   **All Websites**. When nothing has been verified yet, it opens an1me.to once so the extension can
    measure what Safari allows and hand the result back. The app rechecks whenever you return to it.
 4. **Permissions** lists exactly what the extension's `manifest.json` declares, as Required and Optional;
    **Services** shows whether Firebase, Firestore, AniList, AniSkip, Jikan and the others answer from your
@@ -74,11 +73,12 @@ Safari decides website access, and no app may grant a Safari Web Extension's hos
 there is no public API for it. What the app does instead:
 
 - **Opening the right screen** uses `SFSafariSettings.openExtensionsSettings`, the app's one supported way
-  to land on the extension's own Settings page (iOS 26.2 and later), with the Settings app as fallback.
-- **Reading the state** uses `SFSafariExtensionManager` for "is the extension on" (also iOS 26.2 and later)
-  and the extension's own `browser.permissions` reading, sent back over the `an1metracker://` link.
-- On iOS 18–26.1 there is no public API for the extension state at all, so the app says **Unable to check**
-  and explains why instead of showing a value it cannot stand behind.
+  to land on the extension's own Settings page. If Safari refuses, the app opens its own page in Settings.
+- **Reading the state** uses `SFSafariExtensionManager` for "is the extension on" and the extension's own
+  `browser.permissions` reading, sent back over the `an1metracker://` link. **Ready** needs both: Safari's
+  own "enabled" answer and a fresh reading with every website allowed.
+- These APIs are why the app requires iOS 26.2. If Safari does not answer, the app says **Unable to check**
+  instead of showing a value it cannot stand behind.
 
 > [!IMPORTANT]
 > The app holds no permission verdict of its own. It stores the extension's measurement with the time it

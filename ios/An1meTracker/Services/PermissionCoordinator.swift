@@ -29,7 +29,7 @@ final class PermissionCoordinator: ObservableObject {
         settingsLauncher: ExtensionSettingsLaunching? = nil
     ) {
         let stored = store.load()
-        let unknown = ExtensionEnabledState.unknown(.unsupportedSystem(currentVersion: SystemInfo.osVersion))
+        let unknown = ExtensionEnabledState.unknown(.notChecked)
         self.statusService = statusService
         self.store = store
         // Built here rather than as a default argument. Swift evaluates default arguments in a nonisolated

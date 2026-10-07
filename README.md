@@ -60,7 +60,7 @@ The tracker works locally without an account. Metadata lookups still contact the
 
 ## Choose your setup
 
-**Desktop:** Chrome, Edge or Brave. **iPhone:** Safari on iOS 18+, through SideStore with a free Apple ID.
+**Desktop:** Chrome, Edge or Brave. **iPhone:** Safari on iOS 26.2+, through SideStore with a free Apple ID.
 
 <details>
 <summary><b>💻 Desktop — install in four steps</b></summary>

@@ -142,8 +142,8 @@ check(
 );
 check(
   "the extension screen explains an unknown state instead of showing a value",
-  /case \.unknown\(\.unsupportedSystem\):/.test(viewModels[2]),
-  "iOS 18-26.1 cannot report the extension state, and the app has to say so",
+  /case \.unknown\(\.queryFailed\(let message\)\):/.test(viewModels[2]),
+  "when Safari does not answer, the app has to say so rather than show a value",
 );
 
 console.log(failures === 0 ? "\nPASS" : `\nFAIL (${failures})`);

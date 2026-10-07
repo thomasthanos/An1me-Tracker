@@ -19,7 +19,6 @@ struct SafariExtensionViewModel {
     var isChecking: Bool { coordinator.isRefreshing }
     var extensionVersion: String { SafariExtensionIdentity.version ?? "Not found" }
     var bundleIdentifier: String { SafariExtensionIdentity.bundleIdentifier ?? "Not found" }
-    var canQueryState: Bool { SystemInfo.supportsExtensionStateQuery }
 
     var accessSummary: String { coordinator.assessment.summary }
     var accessTone: StatusRow.Tone {
@@ -35,11 +34,11 @@ struct SafariExtensionViewModel {
         return RelativeTime.string(since: date)
     }
 
-    /// Why the app cannot read the enabled state, phrased for the system the user is on.
+    /// Why the app cannot read the enabled state right now.
     var stateLimitation: String? {
         switch state {
-        case .unknown(.unsupportedSystem):
-            return "iOS \(SystemInfo.osVersion) has no public API for this. Turn the extension on in Settings, then verify access — the app will show the state the extension reports."
+        case .unknown(.notChecked):
+            return nil
         case .unknown(.extensionNotFound):
             return "No Safari extension was found inside this app. Reinstall An1me Tracker, keeping the existing app so your data stays."
         case .unknown(.queryFailed(let message)):

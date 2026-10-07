@@ -86,7 +86,6 @@ struct SafariExtensionView: View {
         Section {
             LabeledContent("Version", value: model.extensionVersion)
             LabeledContent("Bundle", value: model.bundleIdentifier)
-            LabeledContent("State API", value: model.canQueryState ? "Available" : "Not on this iOS version")
         } header: {
             Text("Build")
         }

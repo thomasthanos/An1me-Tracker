@@ -18,16 +18,13 @@ enum DiagnosticsService {
         var sections: [DiagnosticsReport.Section] = []
 
         // MARK: Extension
-        var extensionRows: [DiagnosticsReport.Row] = [
+        let extensionRows: [DiagnosticsReport.Row] = [
             .init("Safari Extension", coordinator.extensionState.title, tone: tone(for: coordinator.extensionState)),
             .init("Extension version", SafariExtensionIdentity.version ?? "not found",
                   tone: SafariExtensionIdentity.version == nil ? .bad : .normal),
             .init("Bundle identifier", SafariExtensionIdentity.bundleIdentifier ?? "not found",
                   tone: SafariExtensionIdentity.bundleIdentifier == nil ? .bad : .normal),
         ]
-        if !SystemInfo.supportsExtensionStateQuery {
-            extensionRows.append(.init("State query", "Not available before iOS 26.2", tone: .warning))
-        }
         sections.append(.init(title: "Extension", rows: extensionRows))
 
         // MARK: Website access

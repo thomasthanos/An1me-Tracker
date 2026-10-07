@@ -38,16 +38,8 @@ struct WebsiteAccessViewModel {
         return "Last verified \(RelativeTime.string(since: date))"
     }
 
-    /// Safari said the extension is on — or, on systems that cannot answer, the extension itself sent a
-    /// fresh reading, which it can only do while it is running. An unknown state stays unconfirmed.
-    var extensionConfirmed: Bool {
-        switch coordinator.extensionState {
-        case .enabled: return true
-        case .disabled: return false
-        case .unknown(.unsupportedSystem): return freshSnapshot != nil
-        case .unknown: return false
-        }
-    }
+    /// Only Safari's own answer confirms the extension. An unknown state stays unconfirmed.
+    var extensionConfirmed: Bool { coordinator.extensionState.isEnabled == true }
 
     // MARK: - Rows
 
