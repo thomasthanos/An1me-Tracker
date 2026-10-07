@@ -11,6 +11,14 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.3] — 2026-10-07
+
+### Fixed
+
+- **iPhone card clipping in popup.** Added `flex-shrink: 0` to `.anime-list:not(:empty)` so lists within the fixed-height container no longer shrink cards below their full height on iOS and mobile viewports.
+- **Sort dropdown layering over list items.** Added `position: relative; z-index: 30` to `.toolbar` so the open sort menu stays above `.anime-list` and cards.
+- **Safari extension state detection on iOS.** Switched to direct `SFSafariExtensionManager.stateOfExtension(withIdentifier:)` and `SFSafariSettings.openExtensionsSettings(forIdentifiers:)` calls in SafariServices, and added fallback confirmation from fresh extension reports.
+
 ## [8.3.2] — 2026-10-07
 
 ### Fixed
