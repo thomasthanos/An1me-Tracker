@@ -11,6 +11,17 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.6] — 2026-10-07
+
+### Changed
+
+- **Empirical access probing on iOS.** Safari iOS reports declared origins as granted even when set to "Ask" in Settings. The companion app and background worker now measure real website access by probing hosts directly (`basic` response confirms access) rather than trusting API claims.
+- **All iOS hosts required.** Removed optional host declarations for iOS in favor of a single required host set with probe-based verification.
+
+### Fixed
+
+- **Cross-platform test runner line endings.** Normalized CRLF in `ios-grant-flow.test.js` to ensure reliable test execution across Windows and Linux.
+
 ## [8.3.5] — 2026-10-07
 
 ### Fixed
