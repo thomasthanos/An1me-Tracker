@@ -966,6 +966,8 @@
     renderCard();
   }
 
+  let _stallWatchTimer = null;
+
   (async () => {
     try {
       const stored = await sget([USERNAME_KEY, STATUS_KEY, "firebase_user"]);
@@ -993,12 +995,13 @@
         if (namespace !== "local") return;
         if (changes[AUTH_KEY]) {
           loadAuth()
-            .then(() => renderCard())
+            .then(() => { renderCard(); updateStallWatch(); })
             .catch((error) => warn("Auth reload failed:", error?.message));
         }
         if (changes[STATUS_KEY]) {
           _syncStatus = changes[STATUS_KEY].newValue || null;
           applySyncStatus(_syncStatus);
+          updateStallWatch();
         }
         if (changes.firebase_user) {
           const newUid = changes.firebase_user?.newValue?.uid || null;
@@ -1012,12 +1015,24 @@
       });
     } catch {}
 
-    setInterval(() => {
-      if (_syncStatus && _syncStatus.state === "running") {
-        applySyncStatus(_syncStatus);
-      }
-    }, 30000);
+    updateStallWatch();
   })();
+
+  // Re-checks a running sync for a stall every 30s — only while one is actually running on a connected
+  // desktop account. AniList is off on mobile, so the timer never starts there.
+  function updateStallWatch() {
+    const mobile = window.AnimeTrackerUtils?.isMobileDevice?.() === true;
+    const wanted = !mobile && isConnected() && _syncStatus?.state === "running";
+    if (wanted && !_stallWatchTimer) {
+      _stallWatchTimer = setInterval(() => {
+        if (_syncStatus && _syncStatus.state === "running") applySyncStatus(_syncStatus);
+        updateStallWatch();
+      }, 30000);
+    } else if (!wanted && _stallWatchTimer) {
+      clearInterval(_stallWatchTimer);
+      _stallWatchTimer = null;
+    }
+  }
 
   window.AnimeTracker = window.AnimeTracker || {};
   window.AnimeTracker.AniListIntegration = {
