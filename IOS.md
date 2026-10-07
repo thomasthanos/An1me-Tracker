@@ -4,7 +4,7 @@
 
 <p align="center"><a href="README.md">Overview</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="PRIVACY.md">Privacy</a> · <a href="SECURITY.md">Security</a></p>
 
-[![Version 8.3.3](.github/assets/badge-v-tracker.svg)](CHANGELOG.md) · **iOS 26.2+** · **Free Apple ID**
+[![Version 8.3.4](.github/assets/badge-v-tracker.svg)](CHANGELOG.md) · **iOS 26.2+** · **Free Apple ID**
 
 # iPhone setup
 

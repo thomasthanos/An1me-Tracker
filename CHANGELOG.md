@@ -11,6 +11,17 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.4] — 2026-10-07
+
+### Added
+
+- **In-Safari permission grant flow on iOS.** The companion app now directs users through Safari where the extension requests required or per-service website access via an in-extension grant sheet, eliminating manual Settings navigation.
+
+### Fixed
+
+- **Stale "Needs access" state.** `buildPermissionReport` now queries both `permissions.contains` and `getAll()` to ensure granted domains are accurately recognized even when omitted from `getAll()`.
+- **Robust reachability probes.** Service monitors try `HEAD` followed by `GET` across all candidate hosts of each service, preventing false offline statuses (e.g. Cloudflare resets on Jikan's root endpoint).
+
 ## [8.3.3] — 2026-10-07
 
 ### Fixed
