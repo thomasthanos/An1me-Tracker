@@ -142,7 +142,7 @@ check(
 );
 check(
   "the extension screen explains an unknown state instead of showing a value",
-  /case \.unknown\(\.queryFailed\(let message\)\):/.test(viewModels[2]),
+  /case \.unknown\(\.queryFailed\):/.test(viewModels[2]),
   "when Safari does not answer, the app has to say so rather than show a value",
 );
 

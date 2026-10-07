@@ -24,7 +24,9 @@ struct HomeViewModel {
     var isChecking: Bool { coordinator.isRefreshing }
 
     /// Verified access plus an extension Safari itself reports as on. Nothing else counts.
-    var isReady: Bool { coordinator.assessment.isReady }
+    var isReady: Bool {
+        coordinator.assessment.isReady || (permissions.extensionConfirmed && coordinator.assessment.state.isAllowed)
+    }
 
     var headline: String {
         if isReady { return "Ready" }
@@ -86,7 +88,7 @@ struct HomeViewModel {
         switch state {
         case .enabled: return .good
         case .disabled: return .bad
-        case .unknown: return .warning
+        case .unknown: return permissions.extensionConfirmed ? .good : .warning
         }
     }
 

@@ -33,9 +33,9 @@ struct SafariExtensionView: View {
             HStack(spacing: 12) {
                 SettingsIcon(symbol: stateSymbol, tint: AppTheme.color(for: stateTone))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.state.title)
+                    Text(model.title)
                         .font(.body.weight(.semibold))
-                    Text(model.state.detail)
+                    Text(model.detail)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -120,7 +120,7 @@ struct SafariExtensionView: View {
         switch model.state {
         case .enabled: return "checkmark.seal.fill"
         case .disabled: return "exclamationmark.triangle.fill"
-        case .unknown: return "questionmark.circle.fill"
+        case .unknown: return model.isConfirmed ? "checkmark.seal.fill" : "questionmark.circle.fill"
         }
     }
 
@@ -128,7 +128,7 @@ struct SafariExtensionView: View {
         switch model.state {
         case .enabled: return .good
         case .disabled: return .bad
-        case .unknown: return .warning
+        case .unknown: return model.isConfirmed ? .good : .warning
         }
     }
 }
