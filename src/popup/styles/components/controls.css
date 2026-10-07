@@ -760,3 +760,7 @@ textarea:focus-visible{ outline: none; }
     transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
     filter 0.16s ease;
 }
+
+/* Reserve roughly two cards so switching to a near-empty category does not collapse the list and pull
+   everything below it up. Skipped when empty, so the empty-state message keeps its place. */
+.anime-list:not(:empty){ min-height: 168px; }

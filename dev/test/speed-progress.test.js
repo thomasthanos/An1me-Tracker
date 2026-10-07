@@ -161,7 +161,11 @@ test("three real minutes at 2x checkpoint 360 media seconds and a PC pull replac
     doc: { animeData: seed.animeData, videoProgress: seed.videoProgress, lastUpdated: new Date(epoch).toISOString() } };
   const pc = cloudWorker(seed, phone.worker.remote, { now: phone.worker.now() }); await flush();
   const protectedBefore = protectedData(pc.store);
-  await pc.request("WAKE_AND_POLL_CLOUD", { reason: "popup:open" }); await flush();
+  // applyCloudUpdate debounces on a real 500 ms timer and the harness unref()s timers, so keep the event
+  // loop alive until the pull settles instead of letting Node exit with the request still pending.
+  const keepAlive = setInterval(() => {}, 50);
+  try { await pc.request("WAKE_AND_POLL_CLOUD", { reason: "popup:open" }); } finally { clearInterval(keepAlive); }
+  await flush();
   assert.equal(pc.store.videoProgress[id].currentTime, 360);
   assert.equal(resume(pc.store.animeData, pc.store.videoProgress).currentTime, 360);
   assert.equal(protectedData(pc.store), protectedBefore, "pull only changes the active Resume position");
