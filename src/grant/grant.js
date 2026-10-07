@@ -111,14 +111,6 @@
       : "Nothing to allow: these websites are not used by this version.";
     $("grantAllow").hidden = true;
     $("grantCancel").textContent = "Back to An1me Tracker";
-  } else {
-    // Ask Safari immediately: the fetch below surfaces the native sheet without a second tap. The button
-    // remains as a fallback if this device resolves request() silently and the fetch does not prompt.
-    setStatus("Asking Safari…");
-    void (async () => {
-      await touch(origins);
-      await finish();
-    })();
   }
 
   // Fallback path — request() must be called synchronously inside a tap so Safari's prompt carries the

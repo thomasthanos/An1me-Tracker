@@ -143,19 +143,21 @@ struct RootView: View {
     private var approvals: some View {
         Section {
             ForEach(pendingRows) { row in
-                Button {
-                    model.request(row)
-                } label: {
-                    SettingsRow(symbol: row.symbol,
-                                title: row.title,
-                                value: "Approve",
-                                tint: AppTheme.accent)
-                }
+                SettingsRow(symbol: row.symbol,
+                            title: row.title,
+                            value: "Needs access",
+                            valueColor: .orange,
+                            tint: .orange)
+            }
+            Button {
+                Task { await coordinator.openExtensionSettings() }
+            } label: {
+                Label("Allow All Websites", systemImage: "gear")
             }
         } header: {
             Text("Needs approval")
         } footer: {
-            Text("Safari asks once, on this device. Each button shows Safari's own permission sheet.")
+            Text("iOS shows website access in Settings, not in this app. Tap Allow All Websites, set it to Allow, then come back — the app rechecks automatically.")
         }
     }
 

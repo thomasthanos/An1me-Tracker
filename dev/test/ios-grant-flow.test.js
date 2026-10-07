@@ -48,13 +48,13 @@ test("a report from another extension version is dropped on refresh", () => {
   assert.match(read("ios/An1meTracker/Services/PermissionCoordinator.swift"), /reported != current \{\s*store\.clear\(\)/);
 });
 
-test("Allow buttons no longer route to Settings", () => {
+test("website access is granted in Safari Settings, not the app", () => {
   const vm = read("ios/An1meTracker/ViewModels/WebsiteAccessViewModel.swift");
   assert.match(vm, /case \.allowRequiredAccess:\s*requestAll\(\)/);
-  // The app's Approve buttons open the grant page (Safari's own sheet); the only Settings hop is for
-  // switching the extension on, which Safari cannot do from anywhere else.
+  // iOS shows website access in Settings; the app can only deep-link there. The one thing the app cannot
+  // do anywhere else is turn the extension on, which also lives in Settings.
   const root = read("ios/An1meTracker/Views/RootView.swift");
-  assert.match(root, /model\.request\(row\)/);
+  assert.match(root, /Allow All Websites/);
+  assert.match(root, /coordinator\.openExtensionSettings\(\)/);
   assert.match(root, /Turn the extension on/);
-  assert.doesNotMatch(root, /openExtensionsSettings\(\)[\s\S]*?model\.request/);
 });
