@@ -11,6 +11,22 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.3.2] — 2026-10-07
+
+### Fixed
+
+- **Poster flicker and layout shift.** Poster and in-progress covers reserve their box
+  (`aspect-ratio`, `width`/`height`) before artwork loads, so cards no longer collapse or jump between
+  renders. `scrollbar-gutter: stable` keeps the list width steady across categories.
+- **iPhone popup safe areas and touch targets.** The popup uses `viewport-fit=cover` and keeps the
+  header, footer, toasts and confirm toast clear of the notch and home indicator. Sticky `:hover` lift is
+  disabled on touch, and the delete-progress and Continue Watching close buttons get larger tap areas.
+- **AniList stall timer only when needed.** The 30 s stall-check timer now runs only while a sync is
+  actually running on a connected desktop account, instead of for the whole popup lifetime.
+- **Stable speed-progress test and list min-height.** The PC-pull test keeps the event loop alive across
+  `applyCloudUpdate`'s real debounce, removing a flaky "cancelled" result. A reserved list min-height stops
+  near-empty categories from collapsing.
+
 ## [8.3.1] — 2026-10-06
 
 ### Added
