@@ -51,11 +51,48 @@
     });
   }
 
+  function returnWith(payload) {
+    location.href = `${SCHEME}://state?p=${encodeBase64Url(payload)}`;
+  }
+
   async function returnToApp() {
     $("grantAllow").disabled = true;
     $("grantCancel").disabled = true;
-    const payload = await report();
-    location.href = `${SCHEME}://state?p=${encodeBase64Url(payload)}`;
+    returnWith(await report());
+  }
+
+  const stillAsking = (payload) => payload?.allWebsites ? [] :
+    origins.filter((origin) => !(payload?.grantedOrigins || []).includes(origin));
+
+  // Safari iOS can resolve request() without a prompt for hosts it already counts as declared (they stay
+  // at "Ask" in Settings). Safari's own "would like to access …" sheet also appears when the extension
+  // actually reaches a host, so each missing host is contacted once (no credentials, no body read).
+  async function touch(missing) {
+    await Promise.all(missing.map((origin) => fetch(`https://${hostOf(origin)}/`, {
+      method: "GET", mode: "no-cors", credentials: "omit", cache: "no-store",
+    }).catch(() => null)));
+  }
+
+  // Never claims success without evidence: the page reports what getAll() says after the tap.
+  async function verifyAndReturn() {
+    $("grantAllow").disabled = true;
+    $("grantCancel").disabled = true;
+    let payload = await report();
+    let missing = stillAsking(payload);
+    if (missing.length) {
+      setStatus("Asking Safari for each website…");
+      await touch(missing);
+      payload = await report();
+      missing = stillAsking(payload);
+    }
+    if (missing.length) {
+      setStatus(`Safari still has ${missing.length === 1 ? "1 website" : `${missing.length} websites`} at Ask. ` +
+        "Returning to the app…", true);
+      setTimeout(() => returnWith(payload), 1800);
+      return;
+    }
+    setStatus("Allowed. Returning to the app…");
+    returnWith(payload);
   }
 
   function setStatus(text, error = false) {
@@ -86,9 +123,12 @@
     setStatus("Waiting for Safari…");
     let pending;
     const settle = (granted, error) => {
-      if (error) setStatus("Safari did not show its prompt. Returning to the app…", true);
-      else setStatus(granted ? "Allowed. Returning to the app…" : "Not allowed. Returning to the app…", !granted);
-      void returnToApp();
+      if (!granted && !error) {
+        setStatus("Not allowed. Returning to the app…", true);
+        void returnToApp();
+        return;
+      }
+      void verifyAndReturn();
     };
     try {
       const details = { origins };
