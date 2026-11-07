@@ -10,13 +10,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-let chromium;
-try { ({ chromium } = require("playwright")); }
-catch (error) {
-  if (error.code !== "MODULE_NOT_FOUND") throw error;
-  console.log("SKIP continue watching layout: install Playwright or expose it through NODE_PATH");
-  process.exit(0);
-}
+const { chromium } = require("./lib/browser-runtime").loadPlaywright("continue watching layout");
 const root = path.resolve(__dirname, "../..");
 const candidates = [process.env.AT_TEST_BROWSER,
   ...[process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter(Boolean)

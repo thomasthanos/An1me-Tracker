@@ -2,13 +2,7 @@
 // AT_TEST_BROWSER can select a Chromium executable; missing Playwright is an explicit skip.
 const fs = require("node:fs");
 const path = require("node:path");
-let chromium;
-try { ({ chromium } = require("playwright")); }
-catch (error) {
-  if (error.code !== "MODULE_NOT_FOUND") throw error;
-  console.log("SKIP library DOM integration: install Playwright or expose it through NODE_PATH");
-  process.exit(0);
-}
+const { chromium } = require("./lib/browser-runtime").loadPlaywright("library DOM integration");
 
 const root = path.resolve(__dirname, "../..");
 const candidates = [process.env.AT_TEST_BROWSER,

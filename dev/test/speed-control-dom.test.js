@@ -1,8 +1,6 @@
 // Exercise real HTMLVideoElement rate/volume events, pointer cancellation and DOM cleanup.
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
-let chromium;
-try { ({ chromium } = require('playwright')); }
-catch (error) { if (error.code !== 'MODULE_NOT_FOUND') throw error; console.log('SKIP speed player DOM: expose Playwright via NODE_PATH'); process.exit(0); }
+const { chromium } = require('./lib/browser-runtime').loadPlaywright('speed player DOM');
 const root = path.resolve(__dirname, '../..');
 const modulePath = path.join(root, 'src/content/player/speed-control.js');
 assert.ok(fs.existsSync(modulePath), 'SpeedControl module must exist');

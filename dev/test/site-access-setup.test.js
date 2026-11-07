@@ -3,15 +3,13 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-let chromium;
-try { ({ chromium } = require("playwright")); }
-catch (error) { if (error.code !== "MODULE_NOT_FOUND") throw error; console.log("SKIP site-access setup: expose Playwright through NODE_PATH"); process.exit(0); }
+const { chromium } = require("./lib/browser-runtime").loadPlaywright("site-access setup");
 const root = path.resolve(__dirname, "../..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 execFileSync(process.execPath, [path.join(root, "dev/scripts/package.js"), "--target", "safari"]);
 const safariManifest = JSON.parse(read("dist/an1me-tracker-safari/manifest.json"));
-// The request flow below is for builds that list each service as optional (8.2.8–8.2.10), which the code still
-// supports; the current Safari build asks for every website in one pattern instead (tested at the end).
+// LEGACY: the request flow below is for builds that list each service as optional (8.2.8–8.2.10), which the code still
+// supports. The current Safari build declares every host as required (tested at the end).
 const CORE = ["https://an1me.to/*", "https://*.an1me.to/*"];
 const manifest = { ...safariManifest, host_permissions: CORE,
   optional_host_permissions: JSON.parse(read("manifest.json")).host_permissions.filter(origin => !CORE.includes(origin) && origin !== "https://graphql.anilist.co/*") };
@@ -237,42 +235,20 @@ async function setup(browser, { promiseOnly = false, grant = true, allowed = [],
       assert.equal(await p.page.evaluate(() => document.getElementById("mobileSiteAccess").hidden), true);
       await p.context.close();
     });
-    await test("the Safari build offers one button that asks Safari for every service in one prompt", async () => {
-      const services = safariManifest.optional_host_permissions.filter(origin => origin !== "<all_urls>");
-      assert.deepEqual(safariManifest.host_permissions, CORE);
-      assert.ok(safariManifest.optional_host_permissions.includes("<all_urls>"));
-      const p = await setup(browser, { manifest: safariManifest, gate: true, allowed: CORE });
-      const before = await p.page.evaluate(() => {
-        const el = document.getElementById("authSiteAccess");
-        return { hidden: el.hidden, steps: el.querySelector(".site-access-steps").hidden, link: el.querySelector(".site-access-link").hidden };
-      });
-      assert.deepEqual(before, { hidden: false, steps: true, link: true }, "the button first; no trip to Settings");
-      await p.page.click("#authSiteAccess .site-access-btn");
-      await p.page.waitForTimeout(150);
-      const requests = await p.page.evaluate(() => window.__requests);
-      assert.equal(requests.length, 1, "one tap, one prompt");
-      assert.equal(requests[0].gesture, true);
-      assert.deepEqual(requests[0].origins, services, "every service, and not the all-websites pattern Safari will not grant");
-      assert.equal(await p.page.isVisible("#authSiteAccess"), false);
-      assert.equal(await p.page.evaluate(() => window.AnimeTrackerWebsiteAccess.isPaused()), false);
-      await p.context.close();
+    // The current Safari build (8.3.x) declares every host it needs as required and nothing optional: there is no
+    // consent button and no access gate. The optional-host flow above stays covered as the legacy 8.2.8–8.2.10 shape.
+    await test("the current Safari build declares its hosts as required, with no optional or all-websites pattern", async () => {
+      assert.equal(safariManifest.optional_host_permissions, undefined, "no optional host list in the packaged Safari manifest");
+      for (const origin of CORE) assert.ok(safariManifest.host_permissions.includes(origin), `${origin} is declared`);
+      assert.ok(!safariManifest.host_permissions.includes("<all_urls>"), "no all-websites pattern");
     });
-    await test("if Safari leaves them on Ask, Settings appears under the button with the one All Websites step", async () => {
-      const p = await setup(browser, { manifest: safariManifest, gate: true, allowed: CORE, grant: "noop" });
-      await p.page.click("#authSiteAccess .site-access-btn");
-      await p.page.waitForTimeout(150);
-      const card = await p.page.evaluate(() => {
-        const el = document.getElementById("authSiteAccess");
-        return { hidden: el.hidden, button: !!el.querySelector(".site-access-btn"), steps: el.querySelector(".site-access-steps").hidden,
-          step: el.querySelectorAll(".site-access-steps li")[1].textContent, link: el.querySelector(".site-access-link").hidden,
-          href: el.querySelector(".site-access-link").getAttribute("href") };
-      });
-      assert.deepEqual(card, { hidden: false, button: true, steps: false, step: "Under Permissions, set All Websites to Allow.", link: false,
-        href: "an1metracker://safari-settings" });
-      // Turning All Websites on in Settings is enough on its own; coming back checks again.
-      await p.page.evaluate(() => { window.__allowAllWebsites(); document.dispatchEvent(new Event("visibilitychange")); });
-      await p.page.waitForTimeout(150);
+    await test("the current Safari build shows no setup card, asks for nothing and leaves the access gate off", async () => {
+      const p = await setup(browser, { manifest: safariManifest, gate: true, allowed: CORE });
       assert.equal(await p.page.isVisible("#authSiteAccess"), false);
+      assert.equal(await p.page.evaluate(() => document.getElementById("mobileSiteAccess").hidden), true);
+      assert.equal(await p.page.evaluate(() => document.querySelectorAll(".site-access-btn").length), 0, "no consent button");
+      assert.equal(await p.page.evaluate(() => window.__requests.length), 0);
+      assert.equal(await p.page.evaluate(() => window.AnimeTrackerWebsiteAccess.enabled), false);
       assert.equal(await p.page.evaluate(() => window.AnimeTrackerWebsiteAccess.isPaused()), false);
       await p.context.close();
     });
