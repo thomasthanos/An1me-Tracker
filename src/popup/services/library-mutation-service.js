@@ -96,9 +96,14 @@
 
   async function executeWithRetry(normalizedLabel, keys, operation) {
     let lastConflict = null;
+    // The library this change was computed for. A sign-in or sign-out activates another account's
+    // library; the change is then refused instead of being retried onto it.
+    let owner;
 
     for (let attempt = 0; attempt < MAX_CONFLICT_RETRIES; attempt += 1) {
       const snapshotResponse = await requestSnapshot(keys);
+      if (owner === undefined) owner = snapshotResponse.owner || null;
+      else if ((snapshotResponse.owner || null) !== owner) throw new Error("library_owner_changed");
       let committed = false;
 
       try {
@@ -117,9 +122,11 @@
             const response = await sendCoordinatorRequest({
               type: "LIBRARY_MUTATION_COMMIT",
               expectedRevision: snapshotResponse.revision,
+              expectedOwner: owner,
               data: payload,
               label: options.label || normalizedLabel,
             });
+            if (response?.ownerChanged) throw new Error("library_owner_changed");
             if (response?.conflict) throw new LibraryMutationConflict(response.revision);
             if (!response?.success) throw new Error(response?.error || "Library mutation commit failed");
 

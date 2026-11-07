@@ -1621,15 +1621,20 @@
     if (currentViewMode === "settings") renderSettingsView();
   };
 
-  async function signOut(preserveLocalData = true) {
-    const { LibraryMutations, FirebaseSync } = AT;
-    if (!preserveLocalData) {
-      animeData = {};
-      videoProgress = {};
-      await LibraryMutations.enqueue("sign-out-clear-local", ({ commit }) =>
-        commit({ animeData: {}, videoProgress: {} }, { label: "sign-out-clear-local", markInternalSave, sync: false }),
-      );
-    }
+  // The worker parks the account's library for its next sign-in and activates the signed-out library.
+  // Drop the account's data from this popup before anything awaits, so not one more frame shows it.
+  async function signOut() {
+    const { FirebaseSync } = AT;
+    animeData = {};
+    videoProgress = {};
+    goalSettings = null;
+    badgeState = {};
+    window.AnimeTracker.groupCoverImages = {};
+    try {
+      window.AnimeTracker?.ProgressInsights?.invalidate();
+    } catch {}
+    renderAnimeList();
+    void updateStats({ persist: false });
     lastMetadataRepairState = null;
     await chrome.storage.local.set({ pendingBackgroundMetadataRepair: false, metadataRepairState: null });
     await FirebaseSync.signOut();

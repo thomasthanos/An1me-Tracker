@@ -9,6 +9,7 @@ importScripts(
   "src/common/logger.js",
   "src/common/cloud.js",
   "src/background/sync/session-context.js",
+  "src/background/sync/library-slots.js",
   "src/common/data/cache-policy.js",
   "src/common/data/zoned-time.js",
   "src/common/data/title-match.js",
@@ -371,6 +372,37 @@ const recentBgSyncWriteTokens = new Set();
 let bgLibraryMutationTail = Promise.resolve();
 let bgAuthMutationTail = Promise.resolve();
 let sidecarSyncTail = Promise.resolve();
+
+// One library per account (and one for signed-out use). See src/background/sync/library-slots.js.
+const LibrarySlots = self.AnimeTrackerLibrarySlots;
+const bgLibrarySlots = LibrarySlots.create({
+  get: (keys) => bgStorageGet(keys),
+  set: (data) => bgStorageSetRaw(data),
+  remove: (keys) => bgStorageRemove(keys),
+  libraryKeys: LIBRARY_MUTATION_KEYS,
+  revisionKey: LIBRARY_MUTATION_REVISION_KEY,
+  mapKeys: AnimeTrackerLibraryKeys.MAP_MUTATION_KEYS,
+  // The owner switch is not a local edit: it must not schedule a cloud upload of the library it activates.
+  beforeActivate: (data) => stampBgSyncStorageWrite(data),
+});
+let bgLibraryOwnerReady = null;
+
+function ensureBgLibraryOwner() {
+  if (!bgLibraryOwnerReady) {
+    bgLibraryOwnerReady = ensureBgLegacySyncMigration()
+      .then(() => enqueueBgLibraryMutation(() => bgLibrarySlots.ensureOwner()))
+      .catch((error) => {
+        bgLibraryOwnerReady = null;
+        throw error;
+      });
+  }
+  return bgLibraryOwnerReady;
+}
+
+async function bgSwitchLibraryOwner(owner, options = {}) {
+  await ensureBgLibraryOwner();
+  return enqueueBgLibraryMutation(() => bgLibrarySlots.switchOwner(owner, options));
+}
 
 function stampBgSyncStorageWrite(data) {
   const token = `${Date.now()}:${++bgSyncWriteTokenCounter}`;
@@ -766,6 +798,7 @@ function normalizeLibraryMutationKeys(keys) {
 
 async function bgStorageSet(data) {
   if (!containsLibraryMutationData(data)) return bgStorageSetRaw(data);
+  await ensureBgLibraryOwner();
   // A whole library map built from an earlier read would erase changes made since (R06). Map keys go
   // through runBgLibraryTransaction / commitLibraryMutation; only single settings values are written here.
   if (AnimeTrackerLibraryKeys.writesLibraryMap(data)) {
@@ -783,11 +816,12 @@ async function bgStorageSet(data) {
 
 async function getLibraryMutationSnapshot(keys) {
   await ensureBgLegacySyncMigration();
+  await ensureBgLibraryOwner();
   const requested = normalizeLibraryMutationKeys(keys);
   const snapshotKeys = requested.length > 0 ? requested : LIBRARY_MUTATION_KEYS;
 
   return enqueueBgLibraryMutation(async () => {
-    const stored = await bgStorageGet([...snapshotKeys, LIBRARY_MUTATION_REVISION_KEY]);
+    const stored = await bgStorageGet([...snapshotKeys, LIBRARY_MUTATION_REVISION_KEY, LibrarySlots.OWNER_KEY]);
     const data = {};
     for (const key of snapshotKeys) {
       if (Object.prototype.hasOwnProperty.call(stored, key)) data[key] = stored[key];
@@ -795,6 +829,9 @@ async function getLibraryMutationSnapshot(keys) {
     return {
       success: true,
       revision: Math.max(0, Number(stored[LIBRARY_MUTATION_REVISION_KEY]) || 0),
+      // Whose library this snapshot is. A writer that started on one owner's library must not retry its
+      // change on another's after a sign-in or sign-out.
+      owner: stored[LibrarySlots.OWNER_KEY] || null,
       data,
     };
   });
@@ -809,9 +846,13 @@ async function commitLibraryMutation(expectedRevision, data, options = {}) {
   }
 
   await ensureBgLegacySyncMigration();
+  await ensureBgLibraryOwner();
 
   return enqueueBgLibraryMutation(async () => {
-    const stored = await bgStorageGet([LIBRARY_MUTATION_REVISION_KEY]);
+    const stored = await bgStorageGet([LIBRARY_MUTATION_REVISION_KEY, LibrarySlots.OWNER_KEY]);
+    if (options.expectedOwner && options.expectedOwner !== (stored[LibrarySlots.OWNER_KEY] || null)) {
+      return { success: false, error: "library_owner_changed", ownerChanged: true };
+    }
     // Checked inside the serialized queue, right before the write: a session that ended while this
     // commit waited must not write into the next account's library.
     if (options.scope && !SessionContext.matches(options.scope)) {
@@ -837,6 +878,7 @@ async function runBgLibraryTransaction(keys, operation) {
   if (requested.length === 0) throw new Error("Library transaction requires at least one coordinated key");
 
   await ensureBgLegacySyncMigration();
+  await ensureBgLibraryOwner();
   return enqueueBgLibraryMutation(async () => {
     const stored = await bgStorageGet([...requested, LIBRARY_MUTATION_REVISION_KEY]);
     const snapshot = {};
@@ -943,6 +985,8 @@ async function bgMutateFirebaseAuth(request = {}) {
     if (operation === "clear_session") {
       // Fence first: anything the signed-out session started stops before it can write or report.
       await bgBeginAuthSessionTransition("sign-out");
+      // The account's library is parked for its next sign-in; signed-out use gets the guest library.
+      await bgSwitchLibraryOwner(LibrarySlots.GUEST);
       await bgStorageRemove(["firebase_tokens", "firebase_user"]);
       authState.signedOut = true;
       return { success: true, applied: true, tokens: null, user: null };
@@ -959,7 +1003,14 @@ async function bgMutateFirebaseAuth(request = {}) {
       // A different account (or a sign-in after sign-out) is a new session; re-signing into the same
       // account keeps the work that account already started.
       const previousUid = stored.firebase_user?.uid || null;
-      if (previousUid !== request.user.uid) await bgBeginAuthSessionTransition("account-change");
+      if (previousUid !== request.user.uid) {
+        await bgBeginAuthSessionTransition("account-change");
+        // The new account's library and the new user are activated in one storage write, so no reader
+        // ever sees this account next to another account's library.
+        await bgSwitchLibraryOwner(LibrarySlots.ownerForUid(request.user.uid), {
+          extra: { firebase_user: request.user, firebase_tokens: nextTokens },
+        });
+      }
       await bgStorageSetRaw({ firebase_user: request.user, firebase_tokens: nextTokens });
       authState.signedOut = false;
       return { success: true, applied: true, tokens: nextTokens, user: request.user };
@@ -3641,7 +3692,9 @@ const messageHandlers = {
   },
 
   LIBRARY_MUTATION_COMMIT(message, _sender, sendResponse) {
-    commitLibraryMutation(message.expectedRevision, message.data)
+    commitLibraryMutation(message.expectedRevision, message.data, {
+      expectedOwner: typeof message.expectedOwner === "string" ? message.expectedOwner : null,
+    })
       .then(sendResponse)
       .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
     return true;
@@ -4020,6 +4073,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.runtime.onInstalled.addListener((details) => {
+  ensureBgLibraryOwner().catch((error) => {
+    console.warn("[BG] Library owner check failed:", error?.message || error);
+  });
   // Website access is requested from an explicit tap in the popup, never from this non-interactive event.
   if (details.reason === "install") {
     // Re-registering/restoring an extension can leave existing storage in place.
@@ -4097,6 +4153,11 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(() => {
   dlog("[Anime Tracker] Extension started");
   migrateFromSyncToLocal();
+  // Finishes an account library switch a terminated worker left half-done, and attributes the library
+  // of an install that predates per-account libraries.
+  ensureBgLibraryOwner().catch((error) => {
+    console.warn("[BG] Library owner check failed:", error?.message || error);
+  });
   reconcileSmartNotificationAlarm().catch((error) => {
     console.warn("[BG] Smart notification startup reconciliation failed:", error?.message || error);
   });

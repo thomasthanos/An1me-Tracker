@@ -55,6 +55,11 @@ function isContentStorageAbort(result) {
   return Boolean(result?.__timedOut || result?.__storageUnavailable);
 }
 
+// Callers already treat an abort result as "nothing was written".
+function contentLibraryOwnerChanged() {
+  return { __storageUnavailable: true, __ownerChanged: true };
+}
+
 function contentStorageAreaGet(areaName, keys, Logger) {
   return new Promise((resolve, reject) => {
     if (!isContentContextValid()) {
@@ -288,6 +293,9 @@ const ContentStorage = {
       }
 
       const { Logger } = window.AnimeTrackerContent;
+      // The library this change was meant for. After a sign-in or sign-out another account's library is
+      // active; a change computed for the first one is dropped instead of being replayed onto it.
+      let owner;
       for (let attempt = 0; attempt < CONTENT_LIBRARY_MAX_RETRIES; attempt += 1) {
         const snapshot = await contentLibraryCoordinatorRequest(
           { type: "LIBRARY_MUTATION_SNAPSHOT", keys: requested },
@@ -295,6 +303,8 @@ const ContentStorage = {
         );
         if (isContentStorageAbort(snapshot)) return snapshot;
         if (!snapshot?.success) throw new Error(snapshot?.error || "Library mutation snapshot failed");
+        if (owner === undefined) owner = snapshot.owner || null;
+        else if ((snapshot.owner || null) !== owner) return contentLibraryOwnerChanged();
 
         const data = snapshot.data || {};
         let result = mutator(data);
@@ -309,11 +319,13 @@ const ContentStorage = {
           {
             type: "LIBRARY_MUTATION_COMMIT",
             expectedRevision: snapshot.revision,
+            expectedOwner: owner,
             data: payload,
           },
           Logger,
         );
         if (isContentStorageAbort(response)) return response;
+        if (response?.ownerChanged) return contentLibraryOwnerChanged();
         if (response?.success) return data;
         if (!response?.conflict) throw new Error(response?.error || "Library mutation commit failed");
       }
