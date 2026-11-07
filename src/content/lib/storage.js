@@ -254,6 +254,8 @@ const ContentStorage = {
   async set(data) {
     const writesLibraryData = Object.keys(data || {}).some((key) => CONTENT_LIBRARY_MUTATION_KEYS.has(key));
     if (writesLibraryData) {
+      // Library maps change only through mutate(), which recomputes from the latest snapshot on conflict.
+      if (AnimeTrackerLibraryKeys.writesLibraryMap(data)) throw new Error(AnimeTrackerLibraryKeys.BLIND_MAP_WRITE_ERROR);
       const { Logger } = window.AnimeTrackerContent;
       const response = await contentLibraryCoordinatorRequest({ type: "LIBRARY_MUTATION_WRITE", data }, Logger);
       if (isContentStorageAbort(response)) return response;

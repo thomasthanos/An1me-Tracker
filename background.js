@@ -766,6 +766,11 @@ function normalizeLibraryMutationKeys(keys) {
 
 async function bgStorageSet(data) {
   if (!containsLibraryMutationData(data)) return bgStorageSetRaw(data);
+  // A whole library map built from an earlier read would erase changes made since (R06). Map keys go
+  // through runBgLibraryTransaction / commitLibraryMutation; only single settings values are written here.
+  if (AnimeTrackerLibraryKeys.writesLibraryMap(data)) {
+    throw new Error(AnimeTrackerLibraryKeys.BLIND_MAP_WRITE_ERROR);
+  }
 
   await ensureBgLegacySyncMigration();
 
@@ -3649,6 +3654,10 @@ const messageHandlers = {
     }
     if (!containsLibraryMutationData(message.data)) {
       sendResponse({ success: false, error: "library_key_required" });
+      return true;
+    }
+    if (AnimeTrackerLibraryKeys.writesLibraryMap(message.data)) {
+      sendResponse({ success: false, error: AnimeTrackerLibraryKeys.BLIND_MAP_WRITE_ERROR });
       return true;
     }
     bgStorageSet(message.data)

@@ -97,7 +97,12 @@ const Storage = {
 
   async set(data) {
     const writesLibraryData = Object.keys(data || {}).some((key) => POPUP_LIBRARY_MUTATION_KEYS.has(key));
-    if (writesLibraryData) return coordinatedLibraryWrite(data);
+    if (writesLibraryData) {
+      // Library maps change only through AT.LibraryMutations.enqueue*, which computes the change from the
+      // latest snapshot; a plain set of a whole map would erase changes made since it was read.
+      if (AnimeTrackerLibraryKeys.writesLibraryMap(data)) throw new Error(AnimeTrackerLibraryKeys.BLIND_MAP_WRITE_ERROR);
+      return coordinatedLibraryWrite(data);
+    }
 
     return new Promise((resolve, reject) => {
       chrome.storage.local.set(data, () => {

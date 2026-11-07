@@ -1626,9 +1626,8 @@
     if (!preserveLocalData) {
       animeData = {};
       videoProgress = {};
-      await LibraryMutations.commit(
-        { animeData: {}, videoProgress: {} },
-        { label: "sign-out-clear-local", markInternalSave, sync: false },
+      await LibraryMutations.enqueue("sign-out-clear-local", ({ commit }) =>
+        commit({ animeData: {}, videoProgress: {} }, { label: "sign-out-clear-local", markInternalSave, sync: false }),
       );
     }
     lastMetadataRepairState = null;

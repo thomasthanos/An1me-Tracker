@@ -156,13 +156,10 @@
     return enqueueWithKeys(label, CORE_KEYS, operation);
   }
 
-  function commit(data, options = {}) {
-    return enqueue(options.label || "commit", ({ commit: commitQueued }) => commitQueued(data, options));
-  }
-
+  // There is deliberately no commit(data) shortcut: data computed before the transaction started is a stale
+  // snapshot that would overwrite changes made since (R06). Compute the change inside enqueue*().
   AT.LibraryMutations = Object.freeze({
     enqueue,
     enqueueWithKeys,
-    commit,
   });
 })();
