@@ -44,7 +44,8 @@ test("a consumer pull revalidates fresh cached 3-minute progress and receives re
 });
 test("unchanged cloud revisions avoid library downloads and repeated consumer pulls keep their rate limit", async () => {
   const snapshot = initial(), doc = { animeData: snapshot.animeData, videoProgress: {}, lastUpdated: "2026-10-04T11:59:00Z" };
-  snapshot._bgCloudDocCachePersisted = { uid: "test-user", doc, cachedAt: epoch - 60000 };
+  // The cached copy records the document version it was read at (the harness starts at version 1).
+  snapshot._bgCloudDocCachePersisted = { uid: "test-user", doc: { ...doc, __updateTime: "2026-10-04T11:00:01.000000Z" }, cachedAt: epoch - 60000 };
   const w = cloudWorker(snapshot, doc); await flush();
   await w.request("WAKE_AND_POLL_CLOUD"); await flush();
   assert.equal(w.requests.length, 1);
@@ -52,6 +53,14 @@ test("unchanged cloud revisions avoid library downloads and repeated consumer pu
   w.advance(60000);
   assert.equal((await w.request("WAKE_AND_POLL_CLOUD")).skipped, true);
   assert.equal(w.requests.length, 1);
+});
+test("a cached copy saved before document versions were recorded is read again once", async () => {
+  const snapshot = initial(), doc = { animeData: snapshot.animeData, videoProgress: {}, lastUpdated: "2026-10-04T11:59:00Z" };
+  snapshot._bgCloudDocCachePersisted = { uid: "test-user", doc, cachedAt: epoch - 60000 };
+  const w = cloudWorker(snapshot, doc); await flush();
+  await w.request("WAKE_AND_POLL_CLOUD"); await flush();
+  assert.equal(w.requests.length, 2, "revalidation, then one full read that records the version");
+  assert.equal(w.store._bgCloudDocCachePersisted.doc.__updateTime, w.remoteVersion());
 });
 test("periodic sync keeps its longer interval while a final unload may flush within 30 seconds", async () => {
   const w = cloudWorker(initial()); await flush();

@@ -10,6 +10,7 @@ importScripts(
   "src/common/cloud.js",
   "src/background/sync/session-context.js",
   "src/background/sync/library-slots.js",
+  "src/background/sync/firestore-adapter.js",
   "src/common/data/cache-policy.js",
   "src/common/data/zoned-time.js",
   "src/common/data/title-match.js",
@@ -44,6 +45,7 @@ const FIRESTORE_DATABASE = `projects/${FIREBASE_PROJECT_ID}/databases/(default)`
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/${FIRESTORE_DATABASE}`;
 const CLOUD_CONSUMER_POLL_MIN_GAP_MS = 3 * 60 * 1000;
 const SessionContext = self.AnimeTrackerSessionContext;
+const FirestoreAdapter = self.AnimeTrackerFirestoreAdapter;
 
 importScripts("src/common/data/merge-utils.js");
 
@@ -1748,7 +1750,10 @@ async function fetchCloudData(user, token, reason = "read", scope = null) {
         throw err;
       }
       await markFirebaseAuthRequestOk(token);
-      const doc = fromFSDoc(await response.json());
+      const json = await response.json();
+      // Keep the version this copy was read at: library writes are conditional on it (R03). An existing
+      // document without fields is still an existing document.
+      const doc = FirestoreAdapter.withUpdateTime(fromFSDoc(json) || (json?.updateTime ? {} : null), json?.updateTime);
       if (scope) SessionContext.assertMatches(scope, "fetch");
       if (doc && doc.animeData) doc.animeData = decodeEpisodesFromCloud(doc.animeData);
       return doc;
@@ -1919,7 +1924,7 @@ async function _revalidateCloudDocViaLastUpdated(user, token, cachedLastUpdated,
     return undefined;
   }
   const decoded = fromFSDoc(json);
-  return decoded?.lastUpdated || null;
+  return { lastUpdated: decoded?.lastUpdated || null, updateTime: json?.updateTime || null };
 }
 
 async function fetchCloudDataCached(user, token, reason = "cache", options = {}) {
@@ -1938,8 +1943,13 @@ async function fetchCloudDataCached(user, token, reason = "cache", options = {})
 
   if (cloudCache.doc && cloudCache.uid === user.uid && cloudCache.doc.lastUpdated) {
     try {
-      const cloudLastUpdated = await _revalidateCloudDocViaLastUpdated(user, token, cloudCache.doc.lastUpdated, reason, scope);
-      if (cloudLastUpdated && cloudLastUpdated === cloudCache.doc.lastUpdated && cloudCache.uid === user.uid) {
+      const revalidated = await _revalidateCloudDocViaLastUpdated(user, token, cloudCache.doc.lastUpdated, reason, scope);
+      const cloudLastUpdated = revalidated === undefined || revalidated === null ? revalidated : revalidated.lastUpdated;
+      // The cached copy is current only if it is the same document version, not merely the same lastUpdated
+      // text; a copy cached before versions were recorded is always read again.
+      const cachedUpdateTime = FirestoreAdapter.updateTimeOf(cloudCache.doc);
+      const sameVersion = !!cachedUpdateTime && revalidated?.updateTime === cachedUpdateTime;
+      if (cloudLastUpdated && cloudLastUpdated === cloudCache.doc.lastUpdated && sameVersion && cloudCache.uid === user.uid) {
         cloudCache.time = Date.now();
         bgStorageSet({
           [_BG_CLOUD_CACHE_KEY]: { uid: user.uid, doc: cloudCache.doc, cachedAt: cloudCache.time },
@@ -1994,6 +2004,50 @@ function enqueueFirestoreWrite(fn) {
   return next;
 }
 
+// PATCHes users/{uid} only if it is still the version `cloudDoc` was read at (see firestore-adapter.js).
+// Returns { ok, updateTime } on success, { conflict } when the document changed since, or the failed status.
+async function patchUserDocConditionally({ user, token, scope, cloudDoc, fieldMask, body, kind }) {
+  const precondition = FirestoreAdapter.preconditionQuery(cloudDoc);
+  // A copy cached before versions were recorded cannot be written against; read it again first.
+  if (!precondition) return { conflict: true, unversioned: true };
+  const url = `${FIRESTORE_BASE}/documents/users/${user.uid}?${fieldMask}&${precondition}`;
+  SessionContext.assertMatches(scope, `${kind}-patch`);
+  const response = await fetchWithTimeout(url, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body,
+    signal: scope.signal,
+  });
+  SessionContext.assertMatches(scope, `${kind}-ack`);
+  if (response.ok) {
+    const written = await response.json().catch(() => null);
+    return { ok: true, status: response.status, updateTime: written?.updateTime || null };
+  }
+  const errorBody = await response.text().catch(() => "");
+  if (FirestoreAdapter.isConflict(response.status, errorBody)) {
+    return { conflict: true, status: response.status, errorBody };
+  }
+  return { ok: false, status: response.status, errorBody };
+}
+
+// Runs read → merge → conditional PATCH until the write lands on the version it was merged from, with
+// a short backoff between attempts. After MAX_ATTEMPTS the change stays pending for the retry alarm;
+// nothing is ever written unconditionally.
+async function runConditionalCloudWrite(kind, scope, reason, attempt) {
+  for (let n = 1; ; n += 1) {
+    const result = await attempt(n);
+    if (!result?.conflict) return result;
+    invalidateBgCloudDocCache();
+    if (n >= FirestoreAdapter.MAX_ATTEMPTS) {
+      console.warn(`[BG] ${kind} sync: cloud document kept changing (${n} attempts); left pending`);
+      armSyncRetry(kind, "cloud-conflict");
+      return { success: false, error: "cloud_conflict", conflict: true, kind, reason };
+    }
+    await new Promise((resolve) => setTimeout(resolve, FirestoreAdapter.conflictDelay(n)));
+    SessionContext.assertMatches(scope, `${kind}-retry`);
+  }
+}
+
 async function syncProgressOnly(reason = "progress", options = {}) {
   if (options.markPending !== false) markProgressSyncPending(reason);
   if (!(await websiteAccessAllowed())) return websiteAccessPausedResult("progress");
@@ -2031,7 +2085,7 @@ async function syncProgressOnly(reason = "progress", options = {}) {
     }
 
     await persistCloudSyncStatus("syncing", { kind: "progress", uid: user.uid, reason });
-    const outcome = await enqueueFirestoreWrite(async () => {
+    const progressAttempt = async () => {
       SessionContext.assertMatches(scope, "progress-queue");
       const initial = await bgStorageGet(["videoProgress"]);
       const initialVP = initial.videoProgress || {};
@@ -2077,7 +2131,6 @@ async function syncProgressOnly(reason = "progress", options = {}) {
         return { success: true, wrote: false, kind: "progress", reason };
       }
 
-      const url = `${FIRESTORE_BASE}/documents/users/${user.uid}`;
       const fieldMask = "updateMask.fieldPaths=videoProgress&updateMask.fieldPaths=lastUpdated";
       const pushedAt = new Date().toISOString();
       const body = JSON.stringify({
@@ -2086,18 +2139,11 @@ async function syncProgressOnly(reason = "progress", options = {}) {
           lastUpdated: pushedAt,
         }),
       });
-      SessionContext.assertMatches(scope, "progress-patch");
-      const response = await fetchWithTimeout(`${url}?${fieldMask}`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body,
-        signal: scope.signal,
-      });
-      SessionContext.assertMatches(scope, "progress-ack");
+      const write = await patchUserDocConditionally({ user, token, scope, cloudDoc, fieldMask, body, kind: "progress" });
+      if (write.conflict) return { conflict: true };
 
-      if (!response.ok) {
-        const status = response.status;
-        const errorBody = await response.text().catch(() => "");
+      if (!write.ok) {
+        const { status, errorBody } = write;
         console.warn("[BG] Progress sync failed:", status, errorBody.slice(0, 160));
         await handleSyncHttpError({ kind: "progress", status, errorBody, expectedIdToken: token });
         return { success: false, error: `HTTP ${status}`, status, kind: "progress", reason };
@@ -2107,12 +2153,11 @@ async function syncProgressOnly(reason = "progress", options = {}) {
       FSDebug.write("progress", reason, { fields: ["progress"], bytes: body.length });
       syncState.lastPushedProgress = structuredClone(mergedVP);
 
-      if (cloudCache.doc && cloudCache.uid === user.uid) {
-        cloudCache.doc = {
-          ...cloudCache.doc,
-          videoProgress: mergedVP,
-          lastUpdated: pushedAt,
-        };
+      if (cloudCache.doc && cloudCache.uid === user.uid && write.updateTime) {
+        cloudCache.doc = FirestoreAdapter.withUpdateTime(
+          { ...cloudCache.doc, videoProgress: mergedVP, lastUpdated: pushedAt },
+          write.updateTime,
+        );
         cloudCache.time = Date.now();
         bgStorageSet({
           [_BG_CLOUD_CACHE_KEY]: { uid: user.uid, doc: cloudCache.doc, cachedAt: cloudCache.time },
@@ -2122,7 +2167,8 @@ async function syncProgressOnly(reason = "progress", options = {}) {
       }
       bgRememberOwnWrite(pushedAt);
       return { success: true, wrote: true, kind: "progress", reason };
-    });
+    };
+    const outcome = await enqueueFirestoreWrite(() => runConditionalCloudWrite("progress", scope, reason, progressAttempt));
 
     if (outcome.success) {
       clearSyncRetry("progress");
@@ -2189,7 +2235,7 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
 
   await persistCloudSyncStatus("syncing", { kind: "full", uid: user.uid, reason });
   try {
-    const outcome = await enqueueFirestoreWrite(async () => {
+    const fullAttempt = async () => {
       SessionContext.assertMatches(scope, "full-queue");
       const cloudDoc = await fetchCloudDataCached(user, token, reason, { requireRevalidation: true, scope });
 
@@ -2329,7 +2375,6 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         return { success: true, wrote: false, kind: "full", reason };
       }
 
-      const url = `${FIRESTORE_BASE}/documents/users/${user.uid}`;
       const pushedAt = new Date().toISOString();
 
       const payloadFields = {
@@ -2400,24 +2445,15 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
       const _body = JSON.stringify({
         fields: jsonToFirestoreFields(wireFields),
       });
-      SessionContext.assertMatches(scope, "full-patch");
-      const response = await fetchWithTimeout(`${url}?${fieldMask}`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: _body,
-        signal: scope.signal,
-      });
-      SessionContext.assertMatches(scope, "full-ack");
+      const write = await patchUserDocConditionally({ user, token, scope, cloudDoc, fieldMask, body: _body, kind: "full" });
+      if (write.conflict) return { conflict: true };
 
-      if (response.ok) {
+      if (write.ok) {
         await markFirebaseAuthRequestOk(token);
         FSDebug.write("full", reason, { fields: _changedFields, bytes: _body.length });
 
-        if (cloudCache.doc && cloudCache.uid === user.uid) {
-          cloudCache.doc = {
-            ...cloudCache.doc,
-            ...payloadFields,
-          };
+        if (cloudCache.doc && cloudCache.uid === user.uid && write.updateTime) {
+          cloudCache.doc = FirestoreAdapter.withUpdateTime({ ...cloudCache.doc, ...payloadFields }, write.updateTime);
           cloudCache.time = Date.now();
           bgStorageSet({
             [_BG_CLOUD_CACHE_KEY]: { uid: user.uid, doc: cloudCache.doc, cachedAt: cloudCache.time },
@@ -2429,13 +2465,13 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         clearSyncRetry("full");
         return { success: true, wrote: true, kind: "full", reason };
       } else {
-        const status = response.status;
-        const errorBody = await response.text().catch(() => "");
+        const { status, errorBody } = write;
         console.error("[BG] Sync failed:", status, errorBody.slice(0, 160));
         await handleSyncHttpError({ kind: "full", status, errorBody, expectedIdToken: token });
         return { success: false, error: `HTTP ${status}`, status, kind: "full", reason };
       }
-    });
+    };
+    const outcome = await enqueueFirestoreWrite(() => runConditionalCloudWrite("full", scope, reason, fullAttempt));
 
     if (outcome.success) {
       await finishSuccessfulSync({
