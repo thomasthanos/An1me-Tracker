@@ -1,0 +1,13 @@
+[
+  { "route": "/watch/area-88-act-3/", "expected": { "slug": "area-88", "episode": 3, "double": false, "second": null }, "why": "an act is an episode of its series" },
+  { "route": "/watch/area-88-act-1-act-2/", "expected": { "slug": "area-88", "episode": 1, "double": true, "second": 2 }, "why": "combined acts follow the combined-episode rule" },
+  { "route": "/watch/given-movie-2-hiiragi-mix-movie/", "expected": { "slug": "given-movie-2-hiiragi-mix-movie", "episode": 1, "double": false, "second": null }, "why": "a movie keeps its full slug" },
+  { "route": "/watch/free-episode-12/", "expected": { "slug": "free", "episode": 12, "double": false, "second": null }, "why": "unchanged: explicit episode" },
+  { "route": "/watch/one-piece-1015/", "expected": { "slug": "one-piece", "episode": 1015, "double": false, "second": null }, "why": "unchanged: bare trailing number" },
+  { "route": "/watch/fate-zero-season-2/episode-5", "expected": { "slug": "fate-zero", "episode": 5, "double": false, "second": null }, "why": "unchanged: season ordinal belongs to the series" },
+  { "route": "/watch/some-show-episode-3-4/", "expected": { "slug": "some-show", "episode": 3, "double": true, "second": 4 }, "why": "unchanged: combined episodes" },
+  { "route": "/watch/some-show-part-2/episode-4", "expected": { "slug": "some-show-part-2", "episode": 4, "double": false, "second": null }, "why": "unchanged: part followed by an episode segment is the series" },
+  { "route": "/watch/some-show-act-2/episode-4", "expected": { "slug": "some-show-act-2", "episode": 4, "double": false, "second": null }, "why": "an act followed by an episode segment is part of the series" },
+  { "route": "/watch/some-show-season-2-act-3/", "expected": { "slug": "some-show-season-2", "episode": 3, "double": false, "second": null }, "why": "a season ordinal does not swallow the act number" },
+  { "route": "/watch/some-show-act-1-act-9/", "expected": { "slug": "some-show-act-1", "episode": 9, "double": false, "second": null }, "why": "acts too far apart are not one combined entry (same gap rule as episodes)" }
+]

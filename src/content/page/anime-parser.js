@@ -33,7 +33,15 @@ const AnimeParser = {
 
       const parseDoubleEpisodeMatch = (value) => (value ? value.match(/^(.+?)[-_](?:ep(?:isode)?)[-_]?(\d+)[-_](\d+)$/i) : null);
 
-      const doubleEpMatch = parseDoubleEpisodeMatch(rawPathSlug) || parseDoubleEpisodeMatch(animeSlug);
+      // Combined acts are published as one playable entry: /watch/area-88-act-1-act-2/. Same rule as
+      // combined episodes: the series is the part before the first act, the entry covers both numbers.
+      const parseDoubleActMatch = (value) => (value ? value.match(/^(.+?)[-_]act[-_]?(\d+)[-_]act[-_]?(\d+)$/i) : null);
+
+      const doubleEpMatch =
+        parseDoubleEpisodeMatch(rawPathSlug) ||
+        parseDoubleEpisodeMatch(animeSlug) ||
+        parseDoubleActMatch(rawPathSlug) ||
+        parseDoubleActMatch(animeSlug);
       if (doubleEpMatch) {
         const ep1 = parseInt(doubleEpMatch[2], 10);
         const ep2 = parseInt(doubleEpMatch[3], 10);
@@ -49,17 +57,22 @@ const AnimeParser = {
         }
       }
 
+      // Acts are the episodes of some titles (/watch/area-88-act-3/ is Area 88 episode 3). Without this the
+      // bare-number fallback below read it as series "area-88-act", splitting one series into several keys.
+      const actPattern = /^(.+?)[-_]act[-_]?(\d+)$/i;
+      const partPattern = /^(.+?)[-_]part[-_]?(\d+)$/i;
       const episodePatterns = [
         /^(.+?)[-_]ep(?:isode)?[-_]?(\d+)$/i,
         /^(.+?)[-_]ch(?:apter)?[-_]?(\d+)$/i,
-        /^(.+?)[-_]part[-_]?(\d+)$/i,
+        actPattern,
+        partPattern,
         /^(.+?)[-_](\d+)$/,
       ];
       const fallbackPattern = episodePatterns[episodePatterns.length - 1];
-      // These two read a bare trailing number, which is ambiguous: it is the episode in
-      // "one-piece-1015" but the season in "fate-zero-season-2". The explicit -episode-/-chapter-
-      // patterns are never ambiguous and stay unguarded.
-      const ambiguousPatterns = new Set([episodePatterns[2], fallbackPattern]);
+      // These read a number that is not always the episode: the bare trailing number is the episode in
+      // "one-piece-1015" but the season in "fate-zero-season-2", and an act or part followed by a dedicated
+      // /episode-N segment belongs to the series. The explicit -episode-/-chapter- patterns stay unguarded.
+      const ambiguousPatterns = new Set([actPattern, partPattern, fallbackPattern]);
 
       // A dedicated episode segment (/watch/<slug>/episode-5) is authoritative.
       const episodeSegmentNumber = (() => {
@@ -86,7 +99,9 @@ const AnimeParser = {
           }
           // Without this the trailing number is eaten off the slug and reported as the episode:
           // fate-zero-season-2/episode-5 used to be recorded as fate-zero episode 2.
-          if (ambiguousPatterns.has(pattern) && (episodeSegmentNumber !== null || slugOrdinalIsIdentity)) {
+          // A season ordinal in the slug ("-season-2-act-3") does not make the act number part of the series.
+          const ordinalGuard = pattern !== actPattern && slugOrdinalIsIdentity;
+          if (ambiguousPatterns.has(pattern) && (episodeSegmentNumber !== null || ordinalGuard)) {
             continue;
           }
           animeSlug = match[1];
