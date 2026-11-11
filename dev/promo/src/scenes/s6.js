@@ -7,7 +7,7 @@
   const T0 = P.CUES.scenes[5];
   const IMP = C.impacts.map((x) => x - T0);
   const LOCK = C.lock - T0;
-  const DC = [960, 1010], RX = 860, RY = 760; // the dome
+  const DC = [960, 1110], RX = 860, RY = 860; // the dome: its base sits below the frame
   const onDome = (deg) => [DC[0] + RX * Math.cos((deg * Math.PI) / 180), DC[1] - RY * Math.sin((deg * Math.PI) / 180)];
   const THREATS = [
     { label: "ADS SDK", from: [2140, 60], deg: 52, at: IMP[0], big: true },
@@ -23,7 +23,9 @@
       const ttl = P.title(host, ["ΜΗΔΕΝΙΚΟ *TRACKING* · 100% *ΔΙΚΑ* *ΣΟΥ* ΔΕΔΟΜΕΝΑ"]);
       ttl.node.style.setProperty("--hl", "#35E3A4");
       ttl.node.style.setProperty("--hl-glow", "rgba(16,185,129,.7)");
-      const rei = P.character(host, { who: "rei", x: 214, y: 430, scale: 1.3, glasses: true, hand: "palm", seed: 61 });
+      // the lattice sits behind Rei and the data so it never crosses a face or a line of copy
+      const lattice = P.canvas(host);
+      const rei = P.character(host, { who: "rei", x: 140, y: 430, scale: 1.3, glasses: true, hand: "palm", seed: 61 });
       const data = add(
         host,
         `<div class="s6-data"><div class="s6-ban b1"></div><div class="s6-ban b2"></div>
@@ -43,7 +45,7 @@
       data.querySelector(".s6-mv3").appendChild(mv3);
       const lock = add(
         host,
-        `<div class="s6-lock"><svg width="150" height="170" viewBox="0 0 60 68" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        `<div class="s6-lock"><svg width="112" height="127" viewBox="0 0 60 68" fill="none" stroke-linecap="round" stroke-linejoin="round">
             <path class="shackle" d="M18 30V19a12 12 0 0 1 24 0v11" stroke="#35E3A4" stroke-width="5"/>
             <rect x="9" y="30" width="42" height="32" rx="7" fill="#0c2a22" stroke="#35E3A4" stroke-width="4"/>
             <circle cx="30" cy="43" r="4.5" fill="#35E3A4"/><path d="M30 46v8" stroke="#35E3A4" stroke-width="4"/>
@@ -56,7 +58,7 @@
       const k1 = P.kana(host, "ガキーン!", { x: 1250, y: 200, size: 104, color: "#35E3A4", rot: 7 });
       const k2 = P.kana(host, "バリア!", { x: 596, y: 292, size: 80, color: "#00F0FF", rot: -6 });
       return {
-        bg, ttl, rei, data, bans: [...data.querySelectorAll(".s6-ban")], chips: [...data.querySelectorAll(".s6-chip, .s6-mv3")], priv, sec, mv3,
+        bg, lattice, ttl, rei, data, bans: [...data.querySelectorAll(".s6-ban")], chips: [...data.querySelectorAll(".s6-chip, .s6-mv3")], priv, sec, mv3,
         lock, shackle: lock.querySelector(".shackle"), own: lock.querySelector(".s6-own"), pills, blocked, dome, k1, k2,
       };
     },
@@ -101,7 +103,7 @@
       // Rei holds the barrier
       const locked = t >= LOCK;
       r.rei.set(t, {
-        mouth: locked ? "grin" : jolt > 0.3 ? "flat" : "smirk", eye: locked && t < LOCK + 0.5 ? "happy" : "open", brow: locked ? 2 : 14, open: locked ? 1 : 0.84,
+        blink: false, mouth: locked ? "grin" : jolt > 0.3 ? "flat" : "smirk", eye: locked && t < LOCK + 0.5 ? "happy" : "open", brow: locked ? 2 : 14, open: locked ? 1 : 0.84,
         look: [6, -4], wind: 0.35 + 0.5 * jolt, handY: -74 - 10 * jolt, handRot: -6, dx: -6 * jolt, blush: locked ? 0.6 : 0.15,
         flash: 0.5 * decay(t, IMP[0], 0.2),
       });
@@ -124,24 +126,25 @@
       const shut = tween(t, LOCK - 0.08, LOCK, E.inCubic);
       r.shackle.setAttribute("transform", `translate(0 ${(-9 * (1 - shut)).toFixed(2)}) rotate(${(-28 * (1 - shut)).toFixed(2)} 42 30)`);
 
-      // ---- the shield ----
+      // ---- the shield: lattice behind the content, rim and impacts in front ----
+      const lat = r.lattice;
       const f = r.dome;
+      lat.clearRect(0, 0, W, H);
       f.clearRect(0, 0, W, H);
-      f.save();
-      f.beginPath();
-      f.ellipse(DC[0], DC[1], RX * up, RY * up, 0, Math.PI, TAU);
-      f.closePath();
-      f.save();
-      f.clip();
-      const dg = f.createRadialGradient(DC[0], DC[1], RY * 0.35, DC[0], DC[1], RX);
+      lat.save();
+      lat.beginPath();
+      lat.ellipse(DC[0], DC[1], RX * up, RY * up, 0, Math.PI, TAU);
+      lat.closePath();
+      lat.clip();
+      const dg = lat.createRadialGradient(DC[0], DC[1], RY * 0.35, DC[0], DC[1], RX);
       dg.addColorStop(0, "rgba(16,185,129,0)");
       dg.addColorStop(0.8, "rgba(16,185,129,.07)");
       dg.addColorStop(1, "rgba(53,227,164,.34)");
-      f.fillStyle = dg;
-      f.fillRect(0, 0, W, H);
+      lat.fillStyle = dg;
+      lat.fillRect(0, 0, W, H);
       // hex lattice: bright at the rim and wherever an impact ripple is passing
       const S = 44, HH = S * Math.sqrt(3);
-      f.lineWidth = 2;
+      lat.lineWidth = 2;
       for (let row = 0; row * (HH / 2) < H; row++) {
         for (let col = 0; col * S * 3 < W + S * 3; col++) {
           const x = col * S * 3 + (row % 2 ? S * 1.5 : 0);
@@ -159,19 +162,20 @@
             a += (th.big ? 1.1 : 0.6) * Math.exp(-Math.pow((dist - wave) / 90, 2)) * (1 - age / 0.9);
           }
           if (a < 0.03) continue;
-          f.strokeStyle = `rgba(110,255,205,${Math.min(1, a).toFixed(3)})`;
-          f.beginPath();
+          lat.strokeStyle = `rgba(110,255,205,${Math.min(1, a).toFixed(3)})`;
+          lat.beginPath();
           for (let k = 0; k < 6; k++) {
             const ang = (k * Math.PI) / 3;
             const hx = x + Math.cos(ang) * S, hy = y + Math.sin(ang) * S;
-            k ? f.lineTo(hx, hy) : f.moveTo(hx, hy);
+            k ? lat.lineTo(hx, hy) : lat.moveTo(hx, hy);
           }
-          f.closePath();
-          f.stroke();
+          lat.closePath();
+          lat.stroke();
         }
       }
-      f.restore();
+      lat.restore();
       // rim
+      f.save();
       f.lineWidth = 7 + 6 * jolt;
       f.strokeStyle = "#8dffd6";
       f.shadowColor = "#10B981";
@@ -210,7 +214,7 @@
         }
       });
       // lock confirmation
-      for (let k = 0; k < 2; k++) P.ring(f, 1615, 660, 300, ramp(t, LOCK + k * 0.08, LOCK + 0.5 + k * 0.08), "#35E3A4", 10);
+      for (let k = 0; k < 2; k++) P.ring(f, 1262, 800, 260, ramp(t, LOCK + k * 0.08, LOCK + 0.5 + k * 0.08), "#35E3A4", 10);
 
       P.kanaTick(r.k1, t, { amp: 7, show: ramp(t, IMP[0], IMP[0] + 0.04) * (1 - ramp(t, IMP[0] + 0.75, IMP[0] + 1.0)), seed: 5, pop: lerp(1.5, 1, tween(t, IMP[0], IMP[0] + 0.3, E.outBack)) });
       P.kanaTick(r.k2, t, { amp: 4, show: ramp(t, 0.25, 0.35) * (1 - ramp(t, 1.6, 1.9)), seed: 6, pop: lerp(1.8, 1, tween(t, 0.25, 0.55, E.outBack)) });

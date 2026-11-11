@@ -44,7 +44,7 @@
   function renderFx(t) {
     ctx.clearRect(0, 0, W, H);
     if (t < 0.35) {
-      ctx.fillStyle = `rgba(7,8,16,${(1 - ramp(t, 0.02, 0.35)).toFixed(3)})`;
+      ctx.fillStyle = `rgba(7,8,16,${(0.72 * (1 - ramp(t, 0, 0.35))).toFixed(3)})`;
       ctx.fillRect(0, 0, W, H);
     }
     cuts.forEach((c, i) => {

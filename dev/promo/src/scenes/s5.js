@@ -60,7 +60,7 @@
 
       // ---- Kai, in bed ----
       const pillow = add(host, `<div class="s5-pillow"></div>`);
-      const kai = P.character(host, { who: "kai", x: 1478, y: 322, scale: 1.24, hand: "phone", seed: 51 });
+      const kai = P.character(host, { who: "kai", x: 1446, y: 322, scale: 1.24, hand: "phone", seed: 51 });
       const blanket = add(host, `<div class="s5-blanket"></div>`);
 
       // ---- portal ----
