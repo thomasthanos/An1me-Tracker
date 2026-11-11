@@ -1,0 +1,16 @@
+{
+  "name": "an1me-tracker-promo",
+  "private": true,
+  "description": "Greek promo commercial for An1me Tracker — a HyperFrames composition with a generated soundtrack.",
+  "scripts": {
+    "build": "node tools/build-promo.mjs",
+    "assets": "node tools/sync-brand-assets.mjs",
+    "audio": "node tools/build-promo-audio.mjs",
+    "check": "hyperframes check .",
+    "preview": "hyperframes preview .",
+    "render": "node tools/build-promo.mjs --skip-audio"
+  },
+  "devDependencies": {
+    "hyperframes": "0.9.33"
+  }
+}
