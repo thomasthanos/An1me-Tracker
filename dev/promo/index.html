@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="el">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>An1me Tracker — Promo (GR)</title>
+    <!-- Greek-capable faces. Manrope tops out at 800 (ExtraBold); Plus Jakarta Sans has no Greek subset. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=JetBrains+Mono:wght@500;700&family=Inter:wght@400;500;600;700&display=block&subset=greek,greek-ext,latin,latin-ext"
+      rel="stylesheet"
+    />
+    <link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&display=block" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="src/styles.css" />
+    <link rel="stylesheet" href="src/scenes.css" />
+  </head>
+  <body>
+    <!--
+      1920x1080 · 45 fps · 35.0 s (1575 frames). Every scene is its own composition on the root
+      timeline; each registers a paused GSAP timeline and a frame source, so all motion is a pure
+      function of the HyperFrames clock. No CSS @keyframes / transitions, no timers, no free rAF.
+    -->
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="35"
+      data-fps="45"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div id="s1" class="clip scene" data-composition-id="s1" data-start="0" data-duration="5" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="s2" class="clip scene" data-composition-id="s2" data-start="5" data-duration="5.5" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="s3" class="clip scene" data-composition-id="s3" data-start="10.5" data-duration="5" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="s4" class="clip scene" data-composition-id="s4" data-start="15.5" data-duration="5.5" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="s5" class="clip scene" data-composition-id="s5" data-start="21" data-duration="5.8" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="s6" class="clip scene" data-composition-id="s6" data-start="26.8" data-duration="4" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="s7" class="clip scene" data-composition-id="s7" data-start="30.8" data-duration="4.2" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+      <!-- cut wipes and flashes, above every scene -->
+      <div id="fx" class="clip overlay" data-composition-id="fx" data-no-timeline data-start="0" data-duration="35" data-track-index="2" data-width="1920" data-height="1080"></div>
+
+      <!-- Greek sales captions, lit word by word in sync with the voiceover -->
+      <div id="captions" class="clip overlay" data-composition-id="captions" data-track-kind="captions" data-no-timeline data-start="0" data-duration="35" data-track-index="3" data-width="1920" data-height="1080"></div>
+
+      <!-- mastered mix: voiceover + music + SFX (tools/build-promo-audio.mjs) -->
+      <audio id="mix" src="assets/audio/promo_mix.m4a" data-start="0" data-duration="35" data-track-index="4" data-volume="1"></audio>
+    </div>
+
+    <script src="src/cues.js"></script>
+    <script src="src/brand.generated.js"></script>
+    <script src="src/captions.generated.js"></script>
+    <script src="src/lib.js"></script>
+    <script src="src/hands.js"></script>
+    <script src="src/characters.js"></script>
+    <script src="src/ui.js"></script>
+    <script src="src/scenes/s1.js"></script>
+    <script src="src/scenes/s2.js"></script>
+    <script src="src/scenes/s3.js"></script>
+    <script src="src/scenes/s4.js"></script>
+    <script src="src/scenes/s5.js"></script>
+    <script src="src/scenes/s6.js"></script>
+    <script src="src/scenes/s7.js"></script>
+    <script src="src/overlays.js"></script>
+    <script src="src/main.js"></script>
+  </body>
+</html>
