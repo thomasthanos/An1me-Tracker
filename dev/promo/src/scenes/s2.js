@@ -4,6 +4,7 @@
 (function () {
   const { add, clamp, lerp, ramp, tween, bump, decay, hash, E, TAU, W, H } = P;
   const C = P.CUES.s2;
+  const HS = P.hands.SHAPES;
   const T0 = P.CUES.scenes[1];
   const L = { shine: C.shine - T0, pop: C.uiPop - T0, s0: C.scrubStart - T0, s1: C.scrubEnd - T0, play: C.play - T0 };
   const SAVED = 14 * 60 + 28;
@@ -14,7 +15,7 @@
       const bg = P.canvas(host);
       const ttl = P.title(host, ["ΘΥΜΑΤΑΙ ΤΟ ΕΠΕΙΣΟΔΙΟ.", "ΚΑΙ ΤΟ *ΑΚΡΙΒΕΣ* *ΔΕΥΤΕΡΟΛΕΠΤΟ.*"]);
       const RX = 36, RY = 292, RS = 1.62;
-      const rei = P.character(host, { who: "rei", x: RX, y: RY, scale: RS, glasses: true, hand: "push", seed: 11 });
+      const rei = P.character(host, { who: "rei", x: RX, y: RY, scale: RS, glasses: true, seed: 11 });
       const kz = P.kana(host, "シャキーン!", { x: 300, y: 228, size: 92, color: "#00F0FF", rot: -8 });
       const player = P.ui.player(host, { x: 716, y: 232, w: 860, slug: "jujutsu-kaisen/episode-18", title: "Jujutsu Kaisen", ep: "ΕΠΕΙΣΟΔΙΟ 18", total: TOTAL });
       player.setMark(SAVED);
@@ -60,13 +61,23 @@
       const down = tween(t, 1.25, 1.75, E.inOutCubic);
       const flash = t < L.shine ? 0 : Math.max(decay(t, L.shine, 0.16), 0.9 * (1 - ramp(t, L.shine, L.shine + 0.42)));
       const happy = t > L.s1 + 0.05 && t < L.s1 + 0.9;
+      // right hand: rises to the temple, two fingers nudge the frame, drops; later it presents
+      // the player and taps "play"
+      const push = { x: 348 - 7 * bump(t, L.shine - 0.04, 0.05, 0.3), y: 304 - 9 * bump(t, L.shine - 0.04, 0.05, 0.3), rot: -30, view: "back", side: 1, elbow: 1, ...HS.two };
+      const rest = { x: 392, y: 640, rot: 10, view: "back", side: 1, elbow: 1, ...HS.relaxed };
+      const show = { x: 372 + 5 * Math.sin(t * 2.4), y: 332 + 4 * Math.sin(t * 3.1), rot: 16 + 5 * Math.sin(t * 2.4), view: "palm", side: -1, elbow: 1, ...HS.open, curls: HS.open.curls.map((c, i) => c + 0.08 + 0.07 * Math.sin(t * 4 + i * 0.9)) };
+      const tap = { x: 356 + 8 * bump(t, L.play - 0.07, 0.07, 0.2), y: 344, rot: 52, view: "back", side: -1, elbow: 1, ...HS.point };
+      let arm;
+      if (t < 1.25) arm = P.hands.mix(rest, push, up);
+      else if (t < L.s1 - 0.25) arm = P.hands.mix(push, rest, down);
+      else if (t < L.play - 0.5) arm = P.hands.mix(rest, show, tween(t, L.s1 - 0.25, L.s1 + 0.2, E.outBack));
+      else arm = P.hands.mix(show, tap, tween(t, L.play - 0.5, L.play - 0.12, E.inOutCubic));
       r.rei.set(t, {
         mouth: t > L.play ? "grin" : happy ? "grin" : t > L.shine ? "smirk" : "flat",
         eye: happy ? "happy" : "open", brow: t < 1.4 ? 9 : 2, open: t < 1.4 ? 0.82 : 1,
         look: [lerp(0, 7, ramp(t, 1.5, 2.0)), 0], blush: happy ? 0.7 : 0.25 * ramp(t, 1.5, 2),
         flash, glint: ramp(t, L.shine, L.shine + 0.4),
-        handY: lerp(260, -6 * bump(t, L.shine - 0.03, 0.05, 0.3), up) + 260 * down, handShow: 1 - ramp(t, 1.65, 1.8),
-        tilt: -2 * up * (1 - down), wind: 0.25 * decay(t, L.shine, 0.5),
+        tilt: -2 * up * (1 - down), wind: 0.25 * decay(t, L.shine, 0.5), armR: arm,
       });
       P.kanaTick(r.kz, t, { amp: 4, show: ramp(t, L.shine, L.shine + 0.05) * (1 - ramp(t, 1.5, 1.8)), seed: 4, pop: lerp(2, 1, tween(t, L.shine, L.shine + 0.3, E.outBack)) });
 
@@ -99,7 +110,7 @@
       const sec = SAVED * jump + (playing ? t - L.play : 0);
       r.player.set(t, sec, playing);
       // the saved second gets a hit of emphasis when the voice says "exact second"
-      const em = bump(t, 3.5, 0.1, 0.5);
+      const em = bump(t, 3.75, 0.1, 0.5);
       r.player.cur.style.transform = `scale(${(1 + 0.22 * decay(t, L.s1, 0.2) + 0.2 * em).toFixed(3)})`;
       r.player.cur.style.display = "inline-block";
       r.player.cur.style.color = t >= L.s1 ? "#FFB800" : "#fff";

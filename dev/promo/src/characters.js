@@ -1,7 +1,7 @@
 // Original anime characters for the promo, drawn as SVG and posed from the clock.
 //   Kai — sleepless otaku in a hoodie (scenes 1, 3, 5, 7); powers up into a golden mode.
 //   Rei — megane heroine with long magenta hair (scenes 2, 4, 6, 7).
-// P.character(parent, opts) returns { node, set(t, pose) }. `set` is a pure function of its
+// P.character(parent, opts) returns { node, set(t, pose) }. pose.armL / pose.armR place a hand. `set` is a pure function of its
 // arguments: blinking, hair sway and breathing are all derived from `t`.
 (function () {
   const { clamp, lerp, hash, noise, TAU, E } = P;
@@ -113,70 +113,6 @@
     flat: `<path d="M186 262L214 262" fill="none" stroke="#7a2438" stroke-width="3.4" stroke-linecap="round"/>`,
   };
 
-  // outlined capsule ("finger") helper
-  const cap = (x1, y1, x2, y2, w, fill = SKIN) =>
-    `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${OUT}" stroke-width="${w + 5}" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${fill}" stroke-width="${w}" stroke-linecap="round"/>`;
-
-  function handMarkup(pose, pal) {
-    if (pose === "push") {
-      // megane push: index and middle finger on the bridge, hand rising from the lower right
-      return `<g class="hand hand-push">
-        ${cap(372, 520, 344, 326, 58, pal.top)}
-        <path d="M312 316l60-10 4 24-60 10z" fill="#fff" stroke="${OUT}" stroke-width="2.5" stroke-linejoin="round"/>
-        ${cap(346, 262, 352, 240, 13, SKIN_SH)}
-        ${cap(334, 250, 338, 224, 14, SKIN_SH)}
-        <ellipse cx="328" cy="276" rx="29" ry="36" transform="rotate(8 328 276)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.6"/>
-        ${cap(318, 250, 296, 204, 15)}
-        ${cap(304, 258, 276, 214, 15)}
-        ${cap(306, 292, 284, 270, 14)}
-      </g>`;
-    }
-    if (pose === "point") {
-      return `<g class="hand hand-point">
-        ${cap(304, 452, 392, 372, 56, pal.top)}
-        <path d="M372 356l34 28-14 18-34-28z" fill="#fff" stroke="${OUT}" stroke-width="2.5" stroke-linejoin="round"/>
-        <ellipse cx="418" cy="352" rx="30" ry="26" transform="rotate(-30 418 352)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.6"/>
-        ${cap(434, 338, 486, 300, 15)}
-        ${cap(412, 372, 432, 368, 13, SKIN_SH)}
-        ${cap(404, 334, 418, 318, 14)}
-      </g>`;
-    }
-    if (pose === "palm") {
-      // open palm thrust forward: the shield is cast from here
-      return `<g class="hand hand-palm">
-        ${cap(300, 446, 398, 360, 56, pal.top)}
-        <path d="M380 344l32 30-14 16-32-30z" fill="#fff" stroke="${OUT}" stroke-width="2.5" stroke-linejoin="round"/>
-        ${cap(446, 300, 452, 250, 14)}
-        ${cap(462, 304, 478, 258, 14)}
-        ${cap(476, 314, 502, 276, 14)}
-        ${cap(484, 330, 516, 306, 13)}
-        ${cap(420, 344, 398, 316, 15)}
-        <ellipse cx="450" cy="336" rx="36" ry="34" transform="rotate(-20 450 336)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.6"/>
-        <path d="M434 340q16 8 30-6" fill="none" stroke="${SKIN_SH}" stroke-width="3" stroke-linecap="round"/>
-      </g>`;
-    }
-    if (pose === "phone") {
-      return `<g class="hand hand-phone">
-        ${cap(312, 500, 296, 420, 54, pal.top)}
-        <g transform="rotate(-10 300 356)">
-          <rect x="262" y="286" width="78" height="142" rx="13" fill="#0c1220" stroke="${OUT}" stroke-width="3"/>
-          <rect x="268" y="293" width="66" height="128" rx="8" fill="#101e31"/>
-          <rect class="phone-glow" x="268" y="293" width="66" height="128" rx="8" fill="#54d2ff" opacity=".28"/>
-          <rect x="275" y="304" width="52" height="30" rx="5" fill="#244d67"/>
-          <path d="M295 312l12 7-12 7z" fill="#8af5dd"/>
-          <rect x="275" y="342" width="52" height="5" rx="2.5" fill="#2b405b"/>
-          <rect class="phone-bar" x="275" y="342" width="36" height="5" rx="2.5" fill="#65cfff"/>
-          <rect x="275" y="356" width="38" height="5" rx="2.5" fill="#3a4c68"/>
-          <rect x="275" y="368" width="28" height="5" rx="2.5" fill="#3a4c68"/>
-        </g>
-        <ellipse cx="296" cy="412" rx="34" ry="26" fill="${SKIN}" stroke="${OUT}" stroke-width="2.6"/>
-        ${cap(268, 402, 262, 372, 14)}
-        ${cap(330, 404, 338, 366, 13, SKIN_SH)}
-      </g>`;
-    }
-    return "";
-  }
-
   function markup(who, u, pal, opts) {
     const kai = who === "kai";
     const body = kai
@@ -261,7 +197,7 @@
           <g class="brows-top"></g>
           ${glasses}
         </g>
-        ${handMarkup(opts.hand, pal)}
+        <g class="armL" opacity="0"></g><g class="armR" opacity="0"></g>
       </g>
     </svg>`;
   }
@@ -304,8 +240,13 @@
       bags: $$(".bags"), blush: $(".blush"), gloom: $(".gloom"), sweat: $(".sweat"),
       back: $(".hair-back"), cap: $(".hair-cap"), fshade: $(".fshade"), bangs: $$(".bang"), hi: $(".hair-hi"),
       backL: $(".hair-backL"), backR: $(".hair-backR"), lockL: $(".lockL"), lockR: $(".lockR"), ahoge: $(".ahoge"),
-      flash: $(".lens-flash"), glint: $(".lens-glint"), hand: $(".hand"), strings: $$(".string"),
-      phoneGlow: $(".phone-glow"), phoneBar: $(".phone-bar"),
+      flash: $(".lens-flash"), glint: $(".lens-glint"), strings: $$(".string"),
+    };
+    // arms are solved from the shoulder to wherever a pose puts the wrist (see hands.js)
+    const cuff = who === "kai" ? pal.topSh : "#fff";
+    const arms = {
+      L: P.hands.create($(".armL"), { shoulder: [96, 408], sleeve: pal.top, cuff }),
+      R: P.hands.create($(".armR"), { shoulder: [304, 408], sleeve: pal.top, cuff }),
     };
     let lastMouth = null;
 
@@ -388,15 +329,10 @@
         r.glint.setAttribute("opacity", g == null || g <= 0 || g >= 1 ? 0 : 0.95);
         r.glint.setAttribute("transform", `translate(${f(lerp(96, 300, g ?? 0))} 0)`);
       }
-      if (r.hand) {
-        const hy = p.handY ?? 0;
-        const hx = p.handX ?? 0;
-        r.hand.setAttribute("transform", `translate(${f(hx)} ${f(hy + breathe * 1.4)}) rotate(${(p.handRot ?? 0).toFixed(2)} 300 430)`);
-        r.hand.setAttribute("opacity", clamp(p.handShow ?? 1).toFixed(3));
-      }
-      if (r.phoneGlow) {
-        r.phoneGlow.setAttribute("opacity", (0.18 + 0.2 * clamp(p.phoneGlow ?? 0)).toFixed(3));
-        r.phoneBar.setAttribute("width", f(52 * clamp(p.phoneBar ?? 0.7)));
+      for (const side of ["L", "R"]) {
+        const pose = p["arm" + side];
+        if (!pose) arms[side].set({ show: 0 });
+        else arms[side].set({ ...pose, y: pose.y + breathe * 1.3 });
       }
     }
     set(0, {});

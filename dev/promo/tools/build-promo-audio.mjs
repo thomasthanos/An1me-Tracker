@@ -13,7 +13,7 @@
 //   .work/audio/report.json            what was built, measured loudness and ducking depth
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import "../src/cues.js";
@@ -24,6 +24,8 @@ import { renderSfx } from "./lib/sfx.mjs";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORK = join(ROOT, ".work", "audio");
 const CACHE = join(WORK, "tts-cache");
+// ElevenLabs takes are committed, so a rebuild reuses the exact approved read and spends no credits.
+const VOICE_DIR = join(ROOT, "assets", "voice");
 const CUES = globalThis.PROMO_CUES;
 const script = JSON.parse(readFileSync(join(ROOT, "script", "voiceover.json"), "utf8"));
 const args = process.argv.slice(2);
@@ -72,21 +74,16 @@ function decodeStereo(file) {
 // ---------------------------------------------------------------------------------------------
 
 const providers = {
-  async elevenlabs(sentence, key) {
-    const { voiceId, model } = script.voice.elevenLabs;
-    const id = process.env.ELEVENLABS_VOICE_ID || voiceId;
+  async elevenlabs(sentence, file) {
+    if (!process.env.ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not set and this line has no saved take in assets/voice/");
+    const { id, model, seed, settings } = elevenVoice();
     const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${id}/with-timestamps?output_format=mp3_44100_128`, {
       method: "POST",
       headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({
-        text: sentence.say,
-        model_id: process.env.ELEVENLABS_MODEL || model,
-        voice_settings: { stability: 0.42, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true },
-      }),
+      body: JSON.stringify({ text: sentence.say, model_id: model, language_code: "el", seed, voice_settings: settings }),
     });
     if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const body = await res.json();
-    const file = join(CACHE, key + ".mp3");
     writeFileSync(file, Buffer.from(body.audio_base64, "base64"));
     const al = body.alignment || body.normalized_alignment;
     let words;
@@ -101,42 +98,62 @@ const providers = {
       });
       if (cur) words.push(cur);
     }
-    return { file, words };
+    return { words };
   },
-  async edge(sentence, key) {
+  async edge(sentence, file) {
     const { voice, rate, pitch } = script.voice.edgeTts;
-    const file = join(CACHE, key + ".mp3");
     const r = run("python3", [join(ROOT, "tools", "tts_edge.py"), voice, rate, pitch, file, sentence.say]);
     if (r.status !== 0) throw new Error((r.stderr || "edge-tts failed").trim().split("\n").pop());
     let words;
     try { words = JSON.parse(r.stdout).words; } catch { /* timings are optional */ }
-    return { file, words };
+    return { words };
   },
-  async gtts(sentence, key) {
-    const file = join(CACHE, key + ".mp3");
+  async gtts(sentence, file) {
     const r = run("python3", [join(ROOT, "tools", "tts_gtts.py"), script.voice.gtts.lang, file, sentence.say]);
     if (r.status !== 0) throw new Error((r.stderr || "gTTS failed").trim().split("\n").pop());
-    return { file };
+    return {};
   },
 };
 // Fastest read each provider needs before it stops sounding natural, and its natural floor.
-const TEMPO = { elevenlabs: [1.0, 1.35], edge: [1.0, 1.35], gtts: [1.28, 1.5] };
+const TEMPO = { elevenlabs: [1.0, 1.25], edge: [1.0, 1.35], gtts: [1.28, 1.5] };
+// ElevenLabs reads a whole scene in one take, so the phrasing carries across sentences.
+const SCENE_TAKES = { elevenlabs: true };
 
-async function synth(provider, sentence) {
-  const voiceTag = JSON.stringify(script.voice) + (process.env.ELEVENLABS_VOICE_ID || "");
-  const key = provider + "-" + createHash("sha1").update(voiceTag + sentence.say).digest("hex").slice(0, 16);
-  const meta = join(CACHE, key + ".json");
-  if (!NO_CACHE && existsSync(meta) && existsSync(join(CACHE, key + ".mp3"))) return JSON.parse(readFileSync(meta, "utf8"));
-  const out = await providers[provider](sentence, key);
-  writeFileSync(meta, JSON.stringify(out));
-  return out;
+function elevenVoice() {
+  const v = script.voice.elevenLabs;
+  return {
+    id: process.env.ELEVENLABS_VOICE_ID || v.voiceId,
+    model: process.env.ELEVENLABS_MODEL || v.model,
+    seed: v.seed ?? 1337,
+    settings: v.settings || { stability: 0.45, similarity_boost: 0.8 },
+  };
 }
+function takePath(provider, sentence) {
+  const tag = provider === "elevenlabs" ? JSON.stringify(elevenVoice()) : JSON.stringify(script.voice[provider === "edge" ? "edgeTts" : provider] || {});
+  const key = provider + "-" + createHash("sha1").update(tag + sentence.say).digest("hex").slice(0, 16);
+  const dir = provider === "elevenlabs" ? VOICE_DIR : CACHE;
+  return { file: join(dir, key + ".mp3"), meta: join(dir, key + ".json") };
+}
+/** The lines a provider is asked for: one per sentence, or one per scene. */
+function takesFor(provider, sc) {
+  if (!SCENE_TAKES[provider]) return sc.sentences;
+  return [{ text: sc.sentences.map((x) => x.text).join(" "), say: sc.sentences.map((x) => x.say).join(" "), counts: sc.sentences.map((x) => x.text.trim().split(/\s+/).length) }];
+}
+async function synth(provider, sentence) {
+  const { file, meta } = takePath(provider, sentence);
+  if (!NO_CACHE && existsSync(meta) && existsSync(file)) return { file, ...JSON.parse(readFileSync(meta, "utf8")) };
+  mkdirSync(dirname(file), { recursive: true });
+  const out = await providers[provider](sentence, file);
+  writeFileSync(meta, JSON.stringify({ say: sentence.say, ...out }));
+  return { file, ...out };
+}
+const elevenSaved = () => script.scenes.every((sc) => takesFor("elevenlabs", sc).every((t) => existsSync(takePath("elevenlabs", t).file)));
 
 function pickProviders() {
   const want = flag("provider", process.env.PROMO_TTS || "auto");
   if (want !== "auto") return [want];
   const list = [];
-  if (process.env.ELEVENLABS_API_KEY) list.push("elevenlabs");
+  if (process.env.ELEVENLABS_API_KEY || elevenSaved()) list.push("elevenlabs");
   if (existsSync(join(ROOT, "voiceover.wav"))) list.push("file");
   list.push("edge", "gtts");
   return list;
@@ -248,20 +265,34 @@ async function buildVoice() {
       const built = [];
       for (const sc of script.scenes) {
         const parts = [];
-        for (const sentence of sc.sentences) {
+        for (const sentence of takesFor(provider, sc)) {
           const tts = await synth(provider, sentence);
           const { list, dur } = silences(tts.file);
           const lead = list.length && list[0][0] < 0.02 ? list[0][1] : 0;
           const last = list[list.length - 1];
           const speechEnd = last && last[1] > dur - 0.02 && last[0] > lead ? last[0] + 0.03 : dur;
           const inner = list.filter(([a, b]) => a > lead + 0.01 && b < speechEnd - 0.01);
-          parts.push({ sentence, tts, lead, speechEnd, len: speechEnd - lead, words: timeWords(sentence, tts, lead, speechEnd, inner) });
+          parts.push({ sentence, tts, lead, speechEnd, inner, len: speechEnd - lead, cuts: [], words: timeWords(sentence, tts, lead, speechEnd, inner) });
         }
         const PRE = 0.05; // breath before the first word
-        const window = sc.end - sc.start - 0.2; // keep clear of the next scene's first word
-        const raw = parts.reduce((a, p) => a + p.len, 0);
+        // keep clear of the next scene's first word; the last line may ring closer to the end card
+        const window = sc.end - sc.start - (sc === script.scenes[script.scenes.length - 1] ? 0.1 : 0.2);
         const minGap = 0.12;
-        const need = raw / (window - PRE - minGap * (parts.length - 1));
+        const fullLen = parts.reduce((a, p) => a + p.len, 0);
+        let raw = fullLen;
+        let need = raw / (window - PRE - minGap * (parts.length - 1));
+        if (SCENE_TAKES[provider]) {
+          // a presenter take breathes between sentences; when a scene is tight, shorten the long
+          // pauses first and only then speed the words up
+          for (const maxPause of [0.4, 0.3, 0.22, 0.16]) {
+            if (need <= 1.06) break;
+            for (const p of parts) {
+              p.cuts = p.inner.filter(([a, b]) => b - a > maxPause).map(([a, b]) => [a + maxPause / 2 - p.lead, b - maxPause / 2 - p.lead]);
+            }
+            raw = fullLen - parts.reduce((a, p) => a + p.cuts.reduce((x, [c0, c1]) => x + (c1 - c0), 0), 0);
+            need = raw / (window - PRE - minGap * (parts.length - 1));
+          }
+        }
         if (need > maxTempo) {
           throw new Error(`scene ${sc.id}: the read is ${raw.toFixed(2)}s for a ${(sc.end - sc.start).toFixed(1)}s scene (needs ${need.toFixed(2)}x, limit ${maxTempo}x). Shorten script/voiceover.json.`);
         }
@@ -272,18 +303,36 @@ async function buildVoice() {
         let cursor = PRE;
         const words = [];
         parts.forEach((p, si) => {
-          const af = `atrim=start=${p.lead.toFixed(4)}:end=${p.speechEnd.toFixed(4)},asetpts=PTS-STARTPTS,afade=t=in:d=0.008,afade=t=out:st=${(p.len - 0.03).toFixed(4)}:d=0.03${Math.abs(tempo - 1) > 0.005 ? `,atempo=${tempo.toFixed(4)}` : ""}`;
+          const removed = p.cuts.reduce((x, [c0, c1]) => x + (c1 - c0), 0);
+          const len = p.len - removed;
+          const drop = p.cuts.length ? `,aselect='not(${p.cuts.map(([c0, c1]) => `between(t\\,${c0.toFixed(4)}\\,${c1.toFixed(4)})`).join("+")})',asetpts=N/SR/TB` : "";
+          const af = `atrim=start=${p.lead.toFixed(4)}:end=${p.speechEnd.toFixed(4)},asetpts=PTS-STARTPTS${drop},afade=t=in:d=0.008,afade=t=out:st=${(len - 0.03).toFixed(4)}:d=0.03${Math.abs(tempo - 1) > 0.005 ? `,atempo=${tempo.toFixed(4)}` : ""}`;
           const buf = decodeMono(p.tts.file, af);
+          // word times move earlier by whatever pause was removed before them
+          const shift = (t) => t - p.cuts.reduce((x, [c0, c1]) => x + (t >= c1 ? c1 - c0 : t > c0 ? t - c0 : 0), 0);
           vo.add(buf, sc.start + cursor, Math.SQRT1_2);
-          for (const w of p.words) words.push({ w: w.w, si, s: sc.start + cursor + w.s / tempo, e: sc.start + cursor + w.e / tempo });
-          cursor += p.len / tempo + gap;
+          p.words.forEach((w, wi) => {
+            // a whole-scene take still knows which sentence each word belongs to
+            let sentenceIndex = si;
+            if (p.sentence.counts) {
+              let acc = 0;
+              sentenceIndex = p.sentence.counts.findIndex((c) => (acc += c) > wi);
+            }
+            words.push({ w: w.w, si: sentenceIndex, s: sc.start + cursor + shift(w.s) / tempo, e: sc.start + cursor + shift(w.e) / tempo });
+          });
+          cursor += len / tempo + gap;
         });
         const voEnd = sc.start + cursor - gap;
         built.push({ id: sc.id, start: sc.start, end: sc.end, voStart: sc.start + PRE, voEnd, tempo: +tempo.toFixed(3), words });
-        log(`voice ${sc.id}: ${parts.length} sentence(s), raw ${raw.toFixed(2)}s -> ${spoken.toFixed(2)}s at ${tempo.toFixed(2)}x, clip on ${sc.start.toFixed(1)}s, ends ${voEnd.toFixed(2)}s`);
+        log(`voice ${sc.id}: ${parts.length} take(s), raw ${raw.toFixed(2)}s -> ${spoken.toFixed(2)}s at ${tempo.toFixed(2)}x, clip on ${sc.start.toFixed(1)}s, ends ${voEnd.toFixed(2)}s`);
       }
       captions.push(...built);
       used = provider;
+      if (provider === "elevenlabs") {
+        // drop saved takes the current script no longer uses
+        const keep = new Set(script.scenes.flatMap((sc) => takesFor(provider, sc).flatMap((t) => Object.values(takePath(provider, t)))));
+        for (const f of readdirSync(VOICE_DIR)) if (!keep.has(join(VOICE_DIR, f))) rmSync(join(VOICE_DIR, f));
+      }
       break;
     } catch (err) {
       lastErr = err;

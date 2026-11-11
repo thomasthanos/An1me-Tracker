@@ -4,6 +4,7 @@
 (function () {
   const { add, clamp, lerp, ramp, tween, bump, decay, hash, E, TAU, W, H } = P;
   const C = P.CUES.s6;
+  const HS = P.hands.SHAPES;
   const T0 = P.CUES.scenes[5];
   const IMP = C.impacts.map((x) => x - T0);
   const LOCK = C.lock - T0;
@@ -13,8 +14,8 @@
     { label: "ADS SDK", from: [2140, 60], deg: 52, at: IMP[0], big: true },
     { label: "ANALYTICS", from: [-240, 100], deg: 129, at: IMP[1], big: true },
     { label: "TRACKING PIXEL", from: [2200, 360], deg: 30, at: IMP[2], big: true },
-    { label: "TELEMETRY", from: [-260, 420], deg: 152, at: IMP[2] + 0.5 },
-    { label: "PROFILING", from: [1500, -120], deg: 76, at: IMP[2] + 0.95 },
+    { label: "TELEMETRY", from: [-260, 420], deg: 152, at: IMP[2] + 0.45 },
+    { label: "PROFILING", from: [1500, -120], deg: 76, at: IMP[2] + 0.9 },
   ].map((th) => ({ ...th, hit: onDome(th.deg) }));
 
   P.scene("s6", {
@@ -25,7 +26,7 @@
       ttl.node.style.setProperty("--hl-glow", "rgba(16,185,129,.7)");
       // the lattice sits behind Rei and the data so it never crosses a face or a line of copy
       const lattice = P.canvas(host);
-      const rei = P.character(host, { who: "rei", x: 140, y: 430, scale: 1.3, glasses: true, hand: "palm", seed: 61 });
+      const rei = P.character(host, { who: "rei", x: 140, y: 430, scale: 1.3, glasses: true, seed: 61 });
       const data = add(
         host,
         `<div class="s6-data"><div class="s6-ban b1"></div><div class="s6-ban b2"></div>
@@ -102,10 +103,21 @@
 
       // Rei holds the barrier
       const locked = t >= LOCK;
+      // the cast: a fist at the chest snaps open into a spread palm; every impact makes the
+      // fingers flex and the wrist recoil; on the lock she closes the hand again
+      const cast = tween(t, 0.12, 0.42, E.outBack);
+      const chest = { x: 352, y: 420, rot: 10, view: "back", side: 1, elbow: 1, ...HS.fist };
+      const open = {
+        x: 428 - 12 * jolt, y: 270 + 6 * jolt, rot: 16 - 5 * jolt, view: "palm", side: -1, elbow: 1, ...HS.open,
+        spread: 1.5 + 0.5 * decay(t, 0.3, 0.2), curls: HS.open.curls.map((c, i) => c + 0.2 * jolt + 0.04 * Math.sin(t * 5 + i)),
+      };
+      const done = { x: 404, y: 318, rot: -50, view: "back", side: 1, elbow: 1, ...HS.thumbUp };
+      let arm = P.hands.mix(chest, open, cast);
+      if (t > LOCK - 0.12) arm = P.hands.mix(open, done, tween(t, LOCK - 0.12, LOCK + 0.14, E.outBack));
       r.rei.set(t, {
         blink: false, mouth: locked ? "grin" : jolt > 0.3 ? "flat" : "smirk", eye: locked && t < LOCK + 0.5 ? "happy" : "open", brow: locked ? 2 : 14, open: locked ? 1 : 0.84,
-        look: [6, -4], wind: 0.35 + 0.5 * jolt, handY: -74 - 10 * jolt, handRot: -6, dx: -6 * jolt, blush: locked ? 0.6 : 0.15,
-        flash: 0.5 * decay(t, IMP[0], 0.2),
+        look: [6, -4], wind: 0.35 + 0.5 * jolt, dx: -6 * jolt, blush: locked ? 0.6 : 0.15,
+        flash: 0.5 * decay(t, IMP[0], 0.2), armR: arm,
       });
       [r.priv, r.sec, r.mv3].forEach((b) => b.tick(t + 1));
       r.data.style.transform = `translate(${(-5 * jolt).toFixed(1)}px,${(3 * jolt).toFixed(1)}px)`;

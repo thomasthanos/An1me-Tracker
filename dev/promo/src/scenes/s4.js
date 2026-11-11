@@ -4,6 +4,7 @@
 (function () {
   const { add, clamp, lerp, ramp, tween, bump, decay, hash, E, TAU, W, H } = P;
   const C = P.CUES.s4;
+  const HS = P.hands.SHAPES;
   const T0 = P.CUES.scenes[3];
   const L = { t0: C.typeStart - T0, t1: C.typeEnd - T0, cards: C.cards - T0, gap: C.cardGap, click: C.click - T0 };
   const QUERY = "One Piece";
@@ -20,7 +21,7 @@
     build(host) {
       const bg = P.canvas(host);
       const ttl = P.title(host, ["ΟΛΗ Η *ΒΙΒΛΙΟΘΗΚΗ* ΣΟΥ. ΣΕ *ΕΝΑ* *ΚΛΙΚ.*"]);
-      const rei = P.character(host, { who: "rei", x: 10, y: 322, scale: 1.55, glasses: true, hand: "point", seed: 41 });
+      const rei = P.character(host, { who: "rei", x: 10, y: 322, scale: 1.55, glasses: true, seed: 41 });
       const kz = P.kana(host, "キラッ!", { x: 430, y: 226, size: 96, color: "#FF2A85", rot: 8 });
       const panel = P.ui.panel(host, { x: PX, y: PY, w: PW, search: true, section: "In Progress", cards: CARDS });
       const col = add(
@@ -50,7 +51,7 @@
       tl.fromTo(r.c1, { x: 140, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "back.out(1.6)" }, L.t0 + 0.1);
       tl.fromTo(r.c2, { x: 140, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "back.out(1.6)" }, L.cards + 0.15);
       tl.fromTo(r.featBox, { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, L.cards + 0.6);
-      tl.fromTo(r.cta, { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.45, ease: "back.out(2)" }, 3.0);
+      tl.fromTo(r.cta, { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.45, ease: "back.out(2)" }, 3.45);
       tl.to(r.cta, { scale: 1.1, duration: 0.1, yoyo: true, repeat: 1, ease: "power2.out" }, L.click);
       tl.fromTo(r.toast, { y: 30, opacity: 0, scale: 0.7 }, { y: 0, opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2.2)" }, L.click + 0.04);
       r.panel.cards.forEach((c, i) => {
@@ -101,10 +102,17 @@
 
       // Rei presents the library
       const click = decay(t, L.click, 0.4);
+      // right hand: presents the library, points along as each card lands, thumbs-up on the click
+      let tapK = 0;
+      r.panel.cards.forEach((c, i) => (tapK = Math.max(tapK, bump(t, L.cards + i * L.gap - 0.03, 0.05, 0.14))));
+      const present = { x: 400, y: 392 + 4 * Math.sin(t * 3), rot: 56, view: "palm", side: -1, elbow: 1, ...HS.open };
+      const point = { x: 408 + 12 * tapK, y: 380 + 5 * Math.sin(t * 2.2) - 6 * tapK, rot: 80 - 5 * tapK, view: "back", side: -1, elbow: 1, ...HS.point, curls: HS.point.curls.map((c, i) => (i === 1 ? 0.2 * tapK : c)) };
+      const yes = { x: 392, y: 356 - 16 * decay(t, L.click + 0.1, 0.16), rot: -52, view: "back", side: 1, elbow: 1, ...HS.thumbUp };
+      let arm = P.hands.mix(present, point, tween(t, L.t0 - 0.15, L.t0 + 0.2, E.inOutCubic));
+      if (t > L.click - 0.15) arm = P.hands.mix(point, yes, tween(t, L.click - 0.15, L.click + 0.12, E.outBack));
       r.rei.set(t, {
         mouth: t > L.click ? "grin" : t > L.cards ? "grin" : "smile", eye: t > L.click && t < L.click + 0.33 ? "happy" : "open",
-        look: [7, t < L.cards ? -1 : 1], blush: 0.35 + 0.4 * click, browLift: 3, handRot: -4 + 5 * Math.sin(t * 3.2), handY: -6 * Math.abs(Math.sin(t * 3.2)),
-        tilt: 2,
+        look: [7, t < L.cards ? -1 : 1], blush: 0.35 + 0.4 * click, browLift: 3, tilt: 2, armR: arm,
       });
       P.kanaTick(r.kz, t, { amp: 4, show: ramp(t, L.cards, L.cards + 0.05) * (1 - ramp(t, L.cards + 1.3, L.cards + 1.6)), seed: 2, pop: lerp(1.9, 1, tween(t, L.cards, L.cards + 0.3, E.outBack)) });
 

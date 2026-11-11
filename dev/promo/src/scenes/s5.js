@@ -60,7 +60,7 @@
 
       // ---- Kai, in bed ----
       const pillow = add(host, `<div class="s5-pillow"></div>`);
-      const kai = P.character(host, { who: "kai", x: 1446, y: 322, scale: 1.24, hand: "phone", seed: 51 });
+      const kai = P.character(host, { who: "kai", x: 1446, y: 322, scale: 1.24, seed: 51 });
       const blanket = add(host, `<div class="s5-blanket"></div>`);
 
       // ---- portal ----
@@ -143,10 +143,15 @@
       r.phone.style.boxShadow = `0 0 0 2px rgba(255,255,255,.14), 0 0 ${(40 + 80 * decay(t, L.land, 0.4)).toFixed(0)}px rgba(255,42,133,${(0.35 + 0.5 * decay(t, L.land, 0.4)).toFixed(2)}), 0 30px 80px rgba(0,0,0,.7)`;
 
       // Kai
+      // he scrolls with his thumb while he waits, then taps "resume" the moment it lands
+      const scroll = landed ? -0.55 + 0.75 * decay(t, L.land + 0.5, 0.12) - 0.35 * bump(t, L.land + 0.42, 0.06, 0.12) : Math.sin(t * 3.4) * 0.7;
       r.kai.set(t, {
         mouth: landed ? "grin" : "smile", eye: landed && lt < 1.3 ? "happy" : "open", open: landed ? 1 : 0.78, look: [-7, 3],
-        blush: landed ? 0.8 : 0.3, browLift: landed ? 5 : 0, phoneGlow: landed ? 1 : 0.2, phoneBar: landed ? SAVED / TOTAL : 0.05,
-        handY: -8 * decay(t, L.land, 0.25), tilt: -4,
+        blush: landed ? 0.8 : 0.3, browLift: landed ? 5 : 0, tilt: -4,
+        armR: {
+          x: 316, y: 452 - 10 * decay(t, L.land, 0.25), rot: -9 + 2 * Math.sin(t * 1.7), side: 1, elbow: 1,
+          phone: { glow: landed ? 1 : 0.25, bar: landed ? (SAVED / TOTAL) * tween(lt, 0, 0.5, E.outCubic) : 0.04, thumb: scroll, grip: 0.45 + 0.5 * decay(t, L.land, 0.3) },
+        },
       });
 
       // ---- the portal ----

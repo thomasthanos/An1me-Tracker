@@ -4,6 +4,7 @@
 (function () {
   const { add, clamp, lerp, ramp, tween, bump, decay, hash, E, TAU, W, H } = P;
   const C = P.CUES.s1;
+  const HS = P.hands.SHAPES;
   // the cut: top-right to bottom-left
   const P1 = [1601, -80];
   const P2 = [319, 1160];
@@ -82,10 +83,17 @@
       kai.node.style.opacity = ramp(t, 0.12, 0.3).toFixed(3);
       const dart = Math.sin(tt * 5.2) > 0 ? 1 : -1;
       const shake = (hash(Math.floor(tt * 16)) - 0.5) * 5;
+      // both hands fly up and clutch his hair; the grip tightens on every heartbeat
+      const up = tween(t, 0.3, 0.75, E.outBack);
+      const grip = P.hands.mix(HS.relaxed, HS.claw, up);
+      const squeeze = 0.16 * beat + 0.05 * Math.sin(tt * 9);
+      const clutch = { ...grip, curls: grip.curls.map((c, i) => (i ? c + squeeze : c)) };
       kai.set(tt, {
         mouth: tt > 1.0 ? "panic" : "o", brow: -15, browLift: 5, irisScale: lerp(0.8, 0.52, ramp(tt, 0.4, 2.4)),
         look: [dart * 7, 1], bags: 1, sweat: ramp(tt, 0.5, 1), gloom: ramp(tt, 0.3, 1.2), dx: shake, bob: -4 * beat, blink: false,
         mouthScale: 1 + 0.12 * Math.sin(tt * 18),
+        armL: { x: lerp(60, 80, up) + shake, y: lerp(560, 226, up) - 6 * beat, rot: lerp(0, 40, up), view: "back", side: -1, elbow: -1, ...clutch },
+        armR: { x: lerp(340, 320, up) + shake, y: lerp(560, 226, up) - 6 * beat, rot: lerp(0, -40, up), view: "back", side: 1, elbow: 1, ...clutch },
       });
 
       P.place(clock, { s: tween(t, 0.2, 0.6, E.outBack), o: ramp(t, 0.2, 0.32), r: 2 });

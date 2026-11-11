@@ -32,6 +32,7 @@ index.html                 Root composition: 7 scene compositions, overlays, <au
 src/cues.js                The cue sheet shared by picture and sound
 src/lib.js                 Seeded PRNG (mulberry32), easing, canvas painters, scene registration
 src/characters.js          Kai and Rei — original SVG anime characters posed from the clock
+src/hands.js               Articulated hands (palm, phalanges, thumb) and two-bone IK arms; poses blend
 src/ui.js                  The tracker popup and player, rebuilt from dev/screenshots + the real tokens/fonts
 src/scenes/s1…s7.js        One file per scene
 src/overlays.js            Cut wipes, flashes and the word-by-word Greek captions
@@ -53,23 +54,30 @@ clock. The soundtrack is synthesised the same way: a rebuild is sample-identical
 
 `build-promo-audio.mjs` picks the first provider that works:
 
-1. **ElevenLabs** when `ELEVENLABS_API_KEY` is set (`ELEVENLABS_VOICE_ID` optional).
+1. **ElevenLabs** — the voice in the committed film. Each scene is one take, saved in
+   `assets/voice/` with its word timings, so a rebuild reuses the approved read and spends no
+   credits. A new take is only requested (and `ELEVENLABS_API_KEY` only needed) when a line or
+   the voice in `script/voiceover.json` changes. `ELEVENLABS_VOICE_ID` / `ELEVENLABS_MODEL`
+   override the voice and model.
 2. **`./voiceover.wav`** when that file exists — a finished 35 s voice track you recorded.
-3. **edge-tts**, `el-GR-AthinaNeural`, `+8%`, `+2Hz` — the intended default voice.
+3. **edge-tts**, `el-GR-AthinaNeural`, `+8%`, `+2Hz`.
 4. **gTTS** (Google's Greek voice over plain HTTPS) when edge-tts cannot be reached.
 
 Force one with `--provider edge|gtts|elevenlabs|file`. Each scene's clip is placed on its scene
 timestamp and time-fitted to the scene; the build fails with a clear message if a line is too
-long for its window. Word timings for the captions come from the provider when it reports them,
-otherwise from the pauses found in the audio plus a per-syllable estimate.
+long for its window. A whole-scene take that runs long has its longest pauses shortened
+before any speed-up is applied, so the words themselves stay close to natural pace. Word timings
+for the captions come from the provider when it reports them, otherwise from the pauses found in
+the audio plus a per-syllable estimate.
 
 The voice then goes through the broadcast chain (85 Hz high-pass, presence at 3.5 kHz, air at
 10 kHz, 3:1 compressor at −18 dB), the music is sidechain-ducked under it (the ratio is solved
 so the measured drop is about −8 dB), and the mix is normalised to −14 LUFS / −1 dBTP.
 
-The committed MP4 was built with provider 4: the build environment's proxy did not relay the
-WebSocket audio frames edge-tts needs. Run `npm run build` on a normal connection to get the
-Athina neural voice, or drop in `voiceover.wav` for a human read.
+The committed MP4 uses the ElevenLabs library voice "Christina - Calm, Warm and Sultry" on
+`eleven_v4`. To audition another voice, change `voice.elevenLabs.voiceId` in
+`script/voiceover.json` and run `npm run audio` with the key set; the seven takes cost roughly
+a few hundred credits.
 
 ## Editing the copy
 

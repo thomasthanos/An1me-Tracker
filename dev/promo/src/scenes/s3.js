@@ -4,6 +4,7 @@
 (function () {
   const { add, clamp, lerp, ramp, tween, bump, decay, hash, noise, E, TAU, W, H } = P;
   const C = P.CUES.s3;
+  const HS = P.hands.SHAPES;
   const T0 = P.CUES.scenes[2];
   const L = { alert: C.alert - T0, aura: C.aura - T0, ignite: C.ignite - T0, g15: C.gear15 - T0, g20: C.gear20 - T0, boom: C.boom - T0 };
   const KX = 60, KY = 300, KS = 1.6;
@@ -122,11 +123,23 @@
       }
 
       // ---- Kai ----
+      // right arm: clenched fist while charging -> jabs the Speed control -> fist pumps with
+      // each gear -> open-palm blast on the boom
+      const tremble = (hash(Math.floor(t * 30)) - 0.5) * 8 * (charge * (1 - power) + 0.4 * power);
+      const low = { x: 372, y: 560, rot: 0, view: "back", side: 1, elbow: 1, ...HS.relaxed };
+      const fistUp = { x: 376 + tremble, y: 268 - 14 * decay(t, L.g15, 0.2) - 22 * decay(t, L.g20, 0.22), rot: -6, view: "back", side: 1, elbow: 1, ...HS.fist };
+      const jab = { x: 430, y: 318, rot: 84, view: "back", side: -1, elbow: 1, ...HS.point };
+      const blast = { x: 436, y: 306, rot: 78, view: "palm", side: 1, elbow: 1, ...HS.open, spread: 1.9 };
+      let arm;
+      if (t < L.ignite - 0.12) arm = P.hands.mix(low, fistUp, tween(t, L.aura, L.aura + 0.3, E.outBack));
+      else if (t < L.ignite + 0.42) arm = P.hands.mix(fistUp, jab, tween(t, L.ignite - 0.12, L.ignite, E.outCubic));
+      else if (t < L.boom - 0.14) arm = P.hands.mix(jab, fistUp, tween(t, L.ignite + 0.42, L.ignite + 0.7, E.inOutCubic));
+      else arm = P.hands.mix(fistUp, blast, tween(t, L.boom - 0.14, L.boom, E.outCubic));
       r.kai.set(t, {
         power, mouth: t < L.aura ? "flat" : t < L.ignite ? "panic" : t < L.g20 + 0.35 ? "shout" : "grin",
         brow: t < L.aura ? 9 : 17, open: t < L.aura ? 0.72 : 1, blink: false, irisScale: t >= L.ignite ? 0.9 : 1,
         look: [5, t < L.aura ? -3 : 0], dx: (hash(Math.floor(t * 24)) - 0.5) * 7 * (charge * (1 - power) + burst + boom),
-        bob: -10 * burst, mouthScale: 1 + 0.08 * Math.sin(t * 22) * power,
+        bob: -10 * burst, mouthScale: 1 + 0.08 * Math.sin(t * 22) * power, armR: arm,
       });
       P.kanaTick(r.k1, t, { amp: 6, show: ramp(t, L.aura, L.aura + 0.1) * (1 - ramp(t, L.g15, L.g15 + 0.3)), seed: 6, pop: lerp(1.6, 1, tween(t, L.aura, L.aura + 0.3, E.outBack)) });
       P.kanaTick(r.k2, t, { amp: 9, show: ramp(t, L.boom, L.boom + 0.04) * (1 - ramp(t, L.boom + 0.55, L.boom + 0.8)), seed: 8, pop: lerp(2.4, 1, tween(t, L.boom, L.boom + 0.3, E.outBack)) });

@@ -3,6 +3,7 @@
 (function () {
   const { add, clamp, lerp, ramp, tween, bump, decay, hash, noise, E, TAU, W, H } = P;
   const BEAT = 60 / 128;
+  const HS = P.hands.SHAPES;
   const VERSION = window.PROMO_BRAND.version;
 
   function petal(ctx, x, y, s, rot, flip, color, alpha) {
@@ -134,8 +135,18 @@
       r.heroBox.style.boxShadow = `0 0 0 2px rgba(0,240,255,.55), 0 0 ${(70 + 60 * beat).toFixed(0)}px rgba(0,240,255,${(0.45 + 0.3 * beat).toFixed(2)}), 0 0 220px rgba(255,42,133,.35), 0 40px 90px rgba(0,0,0,.7)`;
       r.h1.style.transform = `translateX(-50%) scale(${(1 + 0.012 * beat).toFixed(4)})`;
 
-      r.kai.set(t, { mouth: "grin", browLift: 4, look: [6, -2], blush: 0.4, eye: t > 2.2 && t < 2.6 ? "happy" : "open", tilt: 3 });
-      r.rei.set(t, { mouth: t > 1.4 ? "grin" : "smile", look: [6, -2], blush: 0.4, eye: t > 3.2 && t < 3.6 ? "happy" : "open", flash: 0.9 * decay(t, 1.35, 0.18), glint: ramp(t, 1.35, 1.75), tilt: 3 });
+      // Kai gives a thumbs-up, Rei waves
+      const kUp = tween(t, 0.7, 1.15, E.outBack);
+      const thumbs = P.hands.mix({ x: 372, y: 560, rot: -20, view: "back", side: 1, elbow: 1, ...HS.fist }, { x: 368, y: 322 - 10 * bump(t, 2.2, 0.1, 0.25), rot: -54, view: "back", side: 1, elbow: 1, ...HS.thumbUp }, kUp);
+      const rUp = tween(t, 0.9, 1.3, E.outBack);
+      const sway = Math.sin((t - 1.3) * 7.5) * clamp(t - 1.2) * clamp(3.9 - t);
+      const wave = P.hands.mix(
+        { x: 380, y: 560, rot: 0, view: "palm", side: -1, elbow: 1, ...HS.relaxed },
+        { x: 392 + 10 * sway, y: 300, rot: 6 + 20 * sway, view: "palm", side: -1, elbow: 1, ...HS.open, curls: HS.open.curls.map((c, i) => c + 0.06 + 0.05 * Math.sin(t * 7.5 + i)) },
+        rUp,
+      );
+      r.kai.set(t, { mouth: "grin", browLift: 4, look: [6, -2], blush: 0.4, eye: t > 2.2 && t < 2.6 ? "happy" : "open", tilt: 3, armR: thumbs });
+      r.rei.set(t, { mouth: t > 1.4 ? "grin" : "smile", look: [6, -2], blush: 0.4, eye: t > 3.2 && t < 3.6 ? "happy" : "open", flash: 0.9 * decay(t, 1.35, 0.18), glint: ramp(t, 1.35, 1.75), tilt: 3, armR: wave });
 
       // foreground: the shimmer
       const f = r.fx;
