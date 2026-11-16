@@ -67,11 +67,11 @@ test("an ordinary page view is left completely alone", () => {
 });
 
 test("the verify marker reports the site it ran on and the worker's version", () => {
-  const { location, sent } = run({ search: "?at_verify=1", reply: { success: true, report: { extensionVersion: "8.3.8", capturedAt: 1 } } });
+  const { location, sent } = run({ search: "?at_verify=1", reply: { success: true, report: { extensionVersion: "8.4.0", capturedAt: 1 } } });
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ type: "GET_PERMISSION_REPORT" }]);
   const payload = decodePayload(location.href);
   assert.equal(payload.site, "an1me.to");
-  assert.equal(payload.extensionVersion, "8.3.8");
+  assert.equal(payload.extensionVersion, "8.4.0");
   assert.equal(typeof payload.capturedAt, "number");
   assert.ok(Math.abs(payload.capturedAt - Date.now()) < 5000, "capturedAt is the content script's own clock");
   assert.equal("error" in payload, false);

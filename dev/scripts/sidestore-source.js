@@ -36,10 +36,10 @@ function createSource({ repository, manifest, appInfo, ipaName, ipaSize, ipaSha2
 
   const versionReleaseNotes =
     `v${version} (Build ${appInfo.CFBundleVersion}):\n` +
-    "• Native iOS Safari permission flow and verification bridge.\n" +
-    "• Centralized iOS host permissions, diagnostics reporting and website access views.\n" +
-    "• Fixed playback settings cloud sync to preserve local preferences.\n" +
-    "• Polished mobile settings toggles and preference rows.";
+    "• Cloud sync for preferences toggles, speed control and hold-to-boost.\n" +
+    "• Strict multi-account isolation and settings parking across sign-ins.\n" +
+    "• Cross-platform PC and iPhone playback preference preservation.\n" +
+    "• Reliable offline retry queuing and audio default reset flow.";
 
   return {
     name: appName,

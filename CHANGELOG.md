@@ -11,6 +11,20 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.4.0] — 2026-10-08
+
+### Added
+
+- **Full Cloud Sync for Preferences & Speed Control.** All 7 preferences toggles (Copy Guard, New Episode Alerts, Auto-Skip Fillers, Skiptime Contributor, Auto-Pick 4K/Premium, Auto-Resume, Ad Guard), user UI preferences (sort, category, compact status), and Speed Control preferences (normal playback speed, hold-to-boost rate, default volume and mute defaults) now sync reliably with Firebase Firestore under `users/{uid}.playbackSettings`.
+- **Per-Account Settings Isolation.** Added `userPreferences` and `speedControlPreferences` to `EXTRA_OWNER_KEYS` in library slots. Switching accounts or signing out parks each account's exact preferences and speed settings in its own isolated slot with zero cross-account data leakage.
+- **Cross-Platform PC ⮂ Mobile Setting Preservation.** PC Desktop boost rates (>2×) and custom default audio volumes are preserved in `cloud_desktop_playback_settings` when syncing with iPhone/iPad, ensuring mobile devices can update playback settings without overwriting or downgrading desktop-only features.
+- **Deep Test Suites & Boundary Fuzzing.** Added comprehensive end-to-end stress, multi-account carousel, offline queue retry, network failure recovery, concurrent sync, and extreme payload fuzzing tests (`account-preferences-sync.test.js` and `account-preferences-deep.test.js`).
+
+### Fixed
+
+- **Audio Reset Synchronization.** Clicking "Reset audio default" now properly dispatches an update to reset stored volume/mute to null and immediately syncs the change to Firestore.
+- **Offline Sidecar Retry Fencing.** Network-interrupted sidecar pushes are safely parked with their owner slot during account changes and resume seamlessly upon reconnecting.
+
 ## [8.3.8] — 2026-10-07
 
 ### Changed
