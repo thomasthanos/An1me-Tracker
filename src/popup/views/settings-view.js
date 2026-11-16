@@ -242,7 +242,13 @@
     options.forEach((option, position) => option.classList.toggle("is-active", position === speedMenu.index));
     const active = options[speedMenu.index];
     trigger.setAttribute("aria-activedescendant", active.id);
-    active.scrollIntoView({ block: "nearest" });
+    if (active) {
+      if (active.offsetTop < menu.scrollTop) {
+        menu.scrollTop = active.offsetTop;
+      } else if (active.offsetTop + active.offsetHeight > menu.scrollTop + menu.clientHeight) {
+        menu.scrollTop = active.offsetTop + active.offsetHeight - menu.clientHeight;
+      }
+    }
   }
 
   function positionSpeedMenu() {
@@ -297,12 +303,25 @@
   }
 
   function speedMenuKey(event) {
+    if (event.key === "Escape" && speedMenu) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      closeSpeedMenu(true);
+      return;
+    }
     const trigger = event.target.closest?.(".settings-speed-trigger") ||
-      (speedMenu?.menu.contains(event.target) ? speedMenu.trigger : null);
+      (speedMenu?.menu.contains(event.target) ? speedMenu.trigger : null) ||
+      speedMenu?.trigger;
     if (!trigger || trigger.disabled || speedBusy || event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key;
     if (key === "Escape") {
-      if (speedMenu) { event.preventDefault(); event.stopPropagation(); closeSpeedMenu(true); }
+      if (speedMenu) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        closeSpeedMenu(true);
+      }
       return;
     }
     if (key === "Tab") { closeSpeedMenu(); return; }
