@@ -108,21 +108,11 @@
     }, 1500);
   }
 
+  // The whole file is checked before anything is merged; a file that fails is refused with no write.
   function parseAndValidate(text) {
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      throw new Error("Invalid JSON file");
-    }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("Backup file is malformed");
-    }
-
-    if (!parsed.animeData || typeof parsed.animeData !== "object") {
-      throw new Error("Backup is missing animeData");
-    }
-    return parsed;
+    const validator = globalThis.AnimeTrackerBackupValidation;
+    if (!validator?.validate) throw new Error("Backup validation unavailable");
+    return validator.validate(text);
   }
 
   function mergeImported(local, parsed) {
@@ -827,6 +817,8 @@
   async function importLibraryFromFile(file) {
     const { Storage, LibraryBackup, LibraryMutations } = AT;
 
+    const maxBytes = globalThis.AnimeTrackerBackupValidation?.LIMITS?.maxBytes;
+    if (maxBytes && file.size > maxBytes) throw new Error("Backup file is too large");
     const text = await file.text();
     const parsed = LibraryBackup.parseAndValidate(text);
     const incomingCount = Object.keys(parsed.animeData).length;
@@ -1621,16 +1613,20 @@
     if (currentViewMode === "settings") renderSettingsView();
   };
 
-  async function signOut(preserveLocalData = true) {
-    const { LibraryMutations, FirebaseSync } = AT;
-    if (!preserveLocalData) {
-      animeData = {};
-      videoProgress = {};
-      await LibraryMutations.commit(
-        { animeData: {}, videoProgress: {} },
-        { label: "sign-out-clear-local", markInternalSave, sync: false },
-      );
-    }
+  // The worker parks the account's library for its next sign-in and activates the signed-out library.
+  // Drop the account's data from this popup before anything awaits, so not one more frame shows it.
+  async function signOut() {
+    const { FirebaseSync } = AT;
+    animeData = {};
+    videoProgress = {};
+    goalSettings = null;
+    badgeState = {};
+    window.AnimeTracker.groupCoverImages = {};
+    try {
+      window.AnimeTracker?.ProgressInsights?.invalidate();
+    } catch {}
+    renderAnimeList();
+    void updateStats({ persist: false });
     lastMetadataRepairState = null;
     await chrome.storage.local.set({ pendingBackgroundMetadataRepair: false, metadataRepairState: null });
     await FirebaseSync.signOut();

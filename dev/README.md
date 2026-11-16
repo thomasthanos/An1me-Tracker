@@ -44,10 +44,19 @@ returns a nonzero exit code if any suite fails. Each suite has a three-minute ti
 relative suite paths resolve from the directory where the command is invoked.
 
 Browser integration suites use Playwright with an available Chrome/Edge/Chromium executable;
-they can also use the Chromium binary installed by Playwright. Make Playwright available through
-Node's module resolution or `NODE_PATH`; `AT_TEST_BROWSER` can select an executable. Without
-Playwright, these suites explicitly print `SKIP`. The dependency-free CI suite and a local run
-with browser integration enabled are different levels of coverage.
+they can also use the Chromium binary installed by Playwright. Playwright is pinned as the only
+development dependency in `package.json` (it is never packaged into the extension):
+
+```sh
+npm ci --ignore-scripts
+npx playwright install chromium   # only if no Chrome/Edge/Chromium is installed
+AT_REQUIRE_BROWSER_TESTS=1 node dev/scripts/run-tests.js
+```
+
+`AT_TEST_BROWSER` can select an executable. Without Playwright, these suites explicitly print
+`SKIP`. With `AT_REQUIRE_BROWSER_TESTS=1` a missing Playwright fails the suite instead
+(`dev/test/lib/browser-runtime.js`); the CI `browser-tests` job runs that way and also fails on
+any `SKIP` line. The dependency-free CI suite and the browser job are different levels of coverage.
 
 Keep `test/lib/` harnesses and `test/fixtures/` recorded inputs even though they are not runtime
 imports. Re-record grouping snapshots only with a reviewed diff.

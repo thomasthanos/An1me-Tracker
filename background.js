@@ -8,6 +8,9 @@ importScripts(
   "src/common/data/speed-preferences.js",
   "src/common/logger.js",
   "src/common/cloud.js",
+  "src/background/sync/session-context.js",
+  "src/background/sync/library-slots.js",
+  "src/background/sync/firestore-adapter.js",
   "src/common/data/cache-policy.js",
   "src/common/data/zoned-time.js",
   "src/common/data/title-match.js",
@@ -41,6 +44,8 @@ if (!FIREBASE_API_KEY || !FIREBASE_PROJECT_ID) {
 const FIRESTORE_DATABASE = `projects/${FIREBASE_PROJECT_ID}/databases/(default)`;
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/${FIRESTORE_DATABASE}`;
 const CLOUD_CONSUMER_POLL_MIN_GAP_MS = 3 * 60 * 1000;
+const SessionContext = self.AnimeTrackerSessionContext;
+const FirestoreAdapter = self.AnimeTrackerFirestoreAdapter;
 
 importScripts("src/common/data/merge-utils.js");
 
@@ -370,6 +375,37 @@ let bgLibraryMutationTail = Promise.resolve();
 let bgAuthMutationTail = Promise.resolve();
 let sidecarSyncTail = Promise.resolve();
 
+// One library per account (and one for signed-out use). See src/background/sync/library-slots.js.
+const LibrarySlots = self.AnimeTrackerLibrarySlots;
+const bgLibrarySlots = LibrarySlots.create({
+  get: (keys) => bgStorageGet(keys),
+  set: (data) => bgStorageSetRaw(data),
+  remove: (keys) => bgStorageRemove(keys),
+  libraryKeys: LIBRARY_MUTATION_KEYS,
+  revisionKey: LIBRARY_MUTATION_REVISION_KEY,
+  mapKeys: AnimeTrackerLibraryKeys.MAP_MUTATION_KEYS,
+  // The owner switch is not a local edit: it must not schedule a cloud upload of the library it activates.
+  beforeActivate: (data) => stampBgSyncStorageWrite(data),
+});
+let bgLibraryOwnerReady = null;
+
+function ensureBgLibraryOwner() {
+  if (!bgLibraryOwnerReady) {
+    bgLibraryOwnerReady = ensureBgLegacySyncMigration()
+      .then(() => enqueueBgLibraryMutation(() => bgLibrarySlots.ensureOwner()))
+      .catch((error) => {
+        bgLibraryOwnerReady = null;
+        throw error;
+      });
+  }
+  return bgLibraryOwnerReady;
+}
+
+async function bgSwitchLibraryOwner(owner, options = {}) {
+  await ensureBgLibraryOwner();
+  return enqueueBgLibraryMutation(() => bgLibrarySlots.switchOwner(owner, options));
+}
+
 function stampBgSyncStorageWrite(data) {
   const token = `${Date.now()}:${++bgSyncWriteTokenCounter}`;
   recentBgSyncWriteTokens.add(token);
@@ -458,6 +494,11 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   const _fsT0 = _fsTimed ? Date.now() : 0;
   const ctrl = new AbortController();
   let timedOut = false;
+  // A caller's signal (the account session's) aborts the request too and surfaces its own reason.
+  const external = options?.signal || null;
+  if (external?.aborted) throw external.reason || new Error("Request aborted");
+  const onExternalAbort = () => ctrl.abort();
+  external?.addEventListener?.("abort", onExternalAbort, { once: true });
   const timer = setTimeout(() => {
     timedOut = true;
     ctrl.abort();
@@ -473,10 +514,13 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
     response = await fetch(url, { ...options, signal: ctrl.signal });
   } catch (error) {
     clearTimeout(timer);
+    external?.removeEventListener?.("abort", onExternalAbort);
     if (_fsTimed) FSDebug.net(options.method, Date.now() - _fsT0, false, timedOut ? "timeout" : "network");
     if (timedOut) throw makeTimeoutError();
+    if (external?.aborted) throw external.reason || error;
     throw error;
   }
+  if (external?.aborted) throw external.reason || new Error("Request aborted");
   if (_fsTimed) FSDebug.net(options.method, Date.now() - _fsT0, response.ok, response.status);
   // Headers arrived — clear the main timer now so callers that never read the body
   // (e.g. successful PATCHes) don't leave a stray abort timer running for 30s.
@@ -496,7 +540,8 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
         },
         (error) => {
           clearTimeout(bodyTimer);
-          throw timedOut ? makeTimeoutError() : error;
+          if (timedOut) throw makeTimeoutError();
+          throw external?.aborted ? external.reason || error : error;
         },
       );
     };
@@ -755,6 +800,12 @@ function normalizeLibraryMutationKeys(keys) {
 
 async function bgStorageSet(data) {
   if (!containsLibraryMutationData(data)) return bgStorageSetRaw(data);
+  await ensureBgLibraryOwner();
+  // A whole library map built from an earlier read would erase changes made since (R06). Map keys go
+  // through runBgLibraryTransaction / commitLibraryMutation; only single settings values are written here.
+  if (AnimeTrackerLibraryKeys.writesLibraryMap(data)) {
+    throw new Error(AnimeTrackerLibraryKeys.BLIND_MAP_WRITE_ERROR);
+  }
 
   await ensureBgLegacySyncMigration();
 
@@ -767,11 +818,12 @@ async function bgStorageSet(data) {
 
 async function getLibraryMutationSnapshot(keys) {
   await ensureBgLegacySyncMigration();
+  await ensureBgLibraryOwner();
   const requested = normalizeLibraryMutationKeys(keys);
   const snapshotKeys = requested.length > 0 ? requested : LIBRARY_MUTATION_KEYS;
 
   return enqueueBgLibraryMutation(async () => {
-    const stored = await bgStorageGet([...snapshotKeys, LIBRARY_MUTATION_REVISION_KEY]);
+    const stored = await bgStorageGet([...snapshotKeys, LIBRARY_MUTATION_REVISION_KEY, LibrarySlots.OWNER_KEY]);
     const data = {};
     for (const key of snapshotKeys) {
       if (Object.prototype.hasOwnProperty.call(stored, key)) data[key] = stored[key];
@@ -779,12 +831,15 @@ async function getLibraryMutationSnapshot(keys) {
     return {
       success: true,
       revision: Math.max(0, Number(stored[LIBRARY_MUTATION_REVISION_KEY]) || 0),
+      // Whose library this snapshot is. A writer that started on one owner's library must not retry its
+      // change on another's after a sign-in or sign-out.
+      owner: stored[LibrarySlots.OWNER_KEY] || null,
       data,
     };
   });
 }
 
-async function commitLibraryMutation(expectedRevision, data) {
+async function commitLibraryMutation(expectedRevision, data, options = {}) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return { success: false, error: "invalid_mutation_data" };
   }
@@ -793,9 +848,18 @@ async function commitLibraryMutation(expectedRevision, data) {
   }
 
   await ensureBgLegacySyncMigration();
+  await ensureBgLibraryOwner();
 
   return enqueueBgLibraryMutation(async () => {
-    const stored = await bgStorageGet([LIBRARY_MUTATION_REVISION_KEY]);
+    const stored = await bgStorageGet([LIBRARY_MUTATION_REVISION_KEY, LibrarySlots.OWNER_KEY]);
+    if (options.expectedOwner && options.expectedOwner !== (stored[LibrarySlots.OWNER_KEY] || null)) {
+      return { success: false, error: "library_owner_changed", ownerChanged: true };
+    }
+    // Checked inside the serialized queue, right before the write: a session that ended while this
+    // commit waited must not write into the next account's library.
+    if (options.scope && !SessionContext.matches(options.scope)) {
+      return { success: false, error: "session_changed", sessionChanged: true };
+    }
     const currentRevision = Math.max(0, Number(stored[LIBRARY_MUTATION_REVISION_KEY]) || 0);
     if (Number(expectedRevision) !== currentRevision) {
       return { success: false, conflict: true, revision: currentRevision };
@@ -816,6 +880,7 @@ async function runBgLibraryTransaction(keys, operation) {
   if (requested.length === 0) throw new Error("Library transaction requires at least one coordinated key");
 
   await ensureBgLegacySyncMigration();
+  await ensureBgLibraryOwner();
   return enqueueBgLibraryMutation(async () => {
     const stored = await bgStorageGet([...requested, LIBRARY_MUTATION_REVISION_KEY]);
     const snapshot = {};
@@ -886,6 +951,18 @@ function normalizeStoredAuthTokens(tokens, previous = null) {
   };
 }
 
+// Bumps the session epoch (cancelling every request the old session started) and drops the in-memory
+// state that belonged to that account. Runs inside the serialized auth mutation, before the stored
+// session changes.
+async function bgBeginAuthSessionTransition(reason) {
+  await self.AnimeTrackerSessionContext.transition(reason);
+  invalidateBgCloudDocCache();
+  fetchDedup.uid = null;
+  fetchDedup.promise = null;
+  syncState.lastPushedProgress = null;
+  _applyCloudUpdateDoc = null;
+}
+
 async function bgMutateFirebaseAuth(request = {}) {
   return enqueueBgAuthMutation(async () => {
     const operation = String(request.operation || "");
@@ -908,6 +985,10 @@ async function bgMutateFirebaseAuth(request = {}) {
     }
 
     if (operation === "clear_session") {
+      // Fence first: anything the signed-out session started stops before it can write or report.
+      await bgBeginAuthSessionTransition("sign-out");
+      // The account's library is parked for its next sign-in; signed-out use gets the guest library.
+      await bgSwitchLibraryOwner(LibrarySlots.GUEST);
       await bgStorageRemove(["firebase_tokens", "firebase_user"]);
       authState.signedOut = true;
       return { success: true, applied: true, tokens: null, user: null };
@@ -921,6 +1002,17 @@ async function bgMutateFirebaseAuth(request = {}) {
         return { success: false, applied: false, error: "invalid_firebase_tokens" };
       }
       const nextTokens = normalizeStoredAuthTokens(request.tokens);
+      // A different account (or a sign-in after sign-out) is a new session; re-signing into the same
+      // account keeps the work that account already started.
+      const previousUid = stored.firebase_user?.uid || null;
+      if (previousUid !== request.user.uid) {
+        await bgBeginAuthSessionTransition("account-change");
+        // The new account's library and the new user are activated in one storage write, so no reader
+        // ever sees this account next to another account's library.
+        await bgSwitchLibraryOwner(LibrarySlots.ownerForUid(request.user.uid), {
+          extra: { firebase_user: request.user, firebase_tokens: nextTokens },
+        });
+      }
       await bgStorageSetRaw({ firebase_user: request.user, firebase_tokens: nextTokens });
       authState.signedOut = false;
       return { success: true, applied: true, tokens: nextTokens, user: request.user };
@@ -1164,7 +1256,9 @@ const syncState = {
   lastPushedProgress: null,
 };
 
-async function finishSuccessfulSync({ kind, user, reason, wrote, fullGeneration = null, progressGeneration = null }) {
+async function finishSuccessfulSync({ kind, user, reason, wrote, fullGeneration = null, progressGeneration = null, scope = null }) {
+  // A sync of a session that has since ended must not clear the new session's pending flags or say "synced".
+  if (scope && !SessionContext.matches(scope)) return false;
   const newerFullChange = kind === "full" && fullGeneration !== fullSyncGeneration;
   const newerProgressChange = progressGeneration !== progressSyncGeneration;
   if (kind === "full") {
@@ -1201,8 +1295,9 @@ async function finishSuccessfulSync({ kind, user, reason, wrote, fullGeneration 
   return true;
 }
 
-async function finishFailedSync({ kind, user, reason, error }) {
+async function finishFailedSync({ kind, user, reason, error, scope = null }) {
   if (error?.code === "SITE_ACCESS_REQUIRED") return websiteAccessPausedResult(kind);
+  if (scope && !SessionContext.matches(scope)) return;
   await persistCloudSyncStatus("error", {
     kind,
     uid: user?.uid || null,
@@ -1627,16 +1722,20 @@ const fromFSDoc = _fsCodec.decodeDoc || (() => null);
 
 const fetchDedup = { uid: null, promise: null };
 
-async function fetchCloudData(user, token, reason = "read") {
-  if (fetchDedup.uid === user.uid && fetchDedup.promise) {
-    return fetchDedup.promise;
+async function fetchCloudData(user, token, reason = "read", scope = null) {
+  const dedupKey = scope ? `${user.uid}#${scope.epoch}` : user.uid;
+  if (fetchDedup.uid === dedupKey && fetchDedup.promise) {
+    const shared = await fetchDedup.promise;
+    if (scope) SessionContext.assertMatches(scope, "fetch");
+    return shared;
   }
 
   const fetchPromise = (async () => {
     try {
       FSDebug.read(reason, "full");
       const url = `${FIRESTORE_BASE}/documents/users/${user.uid}`;
-      const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` }, signal: scope?.signal });
+      if (scope) SessionContext.assertMatches(scope, "fetch");
       if (response.status === 404) {
         await markFirebaseAuthRequestOk(token);
         return null;
@@ -1651,7 +1750,11 @@ async function fetchCloudData(user, token, reason = "read") {
         throw err;
       }
       await markFirebaseAuthRequestOk(token);
-      const doc = fromFSDoc(await response.json());
+      const json = await response.json();
+      // Keep the version this copy was read at: library writes are conditional on it (R03). An existing
+      // document without fields is still an existing document.
+      const doc = FirestoreAdapter.withUpdateTime(fromFSDoc(json) || (json?.updateTime ? {} : null), json?.updateTime);
+      if (scope) SessionContext.assertMatches(scope, "fetch");
       if (doc && doc.animeData) doc.animeData = decodeEpisodesFromCloud(doc.animeData);
       return doc;
     } catch (e) {
@@ -1659,7 +1762,7 @@ async function fetchCloudData(user, token, reason = "read") {
     }
   })();
 
-  fetchDedup.uid = user.uid;
+  fetchDedup.uid = dedupKey;
   fetchDedup.promise = fetchPromise;
   try {
     return await fetchPromise;
@@ -1691,9 +1794,10 @@ async function pollCloudData(reason = "consumer-connected", { force = false, req
       if (!force && Date.now() - _lastCloudPollAt < CLOUD_CONSUMER_POLL_MIN_GAP_MS) return CLOUD_POLL_SKIPPED;
 
       await hydrateBgCloudDocCache();
-      const user = await getFirebaseUser();
-      const token = await getFirebaseToken();
-      if (!user || !token) {
+      const scope = await SessionContext.capture();
+      const user = scope.user;
+      const token = user ? await getFirebaseToken() : null;
+      if (!user || !token || !SessionContext.matches(scope)) {
         if (requireAuth) throw new Error(!user ? "not_authenticated" : "token_unavailable");
         return CLOUD_POLL_SKIPPED;
       }
@@ -1706,27 +1810,29 @@ async function pollCloudData(reason = "consumer-connected", { force = false, req
         // A local TTL cannot tell us whether another device just saved a newer
         // Resume position. Check the small revision field before reusing it;
         // unchanged revisions still avoid downloading the library again.
-        const cloudDoc = await fetchCloudDataCached(user, token, `poll:${reason}`, { requireRevalidation: true });
-        if (cloudDoc) await applyCloudUpdate(cloudDoc);
+        const cloudDoc = await fetchCloudDataCached(user, token, `poll:${reason}`, { requireRevalidation: true, scope });
+        if (cloudDoc) await applyCloudUpdate(cloudDoc, scope);
         return cloudDoc;
       }
 
       const pollAt = Date.now();
       _lastCloudPollAt = pollAt;
       persistBgPollState({ cloudPollAt: pollAt });
-      const cloudDoc = await fetchCloudData(user, token, `poll:${reason}`);
+      const cloudDoc = await fetchCloudData(user, token, `poll:${reason}`, scope);
       if (cloudDoc) {
+        SessionContext.assertMatches(scope, "poll");
         cloudCache.doc = cloudDoc;
         cloudCache.time = Date.now();
         cloudCache.uid = user.uid;
         bgStorageSet({
           [_BG_CLOUD_CACHE_KEY]: { uid: user.uid, doc: cloudDoc, cachedAt: cloudCache.time },
         }).catch(() => {});
-        await applyCloudUpdate(cloudDoc);
+        await applyCloudUpdate(cloudDoc, scope);
       }
       return cloudDoc;
     } catch (e) {
       if (e?.code === 'SITE_ACCESS_REQUIRED') return CLOUD_POLL_SKIPPED;
+      if (SessionContext.isSessionChanged(e)) return CLOUD_POLL_SKIPPED;
       console.warn(`[BG-RT] Poll sync failed (${reason}): ${e.message}`);
       throw e;
     } finally {
@@ -1786,16 +1892,18 @@ async function periodicSyncNeeded() {
 
 const _bgCacheStats = { fresh: 0, revalidated: 0, fullFetch: 0 };
 
-async function _revalidateCloudDocViaLastUpdated(user, token, cachedLastUpdated, reason = "revalidate") {
+async function _revalidateCloudDocViaLastUpdated(user, token, cachedLastUpdated, reason = "revalidate", scope = null) {
   if (!user || !token || !cachedLastUpdated) return undefined;
   FSDebug.read(reason, "revalidate");
   const url = `${FIRESTORE_BASE}/documents/users/${user.uid}?mask.fieldPaths=lastUpdated`;
   let response;
   try {
-    response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } });
+    response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` }, signal: scope?.signal });
   } catch (e) {
+    if (SessionContext.isSessionChanged(e)) throw e;
     return undefined;
   }
+  if (scope) SessionContext.assertMatches(scope, "revalidate");
   if (response.status === 404) {
     await markFirebaseAuthRequestOk(token);
     return null;
@@ -1816,11 +1924,13 @@ async function _revalidateCloudDocViaLastUpdated(user, token, cachedLastUpdated,
     return undefined;
   }
   const decoded = fromFSDoc(json);
-  return decoded?.lastUpdated || null;
+  return { lastUpdated: decoded?.lastUpdated || null, updateTime: json?.updateTime || null };
 }
 
 async function fetchCloudDataCached(user, token, reason = "cache", options = {}) {
+  const scope = options.scope || null;
   await hydrateBgCloudDocCache();
+  if (scope) SessionContext.assertMatches(scope, "cache");
   const now = Date.now();
 
   if (!options.requireRevalidation && cloudCache.doc && cloudCache.uid === user.uid && now - cloudCache.time < _BG_CLOUD_TTL) {
@@ -1833,8 +1943,13 @@ async function fetchCloudDataCached(user, token, reason = "cache", options = {})
 
   if (cloudCache.doc && cloudCache.uid === user.uid && cloudCache.doc.lastUpdated) {
     try {
-      const cloudLastUpdated = await _revalidateCloudDocViaLastUpdated(user, token, cloudCache.doc.lastUpdated, reason);
-      if (cloudLastUpdated && cloudLastUpdated === cloudCache.doc.lastUpdated) {
+      const revalidated = await _revalidateCloudDocViaLastUpdated(user, token, cloudCache.doc.lastUpdated, reason, scope);
+      const cloudLastUpdated = revalidated === undefined || revalidated === null ? revalidated : revalidated.lastUpdated;
+      // The cached copy is current only if it is the same document version, not merely the same lastUpdated
+      // text; a copy cached before versions were recorded is always read again.
+      const cachedUpdateTime = FirestoreAdapter.updateTimeOf(cloudCache.doc);
+      const sameVersion = !!cachedUpdateTime && revalidated?.updateTime === cachedUpdateTime;
+      if (cloudLastUpdated && cloudLastUpdated === cloudCache.doc.lastUpdated && sameVersion && cloudCache.uid === user.uid) {
         cloudCache.time = Date.now();
         bgStorageSet({
           [_BG_CLOUD_CACHE_KEY]: { uid: user.uid, doc: cloudCache.doc, cachedAt: cloudCache.time },
@@ -1849,20 +1964,23 @@ async function fetchCloudDataCached(user, token, reason = "cache", options = {})
       }
     } catch (e) {
       if (e?.code === 'SITE_ACCESS_REQUIRED' || e?.status === 401 || e?.status === 403) throw e;
+      if (SessionContext.isSessionChanged(e)) throw e;
     }
   }
 
   let doc = null;
   try {
-    doc = await fetchCloudData(user, token, reason);
+    doc = await fetchCloudData(user, token, reason, scope);
   } catch (e) {
     if (e?.code === 'SITE_ACCESS_REQUIRED') throw e;
+    if (SessionContext.isSessionChanged(e)) throw e;
     const err = new Error(e?.message || "Fetch failed");
     err.status = e?.status || null;
     err.isTimeout = !!e?.isTimeout;
     err.name = e?.name || err.name;
     throw err;
   }
+  if (scope) SessionContext.assertMatches(scope, "cache");
   if (doc) {
     cloudCache.doc = doc;
     cloudCache.time = Date.now();
@@ -1886,6 +2004,50 @@ function enqueueFirestoreWrite(fn) {
   return next;
 }
 
+// PATCHes users/{uid} only if it is still the version `cloudDoc` was read at (see firestore-adapter.js).
+// Returns { ok, updateTime } on success, { conflict } when the document changed since, or the failed status.
+async function patchUserDocConditionally({ user, token, scope, cloudDoc, fieldMask, body, kind }) {
+  const precondition = FirestoreAdapter.preconditionQuery(cloudDoc);
+  // A copy cached before versions were recorded cannot be written against; read it again first.
+  if (!precondition) return { conflict: true, unversioned: true };
+  const url = `${FIRESTORE_BASE}/documents/users/${user.uid}?${fieldMask}&${precondition}`;
+  SessionContext.assertMatches(scope, `${kind}-patch`);
+  const response = await fetchWithTimeout(url, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body,
+    signal: scope.signal,
+  });
+  SessionContext.assertMatches(scope, `${kind}-ack`);
+  if (response.ok) {
+    const written = await response.json().catch(() => null);
+    return { ok: true, status: response.status, updateTime: written?.updateTime || null };
+  }
+  const errorBody = await response.text().catch(() => "");
+  if (FirestoreAdapter.isConflict(response.status, errorBody)) {
+    return { conflict: true, status: response.status, errorBody };
+  }
+  return { ok: false, status: response.status, errorBody };
+}
+
+// Runs read → merge → conditional PATCH until the write lands on the version it was merged from, with
+// a short backoff between attempts. After MAX_ATTEMPTS the change stays pending for the retry alarm;
+// nothing is ever written unconditionally.
+async function runConditionalCloudWrite(kind, scope, reason, attempt) {
+  for (let n = 1; ; n += 1) {
+    const result = await attempt(n);
+    if (!result?.conflict) return result;
+    invalidateBgCloudDocCache();
+    if (n >= FirestoreAdapter.MAX_ATTEMPTS) {
+      console.warn(`[BG] ${kind} sync: cloud document kept changing (${n} attempts); left pending`);
+      armSyncRetry(kind, "cloud-conflict");
+      return { success: false, error: "cloud_conflict", conflict: true, kind, reason };
+    }
+    await new Promise((resolve) => setTimeout(resolve, FirestoreAdapter.conflictDelay(n)));
+    SessionContext.assertMatches(scope, `${kind}-retry`);
+  }
+}
+
 async function syncProgressOnly(reason = "progress", options = {}) {
   if (options.markPending !== false) markProgressSyncPending(reason);
   if (!(await websiteAccessAllowed())) return websiteAccessPausedResult("progress");
@@ -1904,23 +2066,27 @@ async function syncProgressOnly(reason = "progress", options = {}) {
 
   const runGeneration = progressSyncGeneration;
   let user = null;
+  let scope = null;
   syncState.progressInProgress = true;
   try {
-    user = await getFirebaseUser();
+    scope = await SessionContext.capture();
+    user = scope.user;
     if (!user) {
       const result = { success: false, error: "not_authenticated", kind: "progress" };
-      await finishFailedSync({ kind: "progress", user: null, reason, error: result.error });
+      await finishFailedSync({ kind: "progress", user: null, reason, error: result.error, scope });
       return result;
     }
     const token = await getFirebaseToken();
+    SessionContext.assertMatches(scope, "progress-token");
     if (!token) {
       const result = { success: false, error: "token_unavailable", kind: "progress" };
-      await finishFailedSync({ kind: "progress", user, reason, error: result.error });
+      await finishFailedSync({ kind: "progress", user, reason, error: result.error, scope });
       return result;
     }
 
     await persistCloudSyncStatus("syncing", { kind: "progress", uid: user.uid, reason });
-    const outcome = await enqueueFirestoreWrite(async () => {
+    const progressAttempt = async () => {
+      SessionContext.assertMatches(scope, "progress-queue");
       const initial = await bgStorageGet(["videoProgress"]);
       const initialVP = initial.videoProgress || {};
 
@@ -1929,11 +2095,12 @@ async function syncProgressOnly(reason = "progress", options = {}) {
         return { success: true, wrote: false, kind: "progress", reason };
       }
 
-      const cloudDoc = await fetchCloudDataCached(user, token, `prog:${reason}`, { requireRevalidation: true });
+      const cloudDoc = await fetchCloudDataCached(user, token, `prog:${reason}`, { requireRevalidation: true, scope });
       const cloudVP = cloudDoc?.videoProgress || null;
       const mergedState = await runBgLibraryTransaction(
         ["videoProgress", "animeData", "deletedAnime"],
         (latest) => {
+          SessionContext.assertMatches(scope, "progress-merge");
           const rawLocalVP = latest.videoProgress || {};
           const localVP = cleanTrackedProgressBg(latest.animeData || {}, rawLocalVP, latest.deletedAnime || {});
           const mergedVP = cloudVP
@@ -1964,7 +2131,6 @@ async function syncProgressOnly(reason = "progress", options = {}) {
         return { success: true, wrote: false, kind: "progress", reason };
       }
 
-      const url = `${FIRESTORE_BASE}/documents/users/${user.uid}`;
       const fieldMask = "updateMask.fieldPaths=videoProgress&updateMask.fieldPaths=lastUpdated";
       const pushedAt = new Date().toISOString();
       const body = JSON.stringify({
@@ -1973,15 +2139,11 @@ async function syncProgressOnly(reason = "progress", options = {}) {
           lastUpdated: pushedAt,
         }),
       });
-      const response = await fetchWithTimeout(`${url}?${fieldMask}`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body,
-      });
+      const write = await patchUserDocConditionally({ user, token, scope, cloudDoc, fieldMask, body, kind: "progress" });
+      if (write.conflict) return { conflict: true };
 
-      if (!response.ok) {
-        const status = response.status;
-        const errorBody = await response.text().catch(() => "");
+      if (!write.ok) {
+        const { status, errorBody } = write;
         console.warn("[BG] Progress sync failed:", status, errorBody.slice(0, 160));
         await handleSyncHttpError({ kind: "progress", status, errorBody, expectedIdToken: token });
         return { success: false, error: `HTTP ${status}`, status, kind: "progress", reason };
@@ -1991,12 +2153,11 @@ async function syncProgressOnly(reason = "progress", options = {}) {
       FSDebug.write("progress", reason, { fields: ["progress"], bytes: body.length });
       syncState.lastPushedProgress = structuredClone(mergedVP);
 
-      if (cloudCache.doc && cloudCache.uid === user.uid) {
-        cloudCache.doc = {
-          ...cloudCache.doc,
-          videoProgress: mergedVP,
-          lastUpdated: pushedAt,
-        };
+      if (cloudCache.doc && cloudCache.uid === user.uid && write.updateTime) {
+        cloudCache.doc = FirestoreAdapter.withUpdateTime(
+          { ...cloudCache.doc, videoProgress: mergedVP, lastUpdated: pushedAt },
+          write.updateTime,
+        );
         cloudCache.time = Date.now();
         bgStorageSet({
           [_BG_CLOUD_CACHE_KEY]: { uid: user.uid, doc: cloudCache.doc, cachedAt: cloudCache.time },
@@ -2006,7 +2167,8 @@ async function syncProgressOnly(reason = "progress", options = {}) {
       }
       bgRememberOwnWrite(pushedAt);
       return { success: true, wrote: true, kind: "progress", reason };
-    });
+    };
+    const outcome = await enqueueFirestoreWrite(() => runConditionalCloudWrite("progress", scope, reason, progressAttempt));
 
     if (outcome.success) {
       clearSyncRetry("progress");
@@ -2018,18 +2180,20 @@ async function syncProgressOnly(reason = "progress", options = {}) {
         reason,
         wrote: outcome.wrote,
         progressGeneration: runGeneration,
+        scope,
       });
     } else {
-      await finishFailedSync({ kind: "progress", user, reason, error: outcome.error });
+      await finishFailedSync({ kind: "progress", user, reason, error: outcome.error, scope });
     }
     return outcome;
   } catch (error) {
     if (error?.code === "SITE_ACCESS_REQUIRED") return websiteAccessPausedResult("progress");
+    if (SessionContext.isSessionChanged(error)) return { success: false, error: "session_changed", kind: "progress", reason };
     const failureKind = error?.isTimeout ? "timeout" : "network";
     console.log(`[BG] Progress sync ${failureKind}:`, error?.message || error);
     armSyncRetry("progress", `${failureKind}: ${error?.message || error}`);
     const outcome = { success: false, error: error?.message || failureKind, kind: "progress", reason };
-    await finishFailedSync({ kind: "progress", user, reason, error: outcome.error });
+    await finishFailedSync({ kind: "progress", user, reason, error: outcome.error, scope });
     return outcome;
   } finally {
     syncState.progressInProgress = false;
@@ -2049,29 +2213,38 @@ function fsFieldPathSegment(name) {
 
 async function performFullSync(reason, runFullGeneration, runProgressGeneration) {
   if (!(await websiteAccessAllowed())) return websiteAccessPausedResult("full");
-  const user = await getFirebaseUser();
+  let scope;
+  try {
+    scope = await SessionContext.capture();
+  } catch (error) {
+    return { success: false, error: "session_changed", kind: "full", reason };
+  }
+  const user = scope.user;
   if (!user) {
     const outcome = { success: false, error: "not_authenticated", kind: "full", reason };
-    await finishFailedSync({ kind: "full", user: null, reason, error: outcome.error });
+    await finishFailedSync({ kind: "full", user: null, reason, error: outcome.error, scope });
     return outcome;
   }
   const token = await getFirebaseToken();
+  if (!SessionContext.matches(scope)) return { success: false, error: "session_changed", kind: "full", reason };
   if (!token) {
     const outcome = { success: false, error: "token_unavailable", kind: "full", reason };
-    await finishFailedSync({ kind: "full", user, reason, error: outcome.error });
+    await finishFailedSync({ kind: "full", user, reason, error: outcome.error, scope });
     return outcome;
   }
 
   await persistCloudSyncStatus("syncing", { kind: "full", uid: user.uid, reason });
   try {
-    const outcome = await enqueueFirestoreWrite(async () => {
-      const cloudDoc = await fetchCloudDataCached(user, token, reason, { requireRevalidation: true });
+    const fullAttempt = async () => {
+      SessionContext.assertMatches(scope, "full-queue");
+      const cloudDoc = await fetchCloudDataCached(user, token, reason, { requireRevalidation: true, scope });
 
       // Playback preferences ride the same sync as the library. They used to be pushed only from a toggle
       // tap, so a reinstall restored the library while its settings silently fell back to defaults, and a
       // change made while signed out was dropped for good. Apply the cloud copy first (it wins only when
       // strictly newer), so the push below carries the account's preferences, not this device's defaults.
       if (cloudDoc?.playbackSettings) {
+        SessionContext.assertMatches(scope, "full-playback");
         await applyCloudPlaybackSettings(cloudDoc.playbackSettings);
       }
       const playbackSettings = await buildStoredPlaybackSettings();
@@ -2086,6 +2259,7 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
       const mergedState = await runBgLibraryTransaction(
         ["animeData", "videoProgress", "deletedAnime", "groupCoverImages", "goalSettings", "badgeUnlocks"],
         (local) => {
+          SessionContext.assertMatches(scope, "full-merge");
           const localAnime = local.animeData || {};
           const localProgress = local.videoProgress || {};
           const localDeleted = local.deletedAnime || {};
@@ -2192,6 +2366,7 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         playbackDiffers ||
         shouldWriteEmail;
 
+      SessionContext.assertMatches(scope, "full-write");
       if (!needsCloudWrite) {
         cloudCache.time = Date.now();
         cloudCache.uid = user.uid;
@@ -2200,7 +2375,6 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         return { success: true, wrote: false, kind: "full", reason };
       }
 
-      const url = `${FIRESTORE_BASE}/documents/users/${user.uid}`;
       const pushedAt = new Date().toISOString();
 
       const payloadFields = {
@@ -2271,21 +2445,15 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
       const _body = JSON.stringify({
         fields: jsonToFirestoreFields(wireFields),
       });
-      const response = await fetchWithTimeout(`${url}?${fieldMask}`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: _body,
-      });
+      const write = await patchUserDocConditionally({ user, token, scope, cloudDoc, fieldMask, body: _body, kind: "full" });
+      if (write.conflict) return { conflict: true };
 
-      if (response.ok) {
+      if (write.ok) {
         await markFirebaseAuthRequestOk(token);
         FSDebug.write("full", reason, { fields: _changedFields, bytes: _body.length });
 
-        if (cloudCache.doc && cloudCache.uid === user.uid) {
-          cloudCache.doc = {
-            ...cloudCache.doc,
-            ...payloadFields,
-          };
+        if (cloudCache.doc && cloudCache.uid === user.uid && write.updateTime) {
+          cloudCache.doc = FirestoreAdapter.withUpdateTime({ ...cloudCache.doc, ...payloadFields }, write.updateTime);
           cloudCache.time = Date.now();
           bgStorageSet({
             [_BG_CLOUD_CACHE_KEY]: { uid: user.uid, doc: cloudCache.doc, cachedAt: cloudCache.time },
@@ -2297,13 +2465,13 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         clearSyncRetry("full");
         return { success: true, wrote: true, kind: "full", reason };
       } else {
-        const status = response.status;
-        const errorBody = await response.text().catch(() => "");
+        const { status, errorBody } = write;
         console.error("[BG] Sync failed:", status, errorBody.slice(0, 160));
         await handleSyncHttpError({ kind: "full", status, errorBody, expectedIdToken: token });
         return { success: false, error: `HTTP ${status}`, status, kind: "full", reason };
       }
-    });
+    };
+    const outcome = await enqueueFirestoreWrite(() => runConditionalCloudWrite("full", scope, reason, fullAttempt));
 
     if (outcome.success) {
       await finishSuccessfulSync({
@@ -2313,18 +2481,20 @@ async function performFullSync(reason, runFullGeneration, runProgressGeneration)
         wrote: outcome.wrote,
         fullGeneration: runFullGeneration,
         progressGeneration: runProgressGeneration,
+        scope,
       });
     } else {
-      await finishFailedSync({ kind: "full", user, reason, error: outcome.error });
+      await finishFailedSync({ kind: "full", user, reason, error: outcome.error, scope });
     }
     return outcome;
   } catch (error) {
     if (error?.code === "SITE_ACCESS_REQUIRED") return websiteAccessPausedResult("full");
+    if (SessionContext.isSessionChanged(error)) return { success: false, error: "session_changed", kind: "full", reason };
     const failureKind = error?.isTimeout ? "timeout" : "network";
     console.log(`[BG] Sync ${failureKind}:`, error?.message || error);
     armSyncRetry("full", `${failureKind}: ${error?.message || error}`);
     const outcome = { success: false, error: error?.message || failureKind, kind: "full", reason };
-    await finishFailedSync({ kind: "full", user, reason, error: outcome.error });
+    await finishFailedSync({ kind: "full", user, reason, error: outcome.error, scope });
     return outcome;
   }
 }
@@ -2430,10 +2600,13 @@ let _applyCloudUpdateWaiters = [];
 
 const _MAX_CLOUD_UPDATE_WAITERS = 100;
 
-async function applyCloudUpdate(cloudDoc) {
+// `scope` is the session that fetched the document; it is applied only while that session is current.
+async function applyCloudUpdate(cloudDoc, scope = null) {
   if (!cloudDoc) return;
+  if (!scope) scope = await SessionContext.capture();
+  if (!SessionContext.matches(scope)) return;
 
-  _applyCloudUpdateDoc = cloudDoc;
+  _applyCloudUpdateDoc = { doc: cloudDoc, scope };
   if (_applyCloudDebounce) clearTimeout(_applyCloudDebounce);
 
   if (_applyCloudUpdateWaiters.length >= _MAX_CLOUD_UPDATE_WAITERS) {
@@ -2463,9 +2636,13 @@ async function applyCloudUpdate(cloudDoc) {
 
 async function _drainCloudUpdates() {
   while (_applyCloudUpdateDoc) {
-    const nextCloudDoc = _applyCloudUpdateDoc;
+    const next = _applyCloudUpdateDoc;
     _applyCloudUpdateDoc = null;
-    await _doApplyCloudUpdate(nextCloudDoc);
+    try {
+      await _doApplyCloudUpdate(next.doc, next.scope);
+    } catch (error) {
+      if (!SessionContext.isSessionChanged(error)) throw error;
+    }
   }
 }
 
@@ -2481,8 +2658,10 @@ function bgIsOwnEcho(ts) {
   return !!ts && _bgRecentOwnWrites.includes(ts);
 }
 
-async function _doApplyCloudUpdate(cloudDoc) {
+async function _doApplyCloudUpdate(cloudDoc, scope) {
   if (!cloudDoc) return;
+  // R01: the document belongs to the account that fetched it. Never re-read "the current user" here.
+  if (!SessionContext.matches(scope) || !scope.uid) return;
 
   if (syncState.inProgress || syncState.progressInProgress) {
     // The fetched document is already in cloudCache. Queue and await a full pass
@@ -2496,11 +2675,7 @@ async function _doApplyCloudUpdate(cloudDoc) {
     return;
   }
 
-  const activeUser = await getFirebaseUser();
-  if (!activeUser?.uid) {
-    invalidateBgCloudDocCache();
-    return;
-  }
+  const activeUser = scope.user;
   if (cloudCache.uid && cloudCache.uid !== activeUser.uid) {
     invalidateBgCloudDocCache();
   }
@@ -2572,6 +2747,7 @@ async function _doApplyCloudUpdate(cloudDoc) {
       shallowEqualObjectMap(mergedGoals, cloudGoals) &&
       shallowEqualObjectMap(mergedBadges, cloudBadges);
 
+    SessionContext.assertMatches(scope, "apply-commit");
     if (animeChanged || progressChanged || deletedChanged || groupChanged || goalsChanged || badgesChanged) {
       const commitResult = await commitLibraryMutation(
         local[LIBRARY_MUTATION_REVISION_KEY] || 0,
@@ -2583,24 +2759,29 @@ async function _doApplyCloudUpdate(cloudDoc) {
           goalSettings: mergedGoals,
           badgeUnlocks: mergedBadges,
         }),
+        { scope },
       );
       if (commitResult?.conflict) {
         await syncToFirebase("cloud-pull:local-conflict");
       } else {
+        if (commitResult?.sessionChanged) throw SessionContext.sessionChangedError("apply-commit");
         if (!commitResult?.success) throw new Error(commitResult?.error || "Cloud merge commit failed");
         dlog("[BG-RT] ← Cloud update applied");
       }
     }
 
     if (cloudDoc.playbackSettings) {
+      SessionContext.assertMatches(scope, "apply-playback");
       await applyCloudPlaybackSettings(cloudDoc.playbackSettings);
     }
 
     if (cloudDoc.anilistAuth) {
+      SessionContext.assertMatches(scope, "apply-anilist");
       await applyCloudAnilistAuth(cloudDoc.anilistAuth);
     }
 
     const pending = await bgStorageGet([PENDING_SYNC_KEY, PENDING_PROGRESS_SYNC_KEY]);
+    SessionContext.assertMatches(scope, "apply-verify");
     if (!libraryMatchesCloud || pending[PENDING_SYNC_KEY]) {
       await syncToFirebase("cloud-pull:verify-merge");
     } else if (!progressMatchesCloud || pending[PENDING_PROGRESS_SYNC_KEY]) {
@@ -2904,7 +3085,8 @@ async function flushSidecarRecord(kind, state) {
   const record = state?.[kind];
   if (!config || !record) return { success: true, acknowledged: true, skipped: true, kind };
 
-  const user = await getFirebaseUser();
+  const scope = await SessionContext.capture();
+  const user = scope.user;
   if (!user) {
     return { success: false, acknowledged: false, pending: true, kind, error: "not_authenticated" };
   }
@@ -2916,6 +3098,7 @@ async function flushSidecarRecord(kind, state) {
   }
 
   const token = await getFirebaseToken();
+  if (!SessionContext.matches(scope)) return { success: false, acknowledged: false, pending: false, kind, error: "session_changed" };
   if (!token) return markSidecarAttemptFailed(kind, state, record, "token_unavailable");
 
   const url = `${FIRESTORE_BASE}/documents/users/${user.uid}`;
@@ -2926,13 +3109,16 @@ async function flushSidecarRecord(kind, state) {
   });
 
   try {
-    const response = await enqueueFirestoreWrite(() =>
-      fetchWithTimeout(`${url}?${mask}`, {
+    const response = await enqueueFirestoreWrite(() => {
+      SessionContext.assertMatches(scope, "sidecar-patch");
+      return fetchWithTimeout(`${url}?${mask}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body,
-      }),
-    );
+        signal: scope.signal,
+      });
+    });
+    SessionContext.assertMatches(scope, "sidecar-ack");
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => "");
@@ -2957,6 +3143,7 @@ async function flushSidecarRecord(kind, state) {
     return { success: true, acknowledged: true, pending: false, kind };
   } catch (error) {
     if (error?.code === "SITE_ACCESS_REQUIRED") return websiteAccessPausedResult(kind);
+    if (SessionContext.isSessionChanged(error)) return { success: false, acknowledged: false, pending: false, kind, error: "session_changed" };
     return markSidecarAttemptFailed(kind, state, record, error?.message || error);
   }
 }
@@ -3541,7 +3728,9 @@ const messageHandlers = {
   },
 
   LIBRARY_MUTATION_COMMIT(message, _sender, sendResponse) {
-    commitLibraryMutation(message.expectedRevision, message.data)
+    commitLibraryMutation(message.expectedRevision, message.data, {
+      expectedOwner: typeof message.expectedOwner === "string" ? message.expectedOwner : null,
+    })
       .then(sendResponse)
       .catch((error) => sendResponse({ success: false, error: error?.message || String(error) }));
     return true;
@@ -3554,6 +3743,10 @@ const messageHandlers = {
     }
     if (!containsLibraryMutationData(message.data)) {
       sendResponse({ success: false, error: "library_key_required" });
+      return true;
+    }
+    if (AnimeTrackerLibraryKeys.writesLibraryMap(message.data)) {
+      sendResponse({ success: false, error: AnimeTrackerLibraryKeys.BLIND_MAP_WRITE_ERROR });
       return true;
     }
     bgStorageSet(message.data)
@@ -3916,6 +4109,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.runtime.onInstalled.addListener((details) => {
+  ensureBgLibraryOwner().catch((error) => {
+    console.warn("[BG] Library owner check failed:", error?.message || error);
+  });
   // Website access is requested from an explicit tap in the popup, never from this non-interactive event.
   if (details.reason === "install") {
     // Re-registering/restoring an extension can leave existing storage in place.
@@ -3993,6 +4189,11 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(() => {
   dlog("[Anime Tracker] Extension started");
   migrateFromSyncToLocal();
+  // Finishes an account library switch a terminated worker left half-done, and attributes the library
+  // of an install that predates per-account libraries.
+  ensureBgLibraryOwner().catch((error) => {
+    console.warn("[BG] Library owner check failed:", error?.message || error);
+  });
   reconcileSmartNotificationAlarm().catch((error) => {
     console.warn("[BG] Smart notification startup reconciliation failed:", error?.message || error);
   });

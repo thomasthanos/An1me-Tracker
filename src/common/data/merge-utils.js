@@ -14,6 +14,18 @@
 
   const { toMillis } = globalThis.AnimeTrackerUtils;
 
+  // Record maps come from the cloud document and from imported backups. A key such as "__proto__"
+  // must stay data: assigning it into a merged map would change the map's prototype instead (R13).
+  const RESERVED_MAP_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+  function safeMap(value) {
+    const out = {};
+    if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+    for (const [key, entry] of Object.entries(value)) {
+      if (!RESERVED_MAP_KEYS.has(key)) out[key] = entry;
+    }
+    return out;
+  }
+
   const PROGRESS_MAX_ENTRIES = 200;
   const PROGRESS_TOMBSTONE_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -564,6 +576,8 @@
   }
 
   function mergeVideoProgress(local, cloud) {
+    local = safeMap(local);
+    cloud = safeMap(cloud);
     const merged = {};
     const ids = new Set([...Object.keys(cloud || {}), ...Object.keys(local || {})]);
 
@@ -578,7 +592,9 @@
   }
 
   function mergeAnimeData(localData, cloudData) {
-    const merged = { ...(cloudData || {}), ...(localData || {}) };
+    localData = safeMap(localData);
+    cloudData = safeMap(cloudData);
+    const merged = { ...cloudData, ...localData };
 
     const stripAutoRepaired = (entry) => {
       if (!entry || !Array.isArray(entry.episodes)) return entry;
@@ -799,9 +815,9 @@
   }
 
   function mergeDeletedAnime(local, cloud) {
-    const merged = { ...(cloud || {}) };
+    const merged = safeMap(cloud);
 
-    for (const [slug, info] of Object.entries(local || {})) {
+    for (const [slug, info] of Object.entries(safeMap(local))) {
       const localDeletedAt = toMillis(info?.deletedAt || info);
       const cloudDeletedAt = toMillis(merged[slug]?.deletedAt || merged[slug]);
       if (
@@ -858,8 +874,8 @@
   }
 
   function mergeGoalSettings(local, cloud) {
-    const localObj = local || {};
-    const cloudObj = cloud || {};
+    const localObj = safeMap(local);
+    const cloudObj = safeMap(cloud);
     const keys = new Set([...Object.keys(localObj), ...Object.keys(cloudObj)]);
     const result = {};
 
@@ -881,8 +897,8 @@
   }
 
   function mergeBadgeUnlocks(local, cloud) {
-    const localObj = local || {};
-    const cloudObj = cloud || {};
+    const localObj = safeMap(local);
+    const cloudObj = safeMap(cloud);
     const keys = new Set([...Object.keys(localObj), ...Object.keys(cloudObj)]);
     const result = {};
 
@@ -912,8 +928,8 @@
   }
 
   function mergeGroupCoverImages(local, cloud) {
-    const localObj = local || {};
-    const cloudObj = cloud || {};
+    const localObj = safeMap(local);
+    const cloudObj = safeMap(cloud);
     const result = { ...cloudObj };
 
     for (const [slug, localEntry] of Object.entries(localObj)) {

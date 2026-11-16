@@ -240,6 +240,7 @@ const firebaseConfig = {
     if ("mapValue" in v) {
       const obj = {};
       for (const [k, val] of Object.entries(v.mapValue.fields || {})) {
+        if (RESERVED_KEYS.has(k)) continue;
         obj[k] = decodeValue(val);
       }
       return obj;
@@ -247,10 +248,14 @@ const firebaseConfig = {
     return null;
   }
 
+  // A cloud map key such as "__proto__" would replace the decoded object's prototype when assigned.
+  const RESERVED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
   function decodeFields(fields) {
     if (!fields) return {};
     const out = {};
     for (const [k, v] of Object.entries(fields)) {
+      if (RESERVED_KEYS.has(k)) continue;
       out[k] = decodeValue(v);
     }
     return out;

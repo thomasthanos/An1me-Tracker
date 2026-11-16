@@ -54,6 +54,7 @@ function installedWorker(local, sync) {
   const c = vm.createContext({ console, dlog() {}, setTimeout, clearTimeout, chrome: { storage: { local: area(local), sync: area(sync) },
     runtime: { getManifest: () => ({ version: '7.5.5' }), onInstalled: { addListener: fn => listener = fn } } } }); c.self = c;
   vm.runInContext(read('src/common/utils.js'), c); vm.runInContext(read('src/common/data/library-keys.js'), c);
+  vm.runInContext(read('src/background/sync/library-slots.js'), c);
   const src = read('background.js');
   vm.runInContext(src.slice(src.indexOf('const LIBRARY_MUTATION_REVISION_KEY'), src.indexOf('function stampBgSyncStorageWrite')) +
     src.slice(src.indexOf('function isBenignSwLifecycleError'), src.indexOf('function bgStorageRemove')) +

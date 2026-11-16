@@ -35,3 +35,25 @@ jobs:
         run: node dev/scripts/package.js --zip
       - name: Safari package
         run: node dev/scripts/package.js --target safari --zip
+
+  browser-tests:
+    name: Browser integration tests (required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AT_REQUIRE_BROWSER_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install development dependencies
+        run: npm ci --ignore-scripts
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Regression tests with browser suites required
+        shell: bash
+        run: |
+          node dev/scripts/run-tests.js | tee test-output.log
+          if grep -q "^SKIP" test-output.log; then echo "A browser suite skipped while browser tests are required"; exit 1; fi

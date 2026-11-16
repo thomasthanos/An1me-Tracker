@@ -12,3 +12,6 @@ backend/serviceAccountKey.json
 # Local audit notes, screenshots and temporary agent work.
 /.agents/
 /_metadata/
+
+# Development dependencies (package.json / package-lock.json are tracked).
+node_modules/
