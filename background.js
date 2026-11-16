@@ -2831,6 +2831,7 @@ async function applyCloudPlaybackSettings(cloudPlayback) {
       BG_PLAYBACK_UPDATED_AT_KEY,
       BG_USER_PREFS_KEY,
       BG_CLOUD_DESKTOP_PLAYBACK_KEY,
+      "speedControlPreferences",
     ]);
     const outcome = await runBgLibraryTransaction(localKeys, async (coordinated) => {
       // The transaction snapshot only carries keys in LIBRARY_MUTATION_KEY_SET, which does not include
@@ -2855,6 +2856,7 @@ async function applyCloudPlaybackSettings(cloudPlayback) {
           copyGuard: cloudPlayback.copyGuard !== false,
           skiptimeHelper: cloudPlayback.skiptimeHelper === true,
           auto4kServer: cloudPlayback.auto4kServer !== false,
+          speedControl: cloudPlayback.speedControl && typeof cloudPlayback.speedControl === "object" ? cloudPlayback.speedControl : null,
         };
         if (JSON.stringify(stored[BG_CLOUD_DESKTOP_PLAYBACK_KEY] || null) !== JSON.stringify(desktopPlayback)) {
           writes[BG_CLOUD_DESKTOP_PLAYBACK_KEY] = desktopPlayback;
@@ -2886,6 +2888,17 @@ async function applyCloudPlaybackSettings(cloudPlayback) {
         const localPrefs = stored[BG_USER_PREFS_KEY];
         if (JSON.stringify(localPrefs || null) !== JSON.stringify(cloudPrefs)) {
           writes[BG_USER_PREFS_KEY] = cloudPrefs;
+          changed = true;
+        }
+      }
+
+      const cloudSpeed = cloudPlayback.speedControl;
+      if (cloudSpeed && typeof cloudSpeed === "object") {
+        const model = self.AnimeTrackerSpeedPreferences;
+        const normalized = model ? model.normalize(cloudSpeed, isMobile) : cloudSpeed;
+        const localSpeed = stored[model?.KEY || "speedControlPreferences"];
+        if (JSON.stringify(localSpeed || null) !== JSON.stringify(normalized)) {
+          writes[model?.KEY || "speedControlPreferences"] = normalized;
           changed = true;
         }
       }
@@ -2980,6 +2993,7 @@ async function buildStoredPlaybackSettings() {
     "adGuardEnabled",
     "autoResumeEnabled",
     "userPreferences",
+    "speedControlPreferences",
     BG_PLAYBACK_UPDATED_AT_KEY,
     BG_CLOUD_DESKTOP_PLAYBACK_KEY,
   ]);
@@ -2999,6 +3013,20 @@ async function buildStoredPlaybackSettings() {
     auto4kServerVal = cachedDesktop.auto4kServer !== undefined ? cachedDesktop.auto4kServer !== false : true;
   }
 
+  let speedControlVal = stored.speedControlPreferences || null;
+  if (isMobile) {
+    const cachedDesktop = stored[BG_CLOUD_DESKTOP_PLAYBACK_KEY] || {};
+    if (cachedDesktop.speedControl && speedControlVal) {
+      speedControlVal = {
+        ...cachedDesktop.speedControl,
+        ...speedControlVal,
+        boostRate: cachedDesktop.speedControl.boostRate ?? speedControlVal.boostRate,
+        defaultVolume: cachedDesktop.speedControl.defaultVolume ?? speedControlVal.defaultVolume,
+        defaultMuted: cachedDesktop.speedControl.defaultMuted ?? speedControlVal.defaultMuted,
+      };
+    }
+  }
+
   return {
     copyGuard: copyGuardVal,
     smartNotif: stored.smartNotificationsEnabled === true,
@@ -3008,6 +3036,7 @@ async function buildStoredPlaybackSettings() {
     adGuard: stored.adGuardEnabled !== false,
     autoResume: stored.autoResumeEnabled === true,
     userPreferences: stored.userPreferences || null,
+    speedControl: speedControlVal,
     updatedAt,
   };
 }
@@ -3016,7 +3045,7 @@ async function buildStoredPlaybackSettings() {
 // fields are compared as data rather than by reference.
 function playbackSettingsEqual(a, b) {
   if (!a || !b) return false;
-  return [...Object.keys(BG_PLAYBACK_FIELD_MAP), "userPreferences", "updatedAt"]
+  return [...Object.keys(BG_PLAYBACK_FIELD_MAP), "userPreferences", "speedControl", "updatedAt"]
     .every((field) => JSON.stringify(a[field] ?? null) === JSON.stringify(b[field] ?? null));
 }
 
@@ -3666,8 +3695,6 @@ async function persistBeforeUnloadProgress(message) {
   });
 }
 
-// Playback preferences are local and have their own serial writer. Never advance
-// the library revision or enqueue cloud sync for a speed/volume change.
 let speedPreferenceWrite = Promise.resolve();
 function updateSpeedControlPreferences(message) {
   const update = async () => {
@@ -3676,6 +3703,16 @@ function updateSpeedControlPreferences(message) {
     const next = model.patch(stored[model.KEY], message.patch, message.mobile === true);
     if (JSON.stringify(stored[model.KEY]) !== JSON.stringify(next)) {
       await bgStorageSetRaw({ [model.KEY]: next });
+      const user = await getFirebaseUser().catch(() => null);
+      if (user) {
+        const updatedAt = new Date().toISOString();
+        await bgStorageSetRaw({ [BG_PLAYBACK_UPDATED_AT_KEY]: updatedAt });
+        try {
+          await queueStoredPlaybackSettings();
+        } catch (e) {
+          console.warn("[BG] Queue playback settings failed after speed change:", e?.message);
+        }
+      }
     }
     return { success: true, preferences: next };
   };

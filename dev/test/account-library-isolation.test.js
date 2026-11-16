@@ -21,6 +21,8 @@ function signedInAs(uid, extra = {}) {
     ...auth(uid), legacySyncMigrationV1Complete: true, libraryOwner: `uid:${uid}`,
     animeData: { privateA: entry("Private A") }, videoProgress: { "privateA__episode-2": { currentTime: 300, duration: 1440 } },
     deletedAnime: {}, goalSettings: { weeklyEpisodes: 9 }, copyGuardEnabled: false, cachedStats: { totalAnime: 1 },
+    userPreferences: { sort: "title", category: "all" },
+    speedControlPreferences: { enabled: true, normalRate: 1.25, boostRate: 4 },
     ...extra,
   };
 }
@@ -38,7 +40,10 @@ test("A → sign-out → guest edits → B → sign-out → A: every library see
   assert.equal(w.store.goalSettings && Object.keys(w.store.goalSettings).length, 0, "no goals of A");
   assert.equal(w.store.cachedStats, undefined, "no stats of A painted for the guest");
   assert.equal(w.store.copyGuardEnabled, undefined, "A's settings stay with A");
+  assert.equal(w.store.userPreferences, undefined, "A's user preferences stay with A");
+  assert.equal(w.store.speedControlPreferences, undefined, "A's speed control stays with A");
   assert.ok(w.store["librarySlot:uid:account-a"].data.animeData.privateA, "A's library is parked for A");
+  assert.deepEqual(w.store["librarySlot:uid:account-a"].data.speedControlPreferences, { enabled: true, normalRate: 1.25, boostRate: 4 });
 
   await addAnime(w, "guestOnly", "Guest only");
   await signIn(w, "account-b");
@@ -55,6 +60,8 @@ test("A → sign-out → guest edits → B → sign-out → A: every library see
   assert.ok(w.store.videoProgress["privateA__episode-2"]);
   assert.equal(w.store.goalSettings.weeklyEpisodes, 9);
   assert.equal(w.store.copyGuardEnabled, false);
+  assert.deepEqual(w.store.userPreferences, { sort: "title", category: "all" }, "A gets user preferences back");
+  assert.deepEqual(w.store.speedControlPreferences, { enabled: true, normalRate: 1.25, boostRate: 4 }, "A gets speed control back");
   assert.equal(w.store["librarySlot:uid:account-a"], undefined, "the active library is not also parked");
   assert.ok(w.store["librarySlot:uid:account-b"].data.animeData.bOnly);
   assert.ok(w.store["librarySlot:guest"].data.animeData.guestOnly);

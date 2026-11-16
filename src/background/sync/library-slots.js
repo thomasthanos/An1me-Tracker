@@ -38,6 +38,8 @@
     "adGuardEnabled",
     "autoResumeEnabled",
     "cloud_desktop_playback_settings",
+    "userPreferences",
+    "speedControlPreferences",
   ]);
 
   function ownerForUid(uid) {

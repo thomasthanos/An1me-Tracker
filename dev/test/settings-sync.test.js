@@ -355,5 +355,23 @@ async function test(name, fn) {
     assert.match(fullSync, /playbackDiffers/, "an unchanged copy earns no extra write");
   });
 
+  await test("speed control preferences travel with cloud playback settings and are restored on install", async () => {
+    const store = {};
+    const c = playbackContext(store);
+
+    const cloud = {
+      copyGuard: true, smartNotif: true, autoSkipFiller: true, skiptimeHelper: true,
+      auto4kServer: true, adGuard: true, autoResume: true,
+      speedControl: { enabled: true, normalRate: 1.25, boostRate: 4, defaultVolume: null, defaultMuted: null },
+      updatedAt: "2026-10-05T10:00:00.000Z",
+    };
+    assert.equal(await c.applyCloudPlaybackSettings(cloud), true, "cloud speed control is applied");
+    assert.deepEqual(store.speedControlPreferences, cloud.speedControl);
+
+    const payload = await c.buildStoredPlaybackSettings();
+    assert.deepEqual(payload.speedControl, cloud.speedControl);
+    assert.equal(c.playbackSettingsEqual(cloud, payload), true);
+  });
+
   process.exitCode = failures ? 1 : 0;
 })();

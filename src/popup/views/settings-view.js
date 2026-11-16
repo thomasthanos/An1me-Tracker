@@ -395,12 +395,19 @@
   }
 
   // The worker serialises preference writes. When no worker answers at all (iOS can leave the extension's worker
-  // unreachable for a while), the popup writes the same patch itself: these are device-local settings.
+  // unreachable for a while), the popup writes the same patch itself.
   async function writeSpeedPreferencesHere(delta, mobile) {
     const model = globalThis.AnimeTrackerSpeedPreferences;
     const stored = await chrome.storage.local.get([model.KEY]);
     const next = model.patch(stored?.[model.KEY], delta, mobile);
-    await chrome.storage.local.set({ [model.KEY]: next });
+    const playbackSettingsUpdatedAt = new Date().toISOString();
+    await chrome.storage.local.set({
+      [model.KEY]: next,
+      playbackSettingsUpdatedAt,
+    });
+    try {
+      await window.AnimeTracker?.FirebaseSync?.queuePlaybackSettingsSave?.();
+    } catch {}
     return next;
   }
 
