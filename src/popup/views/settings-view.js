@@ -287,7 +287,23 @@
     const outside = event => { if (!menu.contains(event.target) && !trigger.contains(event.target)) closeSpeedMenu(); };
     listen(document, "pointerdown", outside);
     listen(document, "focusin", outside);
-    listen(document, "scroll", event => { if (!menu.contains(event.target)) closeSpeedMenu(); }, { capture: true, passive: true });
+    const scrollParents = new Map();
+    let scrollAncestor = trigger.parentElement;
+    while (scrollAncestor) {
+      scrollParents.set(scrollAncestor, { top: scrollAncestor.scrollTop, left: scrollAncestor.scrollLeft });
+      scrollAncestor = scrollAncestor.parentElement;
+    }
+    listen(document, "scroll", event => {
+      if (menu.contains(event.target)) return;
+      if (event.target === document || event.target === window) {
+        closeSpeedMenu();
+        return;
+      }
+      const initial = scrollParents.get(event.target);
+      if (!initial || event.target.scrollTop !== initial.top || event.target.scrollLeft !== initial.left) {
+        closeSpeedMenu();
+      }
+    }, { capture: true, passive: true });
     listen(document, "visibilitychange", () => { if (document.hidden) closeSpeedMenu(); });
     listen(window, "blur", () => closeSpeedMenu());
     listen(window, "resize", positionSpeedMenu, { passive: true });

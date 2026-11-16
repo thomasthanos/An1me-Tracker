@@ -255,9 +255,14 @@ function html(mobile) {
       await page.evaluate(() => { window.testStorageChange({enabled:true,normalRate:1.5,boostRate:4,defaultVolume:.6,defaultMuted:false}); });
       await page.locator("#settingsNormalSpeed").focus();
       const messageCount = await page.evaluate(() => window.testMessages.length);
-      await page.keyboard.press("ArrowDown"); await page.keyboard.press("Escape");
+      await page.keyboard.press("ArrowDown");
+      await page.waitForFunction(() => document.getElementById("settingsNormalSpeed").getAttribute("aria-expanded") === "true");
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => document.getElementById("settingsNormalSpeed").getAttribute("aria-expanded") === "false");
       assert.equal(await page.evaluate(() => window.currentViewMode), 'settings', 'real Escape keeps Settings open');
-      await page.keyboard.press("ArrowDown"); await page.keyboard.press("End"); await page.keyboard.press("Enter");
+      await page.keyboard.press("ArrowDown");
+      await page.waitForFunction(() => document.getElementById("settingsNormalSpeed").getAttribute("aria-expanded") === "true");
+      await page.keyboard.press("End"); await page.keyboard.press("Enter");
       await page.waitForFunction(() => document.getElementById("settingsNormalSpeed").value === "2" && !document.getElementById("settingsNormalSpeed").disabled);
       assert.equal(await page.evaluate(() => window.testMessages.length), messageCount + 1, "real key presses commit once");
       assert.equal(await page.locator("#settingsNormalSpeed").getAttribute("aria-expanded"), "false", "Enter does not reopen through a native click");
