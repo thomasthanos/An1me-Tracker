@@ -11,6 +11,6 @@
     "render": "node tools/build-promo.mjs --skip-audio"
   },
   "devDependencies": {
-    "hyperframes": "0.9.33"
+    "hyperframes": "0.9.58"
   }
 }
