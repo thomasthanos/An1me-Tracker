@@ -5,6 +5,7 @@ name: An1me Tracker CodeQL config
 # JavaScript/TypeScript and Actions are scanned; native Swift needs separate review.
 paths-ignore:
   - dev/test/**
+  - dev/promo/**
 
 queries:
   - uses: security-extended

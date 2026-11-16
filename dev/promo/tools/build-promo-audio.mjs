@@ -76,28 +76,11 @@ function decodeStereo(file) {
 const providers = {
   async elevenlabs(sentence, file) {
     if (!process.env.ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY is not set and this line has no saved take in assets/voice/");
-    const { id, model, seed, settings } = elevenVoice();
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${id}/with-timestamps?output_format=mp3_44100_128`, {
-      method: "POST",
-      headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({ text: sentence.say, model_id: model, language_code: "el", seed, voice_settings: settings }),
-    });
-    if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${(await res.text()).slice(0, 300)}`);
-    const body = await res.json();
-    writeFileSync(file, Buffer.from(body.audio_base64, "base64"));
-    const al = body.alignment || body.normalized_alignment;
+    const { id, model, seed } = elevenVoice();
+    const r = run("python3", [join(ROOT, "tools", "tts_elevenlabs.py"), id, model, String(seed), file, sentence.say]);
+    if (r.status !== 0) throw new Error((r.stderr || "ElevenLabs failed").trim().split("\n").pop());
     let words;
-    if (al?.characters) {
-      words = [];
-      let cur = null;
-      al.characters.forEach((ch, i) => {
-        if (/\s/.test(ch)) { if (cur) { words.push(cur); cur = null; } return; }
-        if (!cur) cur = { text: "", start: al.character_start_times_seconds[i], end: 0 };
-        cur.text += ch;
-        cur.end = al.character_end_times_seconds[i];
-      });
-      if (cur) words.push(cur);
-    }
+    try { words = JSON.parse(r.stdout).words; } catch { /* timings are optional */ }
     return { words };
   },
   async edge(sentence, file) {
