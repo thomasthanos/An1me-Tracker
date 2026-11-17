@@ -11,6 +11,14 @@ All notable changes to **An1me.to Tracker**.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The version in `manifest.json` is the single source of truth.
 
+## [8.4.1] — 2026-11-17
+
+### Fixed
+
+- **Shared Speed Control on mobile and PC.** Normal speed, hold boost, enabled state, and remembered audio defaults now keep the same values and appear in Settings on both devices. Mobile edits and audio resets sync back to PC without stale desktop overrides.
+- **Existing mobile preferences.** Restore speed and audio choices stripped by older mobile builds when their cloud timestamp still matches, while preserving newer local edits.
+- **Player fallback saves.** Save the sync timestamp with speed changes when the background worker is unavailable, and request a playback-settings push so the edit can sync later.
+
 ## [8.4.0] — 2026-10-08
 
 ### Added
