@@ -2844,6 +2844,23 @@ async function applyCloudPlaybackSettings(cloudPlayback) {
       const stored = { ...uncoordinated, ...coordinated };
       const localUpdatedAt = stored[BG_PLAYBACK_UPDATED_AT_KEY] || null;
       if (localUpdatedAt && Date.parse(localUpdatedAt) >= Date.parse(cloudUpdatedAt)) {
+        // Older phone builds stripped speed/audio while adopting the cloud timestamp. Repair that
+        // exact legacy projection once, without treating any newer local edit as stale.
+        const model = self.AnimeTrackerSpeedPreferences;
+        const cached = stored[BG_CLOUD_DESKTOP_PLAYBACK_KEY];
+        if (isMobile && localUpdatedAt === cloudUpdatedAt && model && cached?.speedControl && cloudPlayback.speedControl) {
+          const speed = model.normalize(cloudPlayback.speedControl);
+          const legacy = { ...speed, normalRate: [1, 1.25, 1.5, 2].includes(speed.normalRate) ? speed.normalRate : null,
+            boostRate: 2, defaultVolume: null, defaultMuted: null };
+          const local = JSON.stringify(model.normalize(stored[model.KEY]));
+          if (local === JSON.stringify(legacy) && local !== JSON.stringify(speed) &&
+              JSON.stringify(model.normalize(cached.speedControl)) === JSON.stringify(speed)) {
+            const { speedControl, ...desktopPlayback } = cached;
+            const writes = { [model.KEY]: speed, [BG_CLOUD_DESKTOP_PLAYBACK_KEY]: desktopPlayback,
+              [BG_PLAYBACK_UPDATED_AT_KEY]: cloudUpdatedAt };
+            return { data: writes, result: { applied: true, changed: true, writes } };
+          }
+        }
         return { result: { applied: false, changed: false, writes: null } };
       }
 
@@ -2856,7 +2873,6 @@ async function applyCloudPlaybackSettings(cloudPlayback) {
           copyGuard: cloudPlayback.copyGuard !== false,
           skiptimeHelper: cloudPlayback.skiptimeHelper === true,
           auto4kServer: cloudPlayback.auto4kServer !== false,
-          speedControl: cloudPlayback.speedControl && typeof cloudPlayback.speedControl === "object" ? cloudPlayback.speedControl : null,
         };
         if (JSON.stringify(stored[BG_CLOUD_DESKTOP_PLAYBACK_KEY] || null) !== JSON.stringify(desktopPlayback)) {
           writes[BG_CLOUD_DESKTOP_PLAYBACK_KEY] = desktopPlayback;
@@ -3013,19 +3029,7 @@ async function buildStoredPlaybackSettings() {
     auto4kServerVal = cachedDesktop.auto4kServer !== undefined ? cachedDesktop.auto4kServer !== false : true;
   }
 
-  let speedControlVal = stored.speedControlPreferences || null;
-  if (isMobile) {
-    const cachedDesktop = stored[BG_CLOUD_DESKTOP_PLAYBACK_KEY] || {};
-    if (cachedDesktop.speedControl && speedControlVal) {
-      speedControlVal = {
-        ...cachedDesktop.speedControl,
-        ...speedControlVal,
-        boostRate: cachedDesktop.speedControl.boostRate ?? speedControlVal.boostRate,
-        defaultVolume: cachedDesktop.speedControl.defaultVolume ?? speedControlVal.defaultVolume,
-        defaultMuted: cachedDesktop.speedControl.defaultMuted ?? speedControlVal.defaultMuted,
-      };
-    }
-  }
+  const speedControlVal = stored.speedControlPreferences || null;
 
   return {
     copyGuard: copyGuardVal,
@@ -3702,11 +3706,12 @@ function updateSpeedControlPreferences(message) {
     const stored = await bgStorageGet([model.KEY]);
     const next = model.patch(stored[model.KEY], message.patch, message.mobile === true);
     if (JSON.stringify(stored[model.KEY]) !== JSON.stringify(next)) {
-      await bgStorageSetRaw({ [model.KEY]: next });
       const user = await getFirebaseUser().catch(() => null);
+      // Publish the choice and its conflict timestamp together, so a cloud read cannot
+      // observe a new speed with the old timestamp and overwrite it.
+      await bgStorageSetRaw({ [model.KEY]: next,
+        ...(user ? { [BG_PLAYBACK_UPDATED_AT_KEY]: new Date().toISOString() } : {}) });
       if (user) {
-        const updatedAt = new Date().toISOString();
-        await bgStorageSetRaw({ [BG_PLAYBACK_UPDATED_AT_KEY]: updatedAt });
         try {
           await queueStoredPlaybackSettings();
         } catch (e) {

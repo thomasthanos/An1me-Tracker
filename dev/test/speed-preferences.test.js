@@ -13,12 +13,12 @@ function test(name, fn) { try { fn(); console.log(`PASS ${name}`); } catch (erro
 test("desktop starts enabled without overriding an unchosen player speed or audio", () => {
   assert.deepEqual(plain(model.normalize?.()), { enabled: true, normalRate: null, boostRate: 4, defaultVolume: null, defaultMuted: null });
 });
-test("mobile exposes only its supported normal speeds with fixed 2x boost and no audio override", () => {
-  assert.deepEqual(plain(model.MOBILE_RATES), [1, 1.25, 1.5, 2]);
+test("mobile retains the same speed and audio preferences as desktop", () => {
+  assert.deepEqual(plain(model.MOBILE_RATES), plain(model.NORMAL_RATES));
   assert.deepEqual(plain(model.normalize?.({ enabled: false, normalRate: 1.5, boostRate: 8, defaultVolume: .4, defaultMuted: true }, true)),
-    { enabled: false, normalRate: 1.5, boostRate: 2, defaultVolume: null, defaultMuted: null });
+    { enabled: false, normalRate: 1.5, boostRate: 8, defaultVolume: .4, defaultMuted: true });
   assert.deepEqual(plain(model.normalize?.({ normalRate: .75 }, true)),
-    { enabled: true, normalRate: null, boostRate: 2, defaultVolume: null, defaultMuted: null });
+    { enabled: true, normalRate: .75, boostRate: 4, defaultVolume: null, defaultMuted: null });
 });
 test("persisted invalid types and unsupported rates fall back without leaking unrelated fields", () => {
   for (const raw of [undefined, null, [], 1, "bad", { enabled: "false", normalRate: 8, boostRate: 1, defaultVolume: Infinity, defaultMuted: 1, animeData: {} }]) {
@@ -56,14 +56,13 @@ test("selected invalid fields and unknown keys are rejected instead of silently 
     JSON.parse('{"__proto__": {"polluted": true}}')]) {
     assert.throws(() => model.patch?.({}, delta), undefined, JSON.stringify(delta));
   }
-  assert.throws(() => model.patch?.({}, { normalRate: .5 }, true));
-  assert.throws(() => model.patch?.({}, { boostRate: 4 }, true));
-  assert.throws(() => model.patch?.({}, { defaultVolume: .5 }, true));
-  assert.throws(() => model.patch?.({}, { defaultMuted: true }, true));
+  for (const delta of [{ normalRate: .5 }, { boostRate: 4 }, { defaultVolume: .5 }, { defaultMuted: true }]) {
+    assert.deepEqual(plain(model.patch({}, delta, true)), plain(model.patch({}, delta, false)));
+  }
 });
-test("mobile patches retain the chosen normal rate and consistently discard desktop-only overrides", () => {
+test("mobile partial patches preserve shared boost and audio choices", () => {
   assert.deepEqual(plain(model.patch?.({ normalRate: 1.25, boostRate: 8, defaultVolume: .8, defaultMuted: true }, { enabled: false }, true)),
-    { enabled: false, normalRate: 1.25, boostRate: 2, defaultVolume: null, defaultMuted: null });
+    { enabled: false, normalRate: 1.25, boostRate: 8, defaultVolume: .8, defaultMuted: true });
   assert.deepEqual(plain(model.patch?.({}, { normalRate: 2, boostRate: 2, defaultVolume: null, defaultMuted: null }, true)),
     { enabled: true, normalRate: 2, boostRate: 2, defaultVolume: null, defaultMuted: null });
 });

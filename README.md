@@ -105,7 +105,7 @@ If you use Google sign-in on desktop, set a password in **Settings → Set passw
 | Episode tracking & resume | Yes | Yes |
 | Optional cloud sync | Yes | Yes |
 | Library, search, backups & stats | Yes | Yes |
-| Speed controls | Hotkeys, up to 8× boost | Touch controls, up to 2× |
+| Speed controls | Hotkeys, up to 8× boost | Touch controls, up to 8× boost |
 | AniSkip outro skip | Yes | Yes |
 | AniList integration | Yes | Disabled to save battery |
 | New-episode alerts & side panel | Yes | Unavailable |
@@ -122,12 +122,13 @@ If you use Google on desktop, set a password under **Settings → Set password f
 
 | Action | Desktop | iPhone Safari |
 | :--- | :--- | :--- |
-| Temporary boost | Hold <kbd>F7</kbd> · default 4× | Hold speed button · 2× |
+| Temporary boost | Hold <kbd>F7</kbd> · default 4× | Hold speed button · shared boost choice |
 | Toggle / restore | Press <kbd>F8</kbd> | Tap to choose; release a hold to restore |
-| Speed choices | 1.5× · 2× · 3× · 4× · 8× boost | 1× · 1.25× · 1.5× · 2× |
-| Volume & mute | Remembered locally | iOS controls |
+| Normal speed | 0.5× · 0.75× · 1× · 1.25× · 1.5× · 1.75× · 2× | Same choices, synced |
+| Boost choices | 1.5× · 2× · 3× · 4× · 8× | Same choices, synced |
+| Volume & mute | Remembered and synced | Shared defaults shown; iOS controls playback audio |
 
-Configure or disable the feature in **Settings → Speed Control**. Choose a speed before opening Safari's native fullscreen, which uses its own controls. [iPhone playback details](IOS.md#speed-control)
+Configure or disable the feature in **Settings → Speed Control**. All speed preferences sync when signed into the same tracker account, including remembered audio and its reset. Without an account, they stay local. A player that rejects a speed shows a message and keeps its working rate. Choose a speed before opening Safari's native fullscreen, which uses its own controls. [iPhone playback details](IOS.md#speed-control)
 
 </details>
 

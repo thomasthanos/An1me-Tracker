@@ -1,5 +1,5 @@
 // Event-driven speed controls for the video already owned by PlayerObserver.
-// Preferences are device-local; boosts never touch saved progress or normal speed.
+// Preferences sync with the account; temporary boosts never change saved normal speed.
 (function () {
   "use strict";
   if (window.self !== window.top) return;
@@ -16,11 +16,16 @@
   const desired = key => pending.has(key) ? pending.get(key) : preferences[key];
 
   // The worker serialises preference writes. When no worker answers at all (iOS can leave the extension's worker
-  // unreachable for a while), the page writes the same patch itself: these are device-local settings.
+  // unreachable for a while), the page writes the same patch and sync timestamp itself.
   const WORKER_REPLY_MS = 4000;
   async function writeHere(patch) {
     const stored = await chrome.storage.local.get([model.KEY]);
-    await chrome.storage.local.set({ [model.KEY]: model.patch(stored?.[model.KEY], patch, mobile) });
+    await chrome.storage.local.set({ [model.KEY]: model.patch(stored?.[model.KEY], patch, mobile),
+      playbackSettingsUpdatedAt: new Date().toISOString() });
+    // Best effort: if the worker is still asleep, the next full sync picks up this timestamp.
+    try {
+      chrome.runtime.sendMessage({ type: "PUSH_STORED_PLAYBACK_SETTINGS" }, () => { void chrome.runtime.lastError; });
+    } catch {}
     return { success: true };
   }
 
@@ -73,7 +78,7 @@
     const actual = Number(b.video.playbackRate);
     const text = Number.isFinite(actual) && actual > 0 ? label(actual) : "Speed";
     if (b.text.textContent !== text) b.text.textContent = text;
-    b.button.setAttribute("aria-label", `Playback speed ${text}. ${mobile ? "Hold for 2×." : "F7 hold, F8 toggle boost."}`);
+    b.button.setAttribute("aria-label", `Playback speed ${text}. ${mobile ? `Hold for ${label(preferences.boostRate)}.` : "F7 hold, F8 toggle boost."}`);
     for (const option of b.menu.querySelectorAll("[data-speed-rate]")) {
       option.setAttribute("aria-checked", String(same(Number(option.dataset.speedRate), actual)));
     }

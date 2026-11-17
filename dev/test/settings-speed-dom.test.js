@@ -126,19 +126,23 @@ async function runInBrowser(mobile) {
     window.testStorageChange({ enabled:true, normalRate:1.25, boostRate:3, defaultVolume:.6, defaultMuted:false });
   });
   if (mobile) {
-    await test("exact four rates, fixed 2x hold hint and native fullscreen hint", async () => {
+    await test("mobile exposes shared normal speeds, boost and remembered audio", async () => {
       const options = [...required("settingsNormalSpeedMenu").querySelectorAll('[role="option"]')].map(option => option.dataset.speedChoice);
-      equal(JSON.stringify(options), '["","1","1.25","1.5","2"]', "mobile choices");
-      equal(document.getElementById("settingsBoostSpeed"), null, "no configurable mobile boost");
-      equal(document.getElementById("settingsSpeedAudioReset"), null, "no mobile audio override");
-      equal(required("settingsSpeedHint").textContent.includes("2×"), true, "fixed hold boost explained");
+      equal(JSON.stringify(options), '["","0.5","0.75","1","1.25","1.5","1.75","2"]', "shared speed choices");
+      equal(required("settingsBoostSpeed").value, "3", "shared boost displayed");
+      equal(required("settingsSpeedAudioInfo").textContent.includes("60%"), true, "shared remembered audio displayed");
+      equal(required("settingsSpeedAudioReset").disabled, false, "shared audio can be reset from mobile");
       equal(required("settingsSpeedHint").textContent.toLowerCase().includes("fullscreen"), true, "native fullscreen explained");
     });
     await test("normal speed changes use the mobile runtime contract", async () => {
       change("settingsNormalSpeed", "1.5"); await settle();
       equal(JSON.stringify(window.testMessages.at(-1)), '{"type":"UPDATE_SPEED_CONTROL_PREFERENCES","patch":{"normalRate":1.5},"mobile":true}', "mobile write boundary");
-      equal(window.testStore.speedControlPreferences.boostRate, 2, "fixed boost persisted");
-      equal(window.testStore.speedControlPreferences.defaultVolume, null, "audio untouched on mobile");
+      equal(window.testStore.speedControlPreferences.boostRate, 3, "shared boost preserved");
+      equal(window.testStore.speedControlPreferences.defaultVolume, .6, "shared audio preserved");
+      change("settingsBoostSpeed", "8"); await settle();
+      equal(window.testStore.speedControlPreferences.boostRate, 8, "mobile can change shared boost");
+      required("settingsSpeedAudioReset").click(); await settle();
+      equal(window.testStore.speedControlPreferences.defaultVolume, null, "mobile can reset shared audio");
     });
   } else {
     await test("stored normal, boost and audio preferences are reflected in real controls", async () => {

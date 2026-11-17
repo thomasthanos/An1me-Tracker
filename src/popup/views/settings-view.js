@@ -376,6 +376,12 @@
     return parts.length ? `Remembered audio: ${parts.join(", ")}` : "Player audio is used until you change volume or mute.";
   }
 
+  function speedHint(preferences) {
+    return speedIsMobile()
+      ? `Press and hold the speed control for ${preferences.boostRate}×; release to return. In native fullscreen, use the player’s own controls.`
+      : "Hold F7 for a temporary boost; release to return. F8 toggles boost. Tap the speed control to choose normal speed.";
+  }
+
   function renderSpeedControlSection() {
     const model = globalThis.AnimeTrackerSpeedPreferences;
     if (!model) return "";
@@ -390,13 +396,12 @@
         title: "Speed control", subtitle: toggleSubtitle("settingsSpeedControl", preferences.enabled), enabled: preferences.enabled })}
       <div class="settings-speed-fields">
         ${renderSpeedSelect("settingsNormalSpeed", "Normal speed", normalOptions)}
-        ${mobile ? "" : renderSpeedSelect("settingsBoostSpeed", "Hold boost", boostOptions)}
+        ${renderSpeedSelect("settingsBoostSpeed", "Hold boost", boostOptions)}
       </div>
-      <p class="settings-speed-hint" id="settingsSpeedHint">${mobile
-        ? "Press and hold the speed control for 2×; release to return. In native fullscreen, use the player’s own controls."
-        : "Hold F7 for a temporary boost; release to return. F8 toggles boost. Tap the speed control to choose normal speed."}</p>
-      ${mobile ? "" : `<div class="settings-speed-audio"><span id="settingsSpeedAudioInfo">${escapeHtml(speedAudioText(preferences))}</span>
-        <button class="settings-speed-reset" id="settingsSpeedAudioReset" type="button">Reset audio default</button></div>`}
+      <p class="settings-speed-hint" id="settingsSpeedHint">${speedHint(preferences)}</p>
+      <div class="settings-speed-audio"><span id="settingsSpeedAudioInfo">${escapeHtml(speedAudioText(preferences))}</span>
+        <button class="settings-speed-reset" id="settingsSpeedAudioReset" type="button">Reset audio default</button></div>
+      ${mobile ? '<p class="settings-speed-hint">Audio defaults sync with your account. Playback audio stays under device control on mobile.</p>' : ""}
     </section>`;
   }
 
@@ -411,6 +416,8 @@
     if (toggle) toggle.disabled = speedBusy;
     updateSpeedSelect("settingsNormalSpeed", preferences.normalRate === null ? "" : String(preferences.normalRate), speedBusy || !preferences.enabled);
     updateSpeedSelect("settingsBoostSpeed", String(preferences.boostRate), speedBusy || !preferences.enabled);
+    const hint = document.getElementById("settingsSpeedHint");
+    if (hint) hint.textContent = speedHint(preferences);
     const audio = document.getElementById("settingsSpeedAudioInfo");
     if (audio) audio.textContent = speedAudioText(preferences);
     const reset = document.getElementById("settingsSpeedAudioReset");
@@ -501,7 +508,7 @@
       if (control.disabled || speedBusy) return;
       if (control.id === "settingsNormalSpeed") {
         void saveSpeedControlPatch({ normalRate: control.value === "" ? null : Number(control.value) });
-      } else if (control.id === "settingsBoostSpeed" && !speedIsMobile()) {
+      } else if (control.id === "settingsBoostSpeed") {
         void saveSpeedControlPatch({ boostRate: Number(control.value) });
       }
     });

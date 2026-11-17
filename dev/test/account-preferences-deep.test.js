@@ -491,14 +491,13 @@ test("Cross-platform sync: Mobile pull preserves Desktop boost (>2x) and default
   assert.equal(applied, true);
 
   const localMobileSpeed = mobileWorker.store.speedControlPreferences;
-  assert.equal(localMobileSpeed.boostRate, 2, "Mobile clamps boostRate to 2 locally");
-  assert.equal(localMobileSpeed.defaultVolume, null, "Mobile nulls defaultVolume locally");
+  assert.equal(localMobileSpeed.boostRate, 8, "Mobile displays the shared boost unchanged");
+  assert.equal(localMobileSpeed.defaultVolume, 0.72, "Mobile retains shared defaultVolume");
   assert.equal(localMobileSpeed.normalRate, 1.5, "Mobile preserves normalRate 1.5");
 
   const cachedDesktop = mobileWorker.store.cloud_desktop_playback_settings;
-  assert.ok(cachedDesktop?.speedControl, "Desktop speed preferences cached on mobile");
-  assert.equal(cachedDesktop.speedControl.boostRate, 8);
-  assert.equal(cachedDesktop.speedControl.defaultVolume, 0.72);
+  assert.equal(cachedDesktop.speedControl, undefined, "Shared speed choices need no separate desktop override");
+  assert.equal(cachedDesktop.auto4kServer, true, "Desktop-only settings still use the cache");
 
   await mobileWorker.call("runBgLibraryTransaction", ["autoResumeEnabled", "playbackSettingsUpdatedAt"], async () => ({
     data: { autoResumeEnabled: false, playbackSettingsUpdatedAt: "2026-10-06T12:00:00.000Z" },

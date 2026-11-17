@@ -234,9 +234,7 @@ test("Mobile device sync preserves Desktop 4K, Skiptime, Copy Guard and Desktop 
   assert.equal(w.store.copyGuardEnabled, false, "Copy guard disabled locally on mobile");
   assert.equal(w.store.skiptimeHelperEnabled, false, "Skiptime helper disabled locally on mobile");
   assert.equal(w.store.auto4kServerEnabled, false, "4K auto-pick disabled locally on mobile");
-  // Mobile normalized boost to 2 and dropped volume
-  assert.equal(w.store.speedControlPreferences.boostRate, 2, "Mobile normalized boost to 2");
-  assert.equal(w.store.speedControlPreferences.defaultVolume, null, "Mobile audio null");
+  assert.deepEqual(w.store.speedControlPreferences, desktopCloudPlayback.speedControl, "Mobile keeps all shared speed and audio choices");
 
   // Mobile changes a setting (e.g. autoResume) and builds stored payload to push back
   w.store.autoResumeEnabled = true;
@@ -251,6 +249,51 @@ test("Mobile device sync preserves Desktop 4K, Skiptime, Copy Guard and Desktop 
   assert.equal(mobilePushPayload.speedControl.defaultMuted, false, "Preserved desktop defaultMuted in cloud payload");
   // Mobile's own toggle changed
   assert.equal(mobilePushPayload.autoResume, true);
+});
+
+test("Mobile speed edits round-trip to PC including boost, audio reset and slow normal speed", async () => {
+  const speedControl = { enabled: true, normalRate: .75, boostRate: 8, defaultVolume: .8, defaultMuted: true };
+  const cloud = { speedControl, updatedAt: "2026-10-04T11:00:00.000Z" };
+  const phone = cloudWorker(signedInAs("same-account", { playbackSettingsUpdatedAt: null }));
+  const pc = cloudWorker(signedInAs("same-account", { playbackSettingsUpdatedAt: null }));
+  await flush();
+  phone.context.navigator = { userAgent: "iPhone", platform: "iPhone", maxTouchPoints: 5 };
+  await phone.call("applyCloudPlaybackSettings", cloud);
+  await pc.call("applyCloudPlaybackSettings", cloud);
+  assert.deepEqual(phone.store.speedControlPreferences, speedControl, "Phone displays the PC choices unchanged");
+  phone.store.cloud_desktop_playback_settings.speedControl = speedControl; // stale cache left by an older build
+  const edited = await phone.request("UPDATE_SPEED_CONTROL_PREFERENCES", {
+    patch: { enabled: false, normalRate: 1.75, boostRate: 3, defaultVolume: null, defaultMuted: null }, mobile: true,
+  });
+  assert.equal(edited.success, true);
+  await flush();
+  const expected = { enabled: false, normalRate: 1.75, boostRate: 3, defaultVolume: null, defaultMuted: null };
+  assert.deepEqual(structuredClone(phone.remote.playbackSettings.speedControl), expected, "Mobile changes reach Firestore without old cached overrides");
+  await pc.call("applyCloudPlaybackSettings", phone.remote.playbackSettings);
+  assert.deepEqual(pc.store.speedControlPreferences, expected, "PC adopts every mobile speed choice");
+});
+
+test("An upgraded phone repairs speed choices previously stripped at the same cloud timestamp", async () => {
+  const speedControl = { enabled: true, normalRate: .75, boostRate: 8, defaultVolume: .65, defaultMuted: true };
+  const updatedAt = "2026-10-05T10:00:00.000Z";
+  const w = cloudWorker(signedInAs("upgrade", {
+    playbackSettingsUpdatedAt: updatedAt,
+    speedControlPreferences: { enabled: true, normalRate: null, boostRate: 2, defaultVolume: null, defaultMuted: null },
+    cloud_desktop_playback_settings: { speedControl },
+  }));
+  await flush();
+  w.context.navigator = { userAgent: "iPhone", platform: "iPhone", maxTouchPoints: 5 };
+  assert.equal(await w.call("applyCloudPlaybackSettings", { speedControl, updatedAt }), true);
+  assert.deepEqual(w.store.speedControlPreferences, speedControl, "Equal timestamps must not preserve the old mobile projection");
+  assert.equal(w.store.playbackSettingsUpdatedAt, updatedAt, "Repair adopts the existing cloud time");
+  assert.equal(await w.call("applyCloudPlaybackSettings", { speedControl, updatedAt }), false, "Repair runs only once");
+
+  w.store.cloud_desktop_playback_settings.speedControl = speedControl;
+  w.store.speedControlPreferences = { enabled: false, normalRate: 1.25, boostRate: 3, defaultVolume: null, defaultMuted: null };
+  assert.equal(await w.call("applyCloudPlaybackSettings", { speedControl, updatedAt }), false, "Equal-time non-legacy local choices are preserved");
+  w.store.speedControlPreferences = { enabled: true, normalRate: null, boostRate: 2, defaultVolume: null, defaultMuted: null };
+  w.store.playbackSettingsUpdatedAt = "2026-10-06T10:00:00.000Z";
+  assert.equal(await w.call("applyCloudPlaybackSettings", { speedControl, updatedAt }), false, "Newer phone choices are never treated as an upgrade projection");
 });
 
 test("Older cloud payload does not overwrite newer local preferences or speed control", async () => {

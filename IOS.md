@@ -96,18 +96,21 @@ Google and AniList sign-in need Chrome's identity API, which Safari does not hav
 ## Speed Control
 
 <details>
-<summary><b>Player controls, fullscreen &amp; local preferences</b></summary>
+<summary><b>Player controls, fullscreen &amp; synced preferences</b></summary>
 
-On the page player, tap the speed button to choose **1×, 1.25×, 1.5× or 2×**. Hold it for temporary
-**2×**; releasing, cancelling the gesture or leaving the page restores your previous speed. The button
+On the page player, tap the speed button to choose **0.5×, 0.75×, 1×, 1.25×, 1.5×, 1.75× or 2×**.
+Hold it for your chosen temporary boost (**1.5×, 2×, 3×, 4× or 8×**, default **4×**);
+releasing, cancelling the gesture or leaving the page restores your previous speed. The button
 uses the player's ArtPlayer/Plyr controls, with a small wrapper overlay as a fallback. It works on the
 video the tracker can access, including same-origin frames; inaccessible embedded players cannot be
 controlled without extra permissions.
 
-Use **Tracker → Settings → Speed Control** to disable the feature or pick a remembered normal speed.
-Initially the player keeps its own normal speed. These preferences stay local and do not sync with the
-library, and disabling the feature removes its player listeners, button and observation. The controls
-add no network requests or permanent polling and do not change how progress is saved.
+Use **Tracker → Settings → Speed Control** to disable the feature, pick a remembered normal speed or
+change the hold boost. Initially the player keeps its own normal speed. All speed preferences sync
+between mobile and PC when signed into the same tracker account, including remembered audio and its
+reset. Without an account they stay local. Disabling the feature removes its player listeners, button
+and observation. Temporary boosts do not save a new normal speed or change how progress is saved.
+If a player rejects a speed, the control shows a message and keeps the working rate.
 
 > [!NOTE]
 > The button belongs to the page player. Safari's native fullscreen keeps its own controls, so choose a

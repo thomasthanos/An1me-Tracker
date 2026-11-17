@@ -35,7 +35,7 @@ function setup(mobile) {
     // Only the fallback for a worker that cannot be reached writes here.
     set(items) {
       window.testDirectWrites = (window.testDirectWrites || 0) + 1;
-      const oldValue = window.testStore.speedControlPreferences; window.testStore.speedControlPreferences = items.speedControlPreferences;
+      const oldValue = window.testStore.speedControlPreferences; Object.assign(window.testStore, items);
       for (const listener of window.testStorageListeners) listener({ speedControlPreferences: { oldValue, newValue: items.speedControlPreferences } }, 'local');
       return Promise.resolve();
     } },
@@ -113,7 +113,8 @@ async function exercise(mobile) {
       pointer('pointerdown'); pointer('pointerup'); document.querySelector('.at-speed-button').click();
       equal(document.querySelector('.at-speed-menu').hidden, false, 'short tap opens menu');
       const rates = [...document.querySelectorAll('[data-speed-rate]')].map(node => Number(node.dataset.speedRate));
-      equal(JSON.stringify(rates), '[1,1.25,1.5,2]', 'mobile rates');
+      equal(JSON.stringify(rates), '[0.5,0.75,1,1.25,1.5,1.75,2]', 'shared mobile rates');
+      await patch({ boostRate: 2 });
       document.querySelector('[data-speed-rate="1.5"]').click(); await wait(30); equal(testVideo.playbackRate, 1.5, 'normal selected');
       const before = testWrites.length; pointer('pointerdown'); await wait(340); equal(testVideo.playbackRate, 2, 'hold2x');
       pointer('pointerup'); await wait(20); equal(testVideo.playbackRate, 1.5, 'release returns1.5x'); equal(testWrites.length, before, 'temporary2x not stored');
@@ -127,6 +128,18 @@ async function exercise(mobile) {
       key('keydown', 'F8'); equal(testVideo.playbackRate, 1.5, 'desktop shortcut absent on mobile');
     });
   }
+  if (mobile) await test('synced slow speed and configurable boost apply without changing device audio', async () => {
+    const volume = testVideo.volume, muted = testVideo.muted;
+    await patch({ normalRate: .75, boostRate: 8, defaultVolume: .8, defaultMuted: !muted });
+    equal(testVideo.playbackRate, .75, 'synced slow normal speed applied');
+    equal(document.querySelector('.at-speed-button').getAttribute('aria-label').includes('8×'), true, 'boost label reflects sync');
+    equal(testVideo.volume, volume, 'device volume retained'); equal(testVideo.muted, muted, 'device mute retained');
+    pointer('pointerdown'); await wait(340); equal(testVideo.playbackRate, 8, 'synced boost applied');
+    await patch({ boostRate: 3 }); equal(testVideo.playbackRate, 3, 'new boost applies during hold');
+    const writes = testWrites.length;
+    pointer('pointerup'); await wait(30); equal(testVideo.playbackRate, .75, 'release restores synced normal');
+    equal(testWrites.length, writes, 'boost release does not echo a normal-speed edit');
+  });
   await test('server rebind drops previous video, restores boost and keeps one control', async () => {
     const previous = testVideo; const base = previous.playbackRate;
     if (!mobile) key('keydown', 'F7'); else { pointer('pointerdown'); await wait(340); }
@@ -216,6 +229,7 @@ async function exercise(mobile) {
     const target = testStore.speedControlPreferences?.normalRate === 1.5 ? 2 : 1.5;
     document.querySelector(`[data-speed-rate="${target}"]`).click(); await wait(60);
     equal(testStore.speedControlPreferences.normalRate, target, 'stored on the device');
+    equal(Number.isFinite(Date.parse(testStore.playbackSettingsUpdatedAt)), true, 'fallback marks the edit as newer for cloud sync');
     equal(window.testDirectWrites, 1, 'one direct write');
     equal(document.querySelector('.at-speed-status').textContent, '', 'no failure message');
     window.testWorker = null; S.stop();
